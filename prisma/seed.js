@@ -51,6 +51,11 @@ const rules = [
     delayValue: 24,
     delayUnit: 'hour',
     conditionType: 'unpaid_after_register',
+    conditionConfig: {
+      type: 'not_purchased_membership',
+      window: { value: 24, unit: 'hour' },
+      membershipProductIds: ['vip_monthly', 'vip_yearly']
+    },
     templateId: 'tpl_register',
     status: 'enabled'
   },
@@ -63,6 +68,7 @@ const rules = [
     delayValue: 3,
     delayUnit: 'day',
     conditionType: 'expired_after_days',
+    conditionConfig: { type: 'expired_after_days', window: { value: 3, unit: 'day' } },
     templateId: 'tpl_member_expired',
     status: 'enabled'
   },
@@ -75,6 +81,7 @@ const rules = [
     delayValue: 1,
     delayUnit: 'hour',
     conditionType: 'before_campaign_start',
+    conditionConfig: { type: 'before_campaign_start', window: { value: 1, unit: 'hour' } },
     templateId: 'tpl_campaign',
     status: 'enabled'
   },
@@ -87,6 +94,7 @@ const rules = [
     delayValue: 7,
     delayUnit: 'day',
     conditionType: 'after_order_completed',
+    conditionConfig: { type: 'after_order_completed', window: { value: 7, unit: 'day' } },
     templateId: 'tpl_after_sale',
     status: 'enabled'
   }

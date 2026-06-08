@@ -11,6 +11,7 @@
 | 自动规则触发 | 支持四类事件接收、规则匹配、生成计划任务和到期执行 |
 | 四类事件 | `user_register`、`membership_expired`、`campaign_start`、`order_completed` |
 | 任务调度 | 已实现 `sms_task` 任务表、pending/sending/success/failed/blocked 状态、到期扫描执行、最大重试次数和可选后台 worker |
+| 条件判断 | 已实现结构化 `conditionConfig` 和发送前二次校验，支持 `not_purchased_membership` |
 | 发送记录 | 记录手动/自动、模板、规则、事件、服务商返回、手机号脱敏 |
 | 短链追踪 | 发送成功生成短链；`GET /s/{shortCode}` 记录点击并跳转 |
 | 回执状态管理 | `POST /api/sms/provider/callback` 写入回执并更新发送状态 |
@@ -26,6 +27,7 @@
 | 短信服务商 | 使用阿里云号码认证 `dypnsapi SendSmsVerifyCode`，非正式营销短信 |
 | 短信内容 | 使用验证码模板验证链路，不发送真实营销文案 |
 | 任务调度 | 内置 worker 默认关闭，需通过 `SMS_TASK_WORKER_ENABLED=true` 显式开启 |
+| 条件判断 | 未配置会员状态接口时，会根据事件 payload 判断会员购买状态 |
 | 短链目标 | 使用默认测试目标地址，可通过环境变量配置 |
 
 ## 后续待生产化
@@ -35,3 +37,4 @@
 - 支持批量导入手机号。
 - 接入正式营销短信签名和模板。
 - 完善真实服务商回执字段映射。
+- 扩展更多条件类型，例如黑名单、频控、订单状态、活动状态、用户分群。

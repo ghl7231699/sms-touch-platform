@@ -1,6 +1,7 @@
 import { config } from '../../config/env.js';
 import { createId } from '../../utils/ids.js';
 import { maskPhone } from '../../utils/mask-phone.js';
+import { evaluateTaskCondition } from './sms.condition-evaluator.js';
 import { createSmsProvider } from './providers/index.js';
 import { mutateStore, readStore } from './sms.repository.js';
 import { SMS_STATUS, TASK_STATUS } from './sms.types.js';
@@ -102,6 +103,7 @@ function createTaskPayload({ phone, template, rule, event, triggerType, taskType
     ruleName: rule?.name,
     eventId: event?.eventId,
     eventType: event?.eventType,
+    conditionResult: 'not_checked',
     scheduledAt: triggerType === 'auto' ? resolveScheduledAt(rule, event?.occurredAt) : now(),
     attemptCount: 0,
     maxAttempts: 3,
@@ -285,6 +287,7 @@ export async function createRule(input) {
     delayValue: Number(input.delayValue) || 0,
     delayUnit: input.delayUnit || 'hour',
     conditionType: input.conditionType || 'none',
+    conditionConfig: input.conditionConfig || { type: input.conditionType || 'none' },
     templateId: input.templateId,
     status: input.status || 'enabled',
     createdAt,
@@ -364,6 +367,38 @@ async function executeTask(taskId) {
       }
     });
     return fail('TEMPLATE_UNAVAILABLE', 'Template is missing or disabled.', 409);
+  }
+
+  const condition = await evaluateTaskCondition({ task: claimedTask || task, rule, event });
+  await mutateStore((current) => {
+    const currentTask = current.tasks.find((item) => item.id === task.id);
+    if (currentTask) {
+      currentTask.conditionCheckedAt = now();
+      currentTask.conditionResult = condition.result;
+      currentTask.conditionReason = condition.reason;
+      currentTask.updatedAt = now();
+    }
+  });
+
+  if (!condition.shouldSend) {
+    const finalStatus = condition.retryable ? TASK_STATUS.FAILED : TASK_STATUS.SKIPPED;
+    await mutateStore((current) => {
+      const currentTask = current.tasks.find((item) => item.id === task.id);
+      if (currentTask) {
+        currentTask.status = finalStatus;
+        currentTask.lastErrorCode = condition.retryable ? condition.code : undefined;
+        currentTask.lastErrorMessage = condition.retryable ? condition.reason : undefined;
+        currentTask.updatedAt = now();
+      }
+    });
+    const latestAfterCondition = await readStore();
+    const updatedTask = latestAfterCondition.tasks.find((item) => item.id === task.id);
+    return ok({
+      success: !condition.retryable,
+      skipped: !condition.retryable,
+      condition,
+      task: safeTask(updatedTask)
+    }, condition.retryable ? 503 : 200);
   }
 
   const result = await sendWithProvider({

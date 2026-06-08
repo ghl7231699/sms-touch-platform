@@ -9,7 +9,9 @@ export const TASK_STATUS = {
   SENDING: 'sending',
   SUCCESS: 'success',
   FAILED: 'failed',
-  BLOCKED: 'blocked'
+  BLOCKED: 'blocked',
+  SKIPPED: 'skipped',
+  CANCELLED: 'cancelled'
 };
 
 export const SMS_PROVIDERS = {

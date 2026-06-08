@@ -59,6 +59,11 @@ export const config = {
     batchSize: numberFromEnv('SMS_TASK_WORKER_BATCH_SIZE', 20),
     allowRealSend: booleanFromEnv('SMS_TASK_WORKER_ALLOW_REAL_SEND', false)
   },
+  integrations: {
+    membershipStatusUrl: process.env.MEMBERSHIP_STATUS_URL || '',
+    membershipStatusToken: process.env.MEMBERSHIP_STATUS_TOKEN || '',
+    timeoutMs: numberFromEnv('INTEGRATION_TIMEOUT_MS', 3000)
+  },
   whitelist: (process.env.SMS_TEST_PHONE_WHITELIST || '')
     .split(',')
     .map((phone) => phone.trim())

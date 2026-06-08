@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node server/src/app.js",
-    "dev": "node server/src/app.js",
+    "dev": "node scripts/dev.js",
+    "dev:server": "node server/src/app.js",
     "dev:worker": "SMS_TASK_WORKER_ENABLED=true node server/src/app.js",
     "serve": "npm run build && node server/src/app.js",
     "build": "vite build --config web/vite.config.ts",

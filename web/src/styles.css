@@ -338,6 +338,11 @@ th {
   color: var(--amber);
 }
 
+.statusBadge.skipped, .statusBadge.cancelled {
+  background: #f2f4f7;
+  color: var(--muted);
+}
+
 .statusBadge.pending {
   background: #eef4ff;
   color: #175cd3;

@@ -12,19 +12,21 @@
 | `backend-mvp-design.md` | - | 后端 MVP 设计 | 第一阶段后端范围、接口、数据模型、Provider、SDK 接入、验收标准 |
 | `database-docker-prisma.md` | - | 数据库运行说明 | Docker PostgreSQL、Prisma migration、seed、验证命令 |
 | `environment-and-startup.md` | - | 环境配置与启动说明 | Node、Docker、环境变量、首次启动、日常启动、worker、验证命令 |
+| `capability-roadmap-and-integration.md` | - | 能力路线图 | 当前能力、核心缺口、后续步骤、线上系统事件联动示例 |
 | `implementation-coverage.md` | - | 实现覆盖说明 | 当前代码相对 V1 文档的覆盖情况、测试版处理方式和后续生产化事项 |
 
 ## 按角色阅读
 
 | 角色 | 必读 | 关注点 |
 | --- | --- | --- |
-| 产品/运营 | PRD、规则中心设计、项目摘要 | 业务场景、规则配置、指标口径、V1 不做内容 |
+| 产品/运营 | PRD、规则中心设计、项目摘要、能力路线图 | 业务场景、规则配置、指标口径、V1 不做内容、后续扩展 |
 | 后端 | 技术设计、事件定义、规则中心设计、环境配置与启动说明、数据库运行说明 | 事件接收、规则匹配、任务生成、短信服务商、回执、短链、幂等、数据库迁移 |
 | 前端 | PRD、规则中心设计、技术设计 API 部分 | 模板管理、规则管理、手动发送、发送记录、统计页 |
 | 测试 | PRD、规则中心设计、事件定义、技术设计验收标准 | 四类事件、规则触发、状态流转、短链点击、统计口径 |
 | 运维/安全 | 技术设计、环境配置与启动说明 | 部署建议、日志、失败处理、手机号脱敏、批量发送限制、worker 开关 |
 | 短信联调 | 阿里云短信测试配置、技术设计 | 测试签名、模板参数、白名单、OpenAPI 返回记录 |
 | MVP 开发 | 环境配置与启动说明、后端 MVP 设计、数据库运行说明、阿里云短信测试配置 | mock 默认通道、SDK Provider、发送日志、基础统计、数据库启动 |
+| 线上联动 | 能力路线图、事件定义、技术设计 | 事件签名、业务系统对接、条件校验、任务调度 |
 
 ## 推荐阅读路径
 
@@ -38,12 +40,13 @@
 
 1. [项目摘要](project-summary.md)
 2. [环境配置与启动说明](environment-and-startup.md)
-3. [后端 MVP 设计](backend-mvp-design.md)
-4. [数据库与本地 Docker 环境](database-docker-prisma.md)
-5. [阿里云短信测试配置](aliyun-sms-test-config.md)
-6. `短信触达平台 V1 技术设计文档.pdf`
-7. `短信触达平台 V1 - 事件定义文档.pdf`
-8. `短信触达平台 V1 - 规则中心设计.pdf`
+3. [能力梳理、核心路线图与线上事件联动](capability-roadmap-and-integration.md)
+4. [后端 MVP 设计](backend-mvp-design.md)
+5. [数据库与本地 Docker 环境](database-docker-prisma.md)
+6. [阿里云短信测试配置](aliyun-sms-test-config.md)
+7. `短信触达平台 V1 技术设计文档.pdf`
+8. `短信触达平台 V1 - 事件定义文档.pdf`
+9. `短信触达平台 V1 - 规则中心设计.pdf`
 
 ### 测试验收
 

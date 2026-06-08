@@ -34,6 +34,7 @@ model SmsRule {
   delayValue    Int
   delayUnit     String
   conditionType String
+  conditionConfig Json?
   templateId    String
   status        String   @default("enabled")
   createdAt     DateTime @default(now())
@@ -130,6 +131,9 @@ model SmsTask {
   maxAttempts      Int       @default(3)
   lastErrorCode    String?
   lastErrorMessage String?
+  conditionCheckedAt DateTime?
+  conditionResult    String?
+  conditionReason    String?
   logId            String?   @unique
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt

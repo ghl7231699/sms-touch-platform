@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import './styles.css';
 
-type Status = 'enabled' | 'disabled' | 'pending' | 'sending' | 'success' | 'failed' | 'blocked';
+type Status = 'enabled' | 'disabled' | 'pending' | 'sending' | 'success' | 'failed' | 'blocked' | 'skipped' | 'cancelled';
 
 interface Template {
   id: string;
@@ -40,6 +40,11 @@ interface Rule {
   delayValue: number;
   delayUnit: string;
   conditionType: string;
+  conditionConfig?: {
+    type?: string;
+    window?: { value: number; unit: string };
+    membershipProductIds?: string[];
+  };
   templateId: string;
   status: Status;
 }
@@ -91,6 +96,9 @@ interface SmsTask {
   maxAttempts: number;
   lastErrorCode?: string;
   lastErrorMessage?: string;
+  conditionCheckedAt?: string;
+  conditionResult?: string;
+  conditionReason?: string;
   logId?: string;
   createdAt: string;
 }
@@ -167,8 +175,21 @@ function statusLabel(status: string) {
     pending: '待发送',
     sending: '发送中',
     failed: '失败',
-    blocked: '拦截'
+    blocked: '拦截',
+    skipped: '已跳过',
+    cancelled: '已取消'
   }[status] || status;
+}
+
+function conditionLabel(condition: string) {
+  return {
+    none: '无条件',
+    unpaid_after_register: '未购买会员',
+    not_purchased_membership: '未购买会员',
+    expired_after_days: '会员过期',
+    before_campaign_start: '活动开始前',
+    after_order_completed: '订单完成后'
+  }[condition] || condition;
 }
 
 function App() {
@@ -450,7 +471,8 @@ function Rules({ rules, templates, onRefresh, setNotice }: { rules: Rule[]; temp
     templateId: 'tpl_register',
     delayValue: 24,
     delayUnit: 'hour',
-    conditionType: 'unpaid_after_register'
+    conditionType: 'not_purchased_membership',
+    membershipProductIds: 'vip_monthly,vip_yearly'
   });
 
   async function toggle(rule: Rule) {
@@ -465,9 +487,17 @@ function Rules({ rules, templates, onRefresh, setNotice }: { rules: Rule[]; temp
   async function create(event: React.FormEvent) {
     event.preventDefault();
     const template = templates.find((item) => item.id === form.templateId);
+    const conditionConfig = {
+      type: form.conditionType,
+      window: { value: Number(form.delayValue) || 0, unit: form.delayUnit },
+      membershipProductIds: form.membershipProductIds
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+    };
     await api('/api/rules', {
       method: 'POST',
-      body: JSON.stringify({ ...form, scene: template?.scene || 'register' })
+      body: JSON.stringify({ ...form, scene: template?.scene || 'register', conditionConfig })
     });
     setNotice(`${form.name} 已创建`);
     setForm({ ...form, name: '' });
@@ -498,7 +528,7 @@ function Rules({ rules, templates, onRefresh, setNotice }: { rules: Rule[]; temp
                 <tr key={rule.id}>
                   <td><strong>{rule.name}</strong><span>{rule.code}</span></td>
                   <td>{eventLabels[rule.eventType] || rule.eventType}</td>
-                  <td>{rule.delayValue}{rule.delayUnit} · {rule.conditionType}</td>
+                  <td>{rule.delayValue}{rule.delayUnit} · {conditionLabel(rule.conditionType)}</td>
                   <td>{templates.find((item) => item.id === rule.templateId)?.name || '-'}</td>
                   <td><StatusBadge status={rule.status} /></td>
                   <td><button className="tableButton" onClick={() => toggle(rule)}>{rule.status === 'enabled' ? '停用' : '启用'}</button></td>
@@ -533,7 +563,18 @@ function Rules({ rules, templates, onRefresh, setNotice }: { rules: Rule[]; temp
             <option value="day">天</option>
           </select>
         </label>
-        <label>条件类型<input value={form.conditionType} onChange={(event) => setForm({ ...form, conditionType: event.target.value })} /></label>
+        <label>条件类型
+          <select value={form.conditionType} onChange={(event) => setForm({ ...form, conditionType: event.target.value })}>
+            <option value="none">无条件</option>
+            <option value="not_purchased_membership">未购买会员</option>
+            <option value="expired_after_days">会员过期</option>
+            <option value="before_campaign_start">活动开始前</option>
+            <option value="after_order_completed">订单完成后</option>
+          </select>
+        </label>
+        {form.conditionType === 'not_purchased_membership' && (
+          <label>会员商品范围<input value={form.membershipProductIds} onChange={(event) => setForm({ ...form, membershipProductIds: event.target.value })} /></label>
+        )}
         <button className="primaryButton" type="submit"><ListChecks size={16} />创建规则</button>
       </form>
     </section>
@@ -692,6 +733,8 @@ function TaskTable({ tasks, showDetail = false }: { tasks: SmsTask[]; showDetail
               {showDetail && (
                 <td>
                   {task.logId ? <span>日志 {task.logId.slice(0, 8)}</span> : <span>{task.lastErrorCode || '-'}</span>}
+                  {task.conditionResult && <span>条件：{task.conditionResult}</span>}
+                  {task.conditionReason && <span>{task.conditionReason}</span>}
                   {task.lastErrorMessage && <span>{task.lastErrorMessage}</span>}
                 </td>
               )}

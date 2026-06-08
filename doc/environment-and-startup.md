@@ -19,17 +19,16 @@ cp .env.example .env
 npm run db:up
 npm run db:migrate
 npm run db:seed
-npm run build
 npm run dev
 ```
 
 启动后打开：
 
 ```text
-http://127.0.0.1:3100
+http://127.0.0.1:5173
 ```
 
-默认 `SMS_PROVIDER=mock`，不会真实发送短信。
+`npm run dev` 会同时启动后端 `3100` 和 React/Vite `5173`，前端支持 hot reload。默认 `SMS_PROVIDER=mock`，不会真实发送短信。
 
 ## 日常启动
 
@@ -38,6 +37,12 @@ http://127.0.0.1:3100
 ```bash
 npm run db:up
 npm run dev
+```
+
+访问热更新开发页：
+
+```text
+http://127.0.0.1:5173
 ```
 
 需要后台自动扫描到期任务时：
@@ -74,6 +79,16 @@ User: sms_touch
 Password: sms_touch_dev
 Port: 5432
 ```
+
+### 线上服务适配
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `MEMBERSHIP_STATUS_URL` | 空 | 会员状态查询接口；为空时根据事件 payload 判断 |
+| `MEMBERSHIP_STATUS_TOKEN` | 空 | 调用会员状态接口的 Bearer Token |
+| `INTEGRATION_TIMEOUT_MS` | `3000` | 外部系统查询超时时间 |
+
+`not_purchased_membership` 条件会优先调用 `MEMBERSHIP_STATUS_URL`，未配置时使用事件 payload 中的 `membershipPurchased`、`hasMembership`、`membershipStatus` 等字段判断。
 
 ### 短信通道
 
@@ -135,7 +150,9 @@ SMS_TASK_WORKER_ALLOW_REAL_SEND=false
 
 | 命令 | 用途 |
 | --- | --- |
-| `npm run dev` | 启动后端和已构建前端，worker 默认关闭 |
+| `npm run dev` | 同时启动后端 `3100` 和 React/Vite `5173`，支持 hot reload |
+| `npm run dev:server` | 只启动后端并托管已构建前端，访问 `3100` |
+| `npm run dev:web` | 只启动 React/Vite 开发服务，访问 `5173` |
 | `npm run dev:worker` | 启动后端并开启内置任务 worker |
 | `npm run build` | 构建 React 前端 |
 | `npm run typecheck` | 前端 TypeScript 类型检查 |

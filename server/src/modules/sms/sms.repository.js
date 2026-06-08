@@ -9,7 +9,7 @@ function toTemplate(item) {
 }
 
 function toRule(item) {
-  return { ...item, createdAt: iso(item.createdAt), updatedAt: iso(item.updatedAt) };
+  return { ...item, conditionConfig: item.conditionConfig || undefined, createdAt: iso(item.createdAt), updatedAt: iso(item.updatedAt) };
 }
 
 function toEvent(item) {
@@ -33,6 +33,7 @@ function toTask(item) {
     templateParam: item.templateParam || undefined,
     scheduledAt: iso(item.scheduledAt),
     sentAt: item.sentAt ? iso(item.sentAt) : undefined,
+    conditionCheckedAt: item.conditionCheckedAt ? iso(item.conditionCheckedAt) : undefined,
     createdAt: iso(item.createdAt),
     updatedAt: iso(item.updatedAt)
   };
@@ -107,6 +108,7 @@ async function createRule(tx, item) {
       delayValue: Number(item.delayValue || 0),
       delayUnit: item.delayUnit,
       conditionType: item.conditionType,
+      conditionConfig: item.conditionConfig || {},
       templateId: item.templateId,
       status: item.status || 'enabled',
       createdAt: item.createdAt ? new Date(item.createdAt) : undefined,
@@ -188,6 +190,9 @@ async function createTask(tx, item) {
       maxAttempts: Number(item.maxAttempts || 3),
       lastErrorCode: item.lastErrorCode || null,
       lastErrorMessage: item.lastErrorMessage || null,
+      conditionCheckedAt: item.conditionCheckedAt ? new Date(item.conditionCheckedAt) : null,
+      conditionResult: item.conditionResult || null,
+      conditionReason: item.conditionReason || null,
       logId: item.logId || null,
       createdAt: item.createdAt ? new Date(item.createdAt) : undefined,
       updatedAt: item.updatedAt ? new Date(item.updatedAt) : undefined
@@ -296,6 +301,7 @@ async function persistUpdates(tx, before, after) {
           delayValue: Number(item.delayValue || 0),
           delayUnit: item.delayUnit,
           conditionType: item.conditionType,
+          conditionConfig: item.conditionConfig || {},
           templateId: item.templateId,
           status: item.status
         }
@@ -326,6 +332,9 @@ async function persistUpdates(tx, before, after) {
           maxAttempts: Number(item.maxAttempts || 3),
           lastErrorCode: item.lastErrorCode || null,
           lastErrorMessage: item.lastErrorMessage || null,
+          conditionCheckedAt: item.conditionCheckedAt ? new Date(item.conditionCheckedAt) : null,
+          conditionResult: item.conditionResult || null,
+          conditionReason: item.conditionReason || null,
           logId: item.logId || null,
           updatedAt: item.updatedAt ? new Date(item.updatedAt) : undefined
         }

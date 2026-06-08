@@ -12,15 +12,16 @@ cp .env.example .env
 npm run db:up
 npm run db:migrate
 npm run db:seed
-npm run build
 npm run dev
 ```
 
-打开：
+开发模式打开：
 
 ```text
-http://localhost:3100
+http://127.0.0.1:5173
 ```
+
+`npm run dev` 会同时启动后端 `3100` 和 React/Vite `5173`，前端支持 hot reload。生产构建或只看构建产物时，可执行 `npm run build && npm run dev:server`，然后访问 `http://127.0.0.1:3100`。
 
 默认 `SMS_PROVIDER=mock`，不会真实发送短信。只有在 `.env` 中显式设置 `SMS_PROVIDER=aliyun_dypns` 并填写 AccessKey 后，才会调用阿里云 SDK。
 
