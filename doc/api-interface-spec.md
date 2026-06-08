@@ -59,7 +59,7 @@ Content-Type: application/json
 | `GET` | 查询列表、查询详情、健康检查、短链跳转 |
 | `POST` | 新增、修改、启用、停用、审核、重试、取消、导入、导出、发送、回调等动作 |
 
-不使用 `PATCH`、`PUT`、`DELETE`。删除类业务动作统一设计为 `POST /{resource}/{id}/remove`、`POST /{resource}/{id}/disable` 或其他明确动作接口。
+不使用 `PATCH`、`PUT`、`DELETE`。删除、移除、停用等动作统一设计为 `POST /{resource}/{id}/remove`、`POST /{resource}/{id}/status` 或其他明确动作接口。
 
 ### 1.5 通用分页参数
 
@@ -1382,10 +1382,11 @@ POST /api/auth/logout
 ### 13.4 注册申请
 
 ```http
-POST /api/register-applications
-GET /api/register-applications
-POST /api/register-applications/{applicationId}/approve
-POST /api/register-applications/{applicationId}/reject
+POST /api/auth/register-request
+GET /api/auth/register-requests
+GET /api/auth/register-requests/{applicationId}
+POST /api/auth/register-requests/{applicationId}/approve
+POST /api/auth/register-requests/{applicationId}/reject
 ```
 
 用于用户提交注册申请、管理员审核通过或驳回。
@@ -1412,9 +1413,7 @@ GET /api/users
 POST /api/users
 GET /api/users/{userId}
 POST /api/users/{userId}/update
-POST /api/users/{userId}/enable
-POST /api/users/{userId}/disable
-POST /api/users/{userId}/unlock
+POST /api/users/{userId}/status
 POST /api/users/{userId}/reset-password
 ```
 
@@ -1489,8 +1488,8 @@ POST /api/frequency-policies/{policyId}/update
 ### 16.1 发送配置
 
 ```http
-GET /api/system/sms-config
-POST /api/system/sms-config/update
+GET /api/settings
+POST /api/settings/update
 ```
 
 建议配置字段：
@@ -1507,11 +1506,11 @@ POST /api/system/sms-config/update
 ### 16.2 白名单管理
 
 ```http
-GET /api/system/whitelist
-POST /api/system/whitelist
-POST /api/system/whitelist/{whitelistId}/update
-POST /api/system/whitelist/{whitelistId}/enable
-POST /api/system/whitelist/{whitelistId}/disable
+GET /api/whitelist
+POST /api/whitelist
+POST /api/whitelist/{whitelistId}/update
+POST /api/whitelist/{whitelistId}/status
+POST /api/whitelist/export
 ```
 
 核心规则：
@@ -1526,10 +1525,9 @@ POST /api/system/whitelist/{whitelistId}/disable
 GET /api/event-sources
 POST /api/event-sources
 POST /api/event-sources/{sourceId}/update
-POST /api/event-sources/{sourceId}/enable
-POST /api/event-sources/{sourceId}/disable
+POST /api/event-sources/{sourceId}/status
 POST /api/event-sources/{sourceId}/reset-secret
-GET /api/event-access-logs
+GET /api/event-source-logs
 ```
 
 核心规则：
@@ -1547,7 +1545,6 @@ GET /api/event-access-logs
 ```http
 GET /api/operation-logs
 GET /api/operation-logs/{logId}
-POST /api/operation-logs/export
 ```
 
 建议查询参数：
@@ -1575,13 +1572,15 @@ POST /api/approvals/{approvalId}/withdraw
 
 用于高风险操作，例如真实 Provider 切换、真实 worker 开启、高风险规则启用等。
 
+操作日志导出统一通过 `/api/export-tasks` 创建导出任务，导出对象传 `operation_logs`。
+
 ### 17.3 数据导出
 
 ```http
-POST /api/exports
-GET /api/exports
-GET /api/exports/{exportId}
-GET /api/exports/{exportId}/download
+GET /api/export-tasks
+POST /api/export-tasks
+GET /api/export-tasks/{exportId}
+GET /api/export-tasks/{exportId}/download
 ```
 
 建议导出对象：
