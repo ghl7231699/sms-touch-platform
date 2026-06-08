@@ -1,5 +1,6 @@
 node_modules/
 web/dist/
+apps/web/dist/
 .env
 data/*.json
 !.gitkeep

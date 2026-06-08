@@ -10,12 +10,12 @@ const processes = [
   {
     name: 'server',
     command: process.execPath,
-    args: ['server/src/app.js']
+    args: ['apps/api/src/app.js']
   },
   {
     name: 'web',
     command: viteBin,
-    args: ['--config', 'web/vite.config.ts', '--host', '127.0.0.1', '--port', '5173']
+    args: ['--config', 'apps/web/vite.config.ts', '--host', '127.0.0.1', '--port', '5173']
   }
 ];
 

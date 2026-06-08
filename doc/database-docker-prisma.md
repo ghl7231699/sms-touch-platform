@@ -19,7 +19,7 @@ docker-compose.yml
 prisma/schema.prisma
 prisma/migrations/
 prisma/seed.js
-server/src/modules/sms/sms.repository.js
+apps/api/src/modules/sms/sms.repository.js
 ```
 
 ## 启动数据库

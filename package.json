@@ -3,15 +3,21 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
   "scripts": {
-    "start": "node server/src/app.js",
+    "start": "npm --workspace apps/api run start",
     "dev": "node scripts/dev.js",
-    "dev:server": "node server/src/app.js",
-    "dev:worker": "SMS_TASK_WORKER_ENABLED=true node server/src/app.js",
-    "serve": "npm run build && node server/src/app.js",
-    "build": "vite build --config web/vite.config.ts",
-    "typecheck": "tsc -p web/tsconfig.json --noEmit",
-    "dev:web": "vite --config web/vite.config.ts --host 127.0.0.1 --port 5173",
+    "dev:api": "npm --workspace apps/api run dev",
+    "dev:server": "npm run dev:api",
+    "dev:worker": "npm --workspace apps/api run dev:worker",
+    "dev:web": "npm --workspace apps/web run dev",
+    "serve": "npm run build && npm run start",
+    "build": "npm --workspace apps/web run build",
+    "build:web": "npm --workspace apps/web run build",
+    "typecheck": "npm --workspace apps/web run typecheck",
     "db:up": "docker compose -p sms-touch-platform up -d postgres",
     "db:migrate": "prisma migrate dev --name init",
     "db:deploy": "prisma migrate deploy",
@@ -19,21 +25,7 @@
     "db:studio": "prisma studio",
     "test:mock": "node scripts/test-mock.js"
   },
-  "dependencies": {
-    "@alicloud/dypnsapi20170525": "2.0.0",
-    "@alicloud/openapi-client": "^0.4.14",
-    "@alicloud/tea-util": "^1.4.10",
-    "@prisma/client": "^6.1.0",
-    "@vitejs/plugin-react": "^4.3.4",
-    "vite": "^6.0.7",
-    "typescript": "^5.7.2",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "lucide-react": "^0.468.0"
-  },
   "devDependencies": {
-    "@types/react": "^18.3.18",
-    "@types/react-dom": "^18.3.5",
     "prisma": "^6.1.0"
   },
   "prisma": {

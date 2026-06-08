@@ -28,7 +28,7 @@ import { createTaskWorker } from './modules/sms/sms.worker.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const webRoot = path.resolve(__dirname, '../..', 'web');
+const webRoot = path.resolve(__dirname, '../../web');
 const builtWebDir = path.join(webRoot, 'dist');
 const taskWorker = createTaskWorker();
 

@@ -151,9 +151,10 @@ SMS_TASK_WORKER_ALLOW_REAL_SEND=false
 | 命令 | 用途 |
 | --- | --- |
 | `npm run dev` | 同时启动后端 `3100` 和 React/Vite `5173`，支持 hot reload |
-| `npm run dev:server` | 只启动后端并托管已构建前端，访问 `3100` |
+| `npm run dev:api` | 只启动后端 API，访问 `3100` |
+| `npm run dev:server` | `dev:api` 的兼容别名 |
 | `npm run dev:web` | 只启动 React/Vite 开发服务，访问 `5173` |
-| `npm run dev:worker` | 启动后端并开启内置任务 worker |
+| `npm run dev:worker` | 只启动后端并开启内置任务 worker |
 | `npm run build` | 构建 React 前端 |
 | `npm run typecheck` | 前端 TypeScript 类型检查 |
 | `npm run test:mock` | 使用 mock 通道验证手动发送 |
@@ -162,6 +163,17 @@ SMS_TASK_WORKER_ALLOW_REAL_SEND=false
 | `npm run db:deploy` | 部署环境执行 Prisma migration |
 | `npm run db:seed` | 写入初始模板和规则 |
 | `npm run db:studio` | 打开 Prisma Studio |
+
+## 代码目录
+
+```text
+apps/
+  api/    后端服务，包含 API、短信 Provider、任务 worker
+  web/    React + TypeScript 前端，Vite 提供 hot reload
+prisma/   数据库 schema、migration、seed
+doc/      项目文档
+scripts/  根目录开发脚本
+```
 
 ## 验证命令
 

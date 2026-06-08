@@ -39,31 +39,34 @@
 ## 目录结构
 
 ```text
-server/
-  src/
-    app.js
-    config/
-      env.js
-    modules/
-      sms/
-        sms.service.js
-        sms.repository.js
-        sms.types.js
-        providers/
-          mock-sms-provider.js
-          aliyun-dypns-provider.js
-    utils/
-      mask-phone.js
-      ids.js
+apps/
+  api/
+    src/
+      app.js
+      config/
+        env.js
+      modules/
+        sms/
+          sms.service.js
+          sms.repository.js
+          sms.types.js
+          providers/
+            mock-sms-provider.js
+            aliyun-dypns-provider.js
+      utils/
+        mask-phone.js
+        ids.js
+    package.json
+  web/
+    src/
+      main.tsx
+      styles.css
+    vite.config.ts
+    package.json
 prisma/
   schema.prisma
   migrations/
   seed.js
-web/
-  src/
-    main.tsx
-    styles.css
-  vite.config.ts
 docker-compose.yml
 .env.example
 package.json
@@ -187,7 +190,7 @@ docker-compose.yml
 prisma/schema.prisma
 prisma/migrations/
 prisma/seed.js
-server/src/modules/sms/sms.repository.js
+apps/api/src/modules/sms/sms.repository.js
 ```
 
 ### sms_task

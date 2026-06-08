@@ -289,7 +289,7 @@ sequenceDiagram
 
 目标：任务发送前能查询线上系统。
 
-- 新增 `server/src/modules/integrations/`。
+- 新增 `apps/api/src/modules/integrations/`。
 - 实现会员状态查询适配器。
 - 实现订单购买查询适配器。
 - 配置线上接口 baseUrl、鉴权 token、超时。
