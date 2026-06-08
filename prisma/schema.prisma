@@ -1,0 +1,193 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model SmsTemplate {
+  id                 String   @id
+  name               String
+  scene              String
+  providerTemplateId String
+  content            String
+  variables          Json
+  status             String   @default("enabled")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  rules SmsRule[]
+  logs  SmsSendLog[]
+  tasks SmsTask[]
+
+  @@map("sms_template")
+}
+
+model SmsRule {
+  id            String   @id
+  name          String
+  code          String   @unique
+  scene         String
+  eventType     String
+  delayValue    Int
+  delayUnit     String
+  conditionType String
+  templateId    String
+  status        String   @default("enabled")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  template SmsTemplate  @relation(fields: [templateId], references: [id])
+  logs     SmsSendLog[]
+  tasks    SmsTask[]
+
+  @@index([eventType, status])
+  @@map("sms_rule")
+}
+
+model SmsEvent {
+  id         String   @id
+  eventId    String   @unique
+  eventType  String
+  userId     String?
+  phone      String?
+  payload    Json
+  occurredAt DateTime
+  createdAt  DateTime @default(now())
+
+  logs SmsSendLog[]
+  tasks SmsTask[]
+
+  @@index([eventType])
+  @@map("sms_event")
+}
+
+model SmsSendLog {
+  id            String   @id
+  provider      String
+  triggerType   String
+  scene         String
+  phone         String
+  phoneMasked   String
+  templateId    String?
+  templateName  String?
+  templateCode  String
+  templateParam Json?
+  ruleId        String?
+  ruleName      String?
+  eventId       String?
+  eventType     String?
+  status        String
+  receiptStatus String?
+  code          String?
+  message       String?
+  bizId         String?
+  requestId     String?
+  shortCode     String?
+  shortUrl      String?
+  clickCount    Int      @default(0)
+  lastClickedAt DateTime?
+  rawResponse   Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  template  SmsTemplate?  @relation(fields: [templateId], references: [id])
+  rule      SmsRule?      @relation(fields: [ruleId], references: [id])
+  event     SmsEvent?     @relation(fields: [eventId], references: [eventId])
+  shortLink SmsShortLink?
+  receipts  SmsReceipt[]
+  clicks    SmsClickLog[]
+  task      SmsTask?
+
+  @@index([status])
+  @@index([provider])
+  @@index([triggerType])
+  @@index([bizId])
+  @@map("sms_send_log")
+}
+
+model SmsTask {
+  id               String    @id
+  taskType         String
+  status           String    @default("pending")
+  triggerType      String
+  scene            String
+  phone            String
+  phoneMasked      String
+  templateId       String
+  templateName     String?
+  templateCode     String
+  templateParam    Json?
+  ruleId           String?
+  ruleName         String?
+  eventId          String?
+  eventType        String?
+  scheduledAt      DateTime
+  sentAt           DateTime?
+  attemptCount     Int       @default(0)
+  maxAttempts      Int       @default(3)
+  lastErrorCode    String?
+  lastErrorMessage String?
+  logId            String?   @unique
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  template SmsTemplate @relation(fields: [templateId], references: [id])
+  rule     SmsRule?     @relation(fields: [ruleId], references: [id])
+  event    SmsEvent?    @relation(fields: [eventId], references: [eventId])
+  log      SmsSendLog?  @relation(fields: [logId], references: [id])
+
+  @@index([status, scheduledAt])
+  @@index([eventId])
+  @@index([ruleId])
+  @@map("sms_task")
+}
+
+model SmsShortLink {
+  id          String   @id
+  shortCode   String   @unique
+  shortUrl    String
+  targetUrl   String
+  logId       String   @unique
+  userId      String?
+  phoneMasked String?
+  clickCount  Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  log SmsSendLog @relation(fields: [logId], references: [id])
+
+  @@map("sms_short_link")
+}
+
+model SmsClickLog {
+  id        String   @id
+  shortCode String
+  logId     String
+  userId    String?
+  ip        String?
+  userAgent String?
+  clickedAt DateTime @default(now())
+
+  log SmsSendLog @relation(fields: [logId], references: [id])
+
+  @@index([shortCode])
+  @@map("sms_click_log")
+}
+
+model SmsReceipt {
+  id            String   @id
+  logId         String?
+  bizId         String?
+  requestId     String?
+  receiptStatus String
+  raw           Json
+  createdAt     DateTime @default(now())
+
+  log SmsSendLog? @relation(fields: [logId], references: [id])
+
+  @@unique([bizId, receiptStatus])
+  @@index([requestId])
+  @@map("sms_receipt")
+}

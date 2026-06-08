@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: sms-touch-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sms_touch
+      POSTGRES_USER: sms_touch
+      POSTGRES_PASSWORD: sms_touch_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - sms_touch_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sms_touch -d sms_touch"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  sms_touch_pg_data:
