@@ -5,6 +5,7 @@
 ## 快速入口
 
 - [文档地图](README.md)：说明每份 PDF 的用途、阅读顺序和适用角色。
+- [环境配置与启动说明](environment-and-startup.md)：说明本地依赖、环境变量、首次启动、日常启动、worker 和验证命令。
 - [项目摘要](project-summary.md)：汇总业务目标、核心能力、事件、规则、系统模块、接口、数据表和验收标准。
 - [阿里云短信测试配置](aliyun-sms-test-config.md)：记录测试短信通道、签名、模板、白名单和环境变量建议。
 - [后端 MVP 设计](backend-mvp-design.md)：定义第一阶段后端范围、接口、数据模型、Provider 和验收标准。

@@ -4,7 +4,7 @@
 
 文档已集中到 [doc/](doc/)。
 
-## 启动
+## 快速启动
 
 ```bash
 npm install
@@ -23,6 +23,10 @@ http://localhost:3100
 ```
 
 默认 `SMS_PROVIDER=mock`，不会真实发送短信。只有在 `.env` 中显式设置 `SMS_PROVIDER=aliyun_dypns` 并填写 AccessKey 后，才会调用阿里云 SDK。
+
+完整环境变量、首次启动、日常启动、worker 启动和验证命令见：
+
+[环境配置与启动说明](doc/environment-and-startup.md)
 
 后台任务 worker 默认关闭，避免真实短信模式下误发。需要自动扫描到期任务时显式开启：
 
