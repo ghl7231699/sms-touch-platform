@@ -62,15 +62,17 @@ prisma/seed.js            初始模板和规则数据
 
 ## API
 
+完整接口说明见 [API 接口文档](doc/api-interface-spec.md)。
+
 ```text
 GET  /health
 GET  /api/dashboard
 GET  /api/templates
 POST /api/templates
-PATCH /api/templates/:id/status
+POST /api/templates/:id/status
 GET  /api/rules
 POST /api/rules
-PATCH /api/rules/:id/status
+POST /api/rules/:id/status
 POST /api/manual-send
 POST /api/events
 GET  /api/events

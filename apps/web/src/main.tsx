@@ -397,7 +397,7 @@ function Templates({ templates, onRefresh, setNotice }: { templates: Template[];
 
   async function toggle(template: Template) {
     await api(`/api/templates/${template.id}/status`, {
-      method: 'PATCH',
+      method: 'POST',
       body: JSON.stringify({ status: template.status === 'enabled' ? 'disabled' : 'enabled' })
     });
     setNotice(`${template.name} 已${template.status === 'enabled' ? '停用' : '启用'}`);
@@ -477,7 +477,7 @@ function Rules({ rules, templates, onRefresh, setNotice }: { rules: Rule[]; temp
 
   async function toggle(rule: Rule) {
     await api(`/api/rules/${rule.id}/status`, {
-      method: 'PATCH',
+      method: 'POST',
       body: JSON.stringify({ status: rule.status === 'enabled' ? 'disabled' : 'enabled' })
     });
     setNotice(`${rule.name} 已${rule.status === 'enabled' ? '停用' : '启用'}`);

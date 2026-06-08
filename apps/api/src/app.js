@@ -136,7 +136,7 @@ async function handleApi(req, res, url) {
   }
 
   const templateStatusMatch = url.pathname.match(/^\/api\/(?:sms\/)?templates\/([^/]+)\/status$/);
-  if (req.method === 'PATCH' && templateStatusMatch) {
+  if (req.method === 'POST' && templateStatusMatch) {
     const result = await updateTemplateStatus(templateStatusMatch[1], (await readJson(req)).status);
     sendJson(res, result.statusCode, result.body);
     return;
@@ -154,7 +154,7 @@ async function handleApi(req, res, url) {
   }
 
   const ruleStatusMatch = url.pathname.match(/^\/api\/(?:sms\/)?rules\/([^/]+)\/status$/);
-  if (req.method === 'PATCH' && ruleStatusMatch) {
+  if (req.method === 'POST' && ruleStatusMatch) {
     const result = await updateRuleStatus(ruleStatusMatch[1], (await readJson(req)).status);
     sendJson(res, result.statusCode, result.body);
     return;
