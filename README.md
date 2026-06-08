@@ -98,7 +98,7 @@ GET  /api/click-logs
 ```text
 apps/
   api/    后端 API、业务服务和短信 Provider
-  web/    React + TypeScript 运营后台
+  web/    React + TypeScript 运营后台，含 UI spec
 doc/      项目文档和原始 PDF
 prisma/   Prisma 数据模型、迁移和种子数据
 data/     历史 JSON 数据目录，当前 PostgreSQL 版本不再作为主存储
