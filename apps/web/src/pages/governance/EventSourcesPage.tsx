@@ -66,10 +66,12 @@ export default function EventSourcesPage({ setNotice }: { setNotice: (value: str
           <label>名称<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /></label>
           <label>AppId<input value={form.appId} onChange={(event) => setForm({ ...form, appId: event.target.value })} placeholder="留空自动生成" /></label>
           <label>备注<input value={form.remark} onChange={(event) => setForm({ ...form, remark: event.target.value })} /></label>
-          <button className="primaryButton" type="submit"><KeyRound size={16} />创建来源</button>
+          <div className="modalActions">
+            <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(false)}>取消</button>
+            <button className="primaryButton compact" type="submit"><KeyRound size={16} />创建来源</button>
+          </div>
         </form>
       </Modal>
     </section>
   );
 }
-

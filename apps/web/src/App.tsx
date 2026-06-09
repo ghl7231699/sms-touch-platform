@@ -170,7 +170,7 @@ export default function App() {
 
         {view === 'dashboard' && <Dashboard stats={stats} logs={logs} rules={rules} tasks={tasks} />}
         {view === 'templates' && <Templates templates={templates} onRefresh={refresh} setNotice={setNotice} />}
-        {view === 'rules' && <Rules rules={rules} templates={templates} onRefresh={refresh} setNotice={setNotice} />}
+        {view === 'rules' && <Rules rules={rules} templates={templates} logs={logs} onRefresh={refresh} setNotice={setNotice} />}
         {view === 'manual' && <ManualSend templates={templates} onRefresh={refresh} setNotice={setNotice} />}
         {view === 'events' && <Events events={events} onRefresh={refresh} setNotice={setNotice} />}
         {view === 'tasks' && <Tasks tasks={tasks} onRefresh={refresh} setNotice={setNotice} />}

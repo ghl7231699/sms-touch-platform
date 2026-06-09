@@ -77,10 +77,12 @@ export default function PhoneListPage({ kind, title, setNotice }: { kind: 'white
           {kind === 'blacklist'
             ? <label>原因<input value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} /></label>
             : <label>备注<input value={form.remark} onChange={(event) => setForm({ ...form, remark: event.target.value })} /></label>}
-          <button className="primaryButton" type="submit"><ShieldCheck size={16} />保存</button>
+          <div className="modalActions">
+            <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(false)}>取消</button>
+            <button className="primaryButton compact" type="submit"><ShieldCheck size={16} />保存</button>
+          </div>
         </form>
       </Modal>
     </section>
   );
 }
-

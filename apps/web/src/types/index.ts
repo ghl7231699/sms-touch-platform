@@ -36,6 +36,7 @@ export interface SendLog {
   phoneMasked: string;
   templateName?: string;
   templateCode: string;
+  ruleId?: string;
   ruleName?: string;
   eventType?: string;
   status: Status;

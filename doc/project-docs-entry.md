@@ -6,6 +6,7 @@
 
 - [文档地图](README.md)：说明每份 PDF 的用途、阅读顺序和适用角色。
 - [短信触达平台 V1.0 产品需求文档](短信触达平台%20V1.0%20产品需求文档.md)：按后台系统需求模板整理的结构化 PRD。
+- [前端 UI 商业化美化计划](frontend-commercial-ui-polish-plan.md)：定义从 demo 风格升级为商业化运营后台的视觉方向、组件清单、页面优先级、验收标准和排期。
 - [双全栈功能拆分与协作边界](two-fullstack-feature-split.md)：拆分两名全栈工程师的模块、页面、接口、数据表和公共契约边界，减少并行开发冲突。
 - [API 接口文档](api-interface-spec.md)：按 PRD 和当前后端实现整理接口、请求参数、响应示例、错误码、已实现与规划差异。
 - [前端页面与新增/修改接口梳理](frontend-pages-and-write-api-count.md)：统计当前页面、PRD 页面、弹窗详情和新增/修改接口数量。

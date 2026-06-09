@@ -4,11 +4,13 @@ import { api } from '../../lib/api';
 import { eventLabels } from '../../constants/labels';
 import type { EventItem } from '../../types';
 import { Modal } from '../../components/Modal';
+import { SelectField } from '../../components/SelectField';
 
 export default function Events({ events, onRefresh, setNotice }: { events: EventItem[]; onRefresh: () => Promise<void>; setNotice: (value: string) => void }) {
   const [phone, setPhone] = useState('18515385071');
   const [eventType, setEventType] = useState('user_register');
   const [modalOpen, setModalOpen] = useState(false);
+  const eventOptions = Object.entries(eventLabels).map(([value, label]) => ({ value, label }));
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -45,15 +47,15 @@ export default function Events({ events, onRefresh, setNotice }: { events: Event
       <Modal open={modalOpen} title="模拟业务事件" subtitle="自动规则触发" onClose={() => setModalOpen(false)}>
         <form className="formPanel" onSubmit={submit}>
           <label>事件类型
-            <select value={eventType} onChange={(event) => setEventType(event.target.value)}>
-              {Object.entries(eventLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}
-            </select>
+            <SelectField value={eventType} options={eventOptions} onChange={setEventType} />
           </label>
           <label>手机号<input value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
-          <button className="primaryButton" type="submit"><Zap size={16} />触发事件</button>
+          <div className="modalActions">
+            <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(false)}>取消</button>
+            <button className="primaryButton compact" type="submit"><Zap size={16} />触发事件</button>
+          </div>
         </form>
       </Modal>
     </section>
   );
 }
-

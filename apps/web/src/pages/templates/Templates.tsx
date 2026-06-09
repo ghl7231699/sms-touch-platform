@@ -4,6 +4,7 @@ import { api } from '../../lib/api';
 import { sceneLabels } from '../../constants/labels';
 import type { Template } from '../../types';
 import { Modal } from '../../components/Modal';
+import { SelectField } from '../../components/SelectField';
 import { StatusBadge } from '../../components/StatusBadge';
 
 export default function Templates({ templates, onRefresh, setNotice }: { templates: Template[]; onRefresh: () => Promise<void>; setNotice: (value: string) => void }) {
@@ -14,6 +15,7 @@ export default function Templates({ templates, onRefresh, setNotice }: { templat
     content: '您的测试验证码为${code}，${min}分钟内有效。'
   });
   const [modalOpen, setModalOpen] = useState(false);
+  const sceneOptions = Object.entries(sceneLabels).map(([value, label]) => ({ value, label }));
 
   async function toggle(template: Template) {
     await api(`/api/templates/${template.id}/status`, {
@@ -70,16 +72,16 @@ export default function Templates({ templates, onRefresh, setNotice }: { templat
         <form className="formPanel" onSubmit={create}>
           <label>模板名称<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /></label>
           <label>业务场景
-            <select value={form.scene} onChange={(event) => setForm({ ...form, scene: event.target.value })}>
-              {Object.entries(sceneLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
+            <SelectField value={form.scene} options={sceneOptions} onChange={(scene) => setForm({ ...form, scene })} />
           </label>
           <label>服务商模板 Code<input value={form.providerTemplateId} onChange={(event) => setForm({ ...form, providerTemplateId: event.target.value })} /></label>
           <label>模板内容<input value={form.content} onChange={(event) => setForm({ ...form, content: event.target.value })} /></label>
-          <button className="primaryButton" type="submit"><FileText size={16} />创建模板</button>
+          <div className="modalActions">
+            <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(false)}>取消</button>
+            <button className="primaryButton compact" type="submit"><FileText size={16} />创建模板</button>
+          </div>
         </form>
       </Modal>
     </section>
   );
 }
-

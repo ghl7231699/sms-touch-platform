@@ -54,26 +54,36 @@ export const pageTitles: Record<View, string> = {
 
 export const menuGroups: MenuGroup[] = [
   {
-    title: '触达主链路',
+    title: '总览',
     items: [
-      { key: 'dashboard', label: '运营总览', icon: <LayoutDashboard size={18} /> },
-      { key: 'templates', label: '短信模板', icon: <FileText size={18} /> },
+      { key: 'dashboard', label: '增长总览', icon: <LayoutDashboard size={18} /> }
+    ]
+  },
+  {
+    title: '触达运营',
+    items: [
+      { key: 'templates', label: '模板中心', icon: <FileText size={18} /> },
       { key: 'rules', label: '规则中心', icon: <ListChecks size={18} /> },
       { key: 'manual', label: '手动发送', icon: <Send size={18} /> },
-      { key: 'events', label: '事件触发', icon: <Zap size={18} /> },
-      { key: 'tasks', label: '任务队列', icon: <Clock3 size={18} /> },
+      { key: 'tasks', label: '任务中心', icon: <Clock3 size={18} /> },
+      { key: 'events', label: '事件触发', icon: <Zap size={18} /> }
+    ]
+  },
+  {
+    title: '数据分析',
+    items: [
       { key: 'logs', label: '发送记录', icon: <Activity size={18} /> }
     ]
   },
   {
-    title: '治理与安全',
+    title: '系统设置',
     items: [
       { key: 'users', label: '用户管理', icon: <Users size={18} /> },
       { key: 'roles', label: '角色权限', icon: <UserCheck size={18} /> },
       { key: 'whitelist', label: '白名单', icon: <ShieldCheck size={18} /> },
       { key: 'blacklist', label: '黑名单', icon: <Ban size={18} /> },
       { key: 'unsubscribes', label: '退订记录', icon: <Bell size={18} /> },
-      { key: 'settings', label: '系统配置', icon: <Settings size={18} /> },
+      { key: 'settings', label: '运行配置', icon: <Settings size={18} /> },
       { key: 'eventSources', label: '事件来源', icon: <KeyRound size={18} /> },
       { key: 'eventSourceLogs', label: '接入日志', icon: <Database size={18} /> },
       { key: 'operationLogs', label: '操作日志', icon: <ScrollText size={18} /> },

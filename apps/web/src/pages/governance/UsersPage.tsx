@@ -3,6 +3,7 @@ import { Users } from 'lucide-react';
 import { api } from '../../lib/api';
 import type { AdminUser, RoleItem } from '../../types';
 import { Modal } from '../../components/Modal';
+import { SelectField } from '../../components/SelectField';
 import { StatusBadge } from '../../components/StatusBadge';
 
 export default function UsersPage({ setNotice }: { setNotice: (value: string) => void }) {
@@ -10,6 +11,7 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
   const [roles, setRoles] = useState<RoleItem[]>([]);
   const [form, setForm] = useState({ email: '', name: '', roleCode: 'operator' });
   const [modalOpen, setModalOpen] = useState(false);
+  const roleOptions = roles.map((role) => ({ value: role.code, label: role.name }));
 
   async function load() {
     const [userData, roleData] = await Promise.all([
@@ -74,14 +76,14 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
           <label>姓名<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /></label>
           <label>邮箱<input value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /></label>
           <label>角色
-            <select value={form.roleCode} onChange={(event) => setForm({ ...form, roleCode: event.target.value })}>
-              {roles.map((role) => <option key={role.code} value={role.code}>{role.name}</option>)}
-            </select>
+            <SelectField value={form.roleCode} options={roleOptions} onChange={(roleCode) => setForm({ ...form, roleCode })} />
           </label>
-          <button className="primaryButton" type="submit"><Users size={16} />创建用户</button>
+          <div className="modalActions">
+            <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(false)}>取消</button>
+            <button className="primaryButton compact" type="submit"><Users size={16} />创建用户</button>
+          </div>
         </form>
       </Modal>
     </section>
   );
 }
-

@@ -4,11 +4,13 @@ import { api } from '../../lib/api';
 import { statusLabel } from '../../constants/labels';
 import type { Template } from '../../types';
 import { Modal } from '../../components/Modal';
+import { SelectField } from '../../components/SelectField';
 
 export default function ManualSend({ templates, onRefresh, setNotice }: { templates: Template[]; onRefresh: () => Promise<void>; setNotice: (value: string) => void }) {
   const [phone, setPhone] = useState('18515385071');
   const [templateId, setTemplateId] = useState('tpl_register');
   const [modalOpen, setModalOpen] = useState(false);
+  const templateOptions = templates.map((template) => ({ value: template.id, label: template.name }));
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -42,14 +44,14 @@ export default function ManualSend({ templates, onRefresh, setNotice }: { templa
         <form className="formPanel" onSubmit={submit}>
           <label>手机号<input value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
           <label>短信模板
-            <select value={templateId} onChange={(event) => setTemplateId(event.target.value)}>
-              {templates.map((template) => <option value={template.id} key={template.id}>{template.name}</option>)}
-            </select>
+            <SelectField value={templateId} options={templateOptions} onChange={setTemplateId} />
           </label>
-          <button className="primaryButton" type="submit"><Send size={16} />发送短信</button>
+          <div className="modalActions">
+            <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(false)}>取消</button>
+            <button className="primaryButton compact" type="submit"><Send size={16} />发送短信</button>
+          </div>
         </form>
       </Modal>
     </section>
   );
 }
-

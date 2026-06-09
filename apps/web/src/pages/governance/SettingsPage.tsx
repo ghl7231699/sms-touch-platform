@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Settings } from 'lucide-react';
 import { api } from '../../lib/api';
+import { SelectField } from '../../components/SelectField';
 
 export default function SettingsPage({ setNotice }: { setNotice: (value: string) => void }) {
   const [settings, setSettings] = useState<Record<string, any>>({});
@@ -26,16 +27,21 @@ export default function SettingsPage({ setNotice }: { setNotice: (value: string)
   const safety = settings['sms.safety'] || {};
   const worker = settings['sms.worker'] || {};
   const shortLink = settings['sms.short_link'] || {};
+  const providerOptions = [
+    { value: 'mock', label: 'mock' },
+    { value: 'aliyun_dypns', label: 'aliyun_dypns' }
+  ];
 
   return (
     <section className="workspace">
       <section className="panel formPanel">
         <div className="panelTitle"><h2>发送保护</h2><span>Provider / Worker / 白名单</span></div>
         <label>服务商
-          <select value={settings['sms.provider']?.provider || 'mock'} onChange={(event) => setSettings({ ...settings, 'sms.provider': { provider: event.target.value } })}>
-            <option value="mock">mock</option>
-            <option value="aliyun_dypns">aliyun_dypns</option>
-          </select>
+          <SelectField
+            value={settings['sms.provider']?.provider || 'mock'}
+            options={providerOptions}
+            onChange={(provider) => setSettings({ ...settings, 'sms.provider': { provider } })}
+          />
         </label>
         <label>Worker 批量大小<input type="number" value={worker.batchSize || 20} onChange={(event) => setSettings({ ...settings, 'sms.worker': { ...worker, batchSize: Number(event.target.value) } })} /></label>
         <label className="checkRow"><input type="checkbox" checked={Boolean(safety.requireWhitelistForMock)} onChange={(event) => setSettings({ ...settings, 'sms.safety': { ...safety, requireWhitelistForMock: event.target.checked } })} />mock 发送也要求白名单</label>
@@ -50,4 +56,3 @@ export default function SettingsPage({ setNotice }: { setNotice: (value: string)
     </section>
   );
 }
-
