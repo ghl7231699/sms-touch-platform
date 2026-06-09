@@ -26,19 +26,19 @@ model SmsTemplate {
 }
 
 model SmsRule {
-  id            String   @id
-  name          String
-  code          String   @unique
-  scene         String
-  eventType     String
-  delayValue    Int
-  delayUnit     String
-  conditionType String
+  id              String   @id
+  name            String
+  code            String   @unique
+  scene           String
+  eventType       String
+  delayValue      Int
+  delayUnit       String
+  conditionType   String
   conditionConfig Json?
-  templateId    String
-  status        String   @default("enabled")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  templateId      String
+  status          String   @default("enabled")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   template SmsTemplate  @relation(fields: [templateId], references: [id])
   logs     SmsSendLog[]
@@ -58,7 +58,7 @@ model SmsEvent {
   occurredAt DateTime
   createdAt  DateTime @default(now())
 
-  logs SmsSendLog[]
+  logs  SmsSendLog[]
   tasks SmsTask[]
 
   @@index([eventType])
@@ -66,7 +66,7 @@ model SmsEvent {
 }
 
 model SmsSendLog {
-  id            String   @id
+  id            String    @id
   provider      String
   triggerType   String
   scene         String
@@ -88,11 +88,11 @@ model SmsSendLog {
   requestId     String?
   shortCode     String?
   shortUrl      String?
-  clickCount    Int      @default(0)
+  clickCount    Int       @default(0)
   lastClickedAt DateTime?
   rawResponse   Json?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   template  SmsTemplate?  @relation(fields: [templateId], references: [id])
   rule      SmsRule?      @relation(fields: [ruleId], references: [id])
@@ -110,38 +110,38 @@ model SmsSendLog {
 }
 
 model SmsTask {
-  id               String    @id
-  taskType         String
-  status           String    @default("pending")
-  triggerType      String
-  scene            String
-  phone            String
-  phoneMasked      String
-  templateId       String
-  templateName     String?
-  templateCode     String
-  templateParam    Json?
-  ruleId           String?
-  ruleName         String?
-  eventId          String?
-  eventType        String?
-  scheduledAt      DateTime
-  sentAt           DateTime?
-  attemptCount     Int       @default(0)
-  maxAttempts      Int       @default(3)
-  lastErrorCode    String?
-  lastErrorMessage String?
+  id                 String    @id
+  taskType           String
+  status             String    @default("pending")
+  triggerType        String
+  scene              String
+  phone              String
+  phoneMasked        String
+  templateId         String
+  templateName       String?
+  templateCode       String
+  templateParam      Json?
+  ruleId             String?
+  ruleName           String?
+  eventId            String?
+  eventType          String?
+  scheduledAt        DateTime
+  sentAt             DateTime?
+  attemptCount       Int       @default(0)
+  maxAttempts        Int       @default(3)
+  lastErrorCode      String?
+  lastErrorMessage   String?
   conditionCheckedAt DateTime?
   conditionResult    String?
   conditionReason    String?
-  logId            String?   @unique
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  logId              String?   @unique
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   template SmsTemplate @relation(fields: [templateId], references: [id])
-  rule     SmsRule?     @relation(fields: [ruleId], references: [id])
-  event    SmsEvent?    @relation(fields: [eventId], references: [eventId])
-  log      SmsSendLog?  @relation(fields: [logId], references: [id])
+  rule     SmsRule?    @relation(fields: [ruleId], references: [id])
+  event    SmsEvent?   @relation(fields: [eventId], references: [eventId])
+  log      SmsSendLog? @relation(fields: [logId], references: [id])
 
   @@index([status, scheduledAt])
   @@index([eventId])
@@ -194,4 +194,327 @@ model SmsReceipt {
   @@unique([bizId, receiptStatus])
   @@index([requestId])
   @@map("sms_receipt")
+}
+
+model AdminUser {
+  id           String    @id
+  email        String    @unique
+  name         String
+  phone        String?   @unique
+  passwordHash String
+  status       String    @default("active")
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  roles         AdminUserRole[]
+  sessions      AuthSession[]
+  operationLogs AdminOperationLog[]
+
+  @@index([status])
+  @@map("admin_user")
+}
+
+model AdminRole {
+  id          String   @id
+  code        String   @unique
+  name        String
+  description String?
+  permissions Json
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users AdminUserRole[]
+
+  @@map("admin_role")
+}
+
+model AdminUserRole {
+  id        String   @id
+  userId    String
+  roleId    String
+  createdAt DateTime @default(now())
+
+  user AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role AdminRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@map("admin_user_role")
+}
+
+model AuthSession {
+  id         String    @id
+  userId     String
+  tokenHash  String    @unique
+  ip         String?
+  userAgent  String?
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+
+  user AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("auth_session")
+}
+
+model AuthVerificationCode {
+  id         String    @id
+  email      String
+  codeHash   String
+  purpose    String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([email, purpose])
+  @@map("auth_verification_code")
+}
+
+model AuthRegisterRequest {
+  id            String    @id
+  email         String
+  name          String
+  phone         String?
+  reason        String?
+  requestedRole String    @default("operator")
+  status        String    @default("pending")
+  reviewedById  String?
+  reviewedAt    DateTime?
+  rejectReason  String?
+  createdUserId String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([status])
+  @@map("auth_register_request")
+}
+
+model AuthPasswordSetupToken {
+  id        String    @id
+  userId    String
+  tokenHash String    @unique
+  purpose   String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, purpose])
+  @@map("auth_password_setup_token")
+}
+
+model AdminOperationLog {
+  id           String   @id
+  userId       String?
+  userName     String?
+  action       String
+  resource     String
+  resourceId   String?
+  method       String?
+  path         String?
+  ip           String?
+  userAgent    String?
+  requestBody  Json?
+  result       String   @default("success")
+  statusCode   Int?
+  errorMessage String?
+  createdAt    DateTime @default(now())
+
+  user AdminUser? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([resource, action])
+  @@index([userId])
+  @@map("admin_operation_log")
+}
+
+model SmsWhitelist {
+  id          String   @id
+  phone       String   @unique
+  phoneMasked String
+  scene       String?
+  remark      String?
+  status      String   @default("enabled")
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status])
+  @@map("sms_whitelist")
+}
+
+model SmsBlacklist {
+  id          String    @id
+  phone       String    @unique
+  phoneMasked String
+  scene       String?
+  reason      String?
+  source      String    @default("manual")
+  status      String    @default("active")
+  createdById String?
+  removedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status])
+  @@map("sms_blacklist")
+}
+
+model SmsUnsubscribe {
+  id          String   @id
+  phone       String
+  phoneMasked String
+  scene       String   @default("")
+  source      String   @default("manual")
+  remark      String?
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([phone, scene])
+  @@index([status])
+  @@map("sms_unsubscribe")
+}
+
+model SmsFrequencyPolicy {
+  id              String   @id
+  scene           String   @unique
+  dailyLimit      Int      @default(1)
+  weeklyLimit     Int      @default(3)
+  cooldownMinutes Int      @default(1440)
+  quietStart      String   @default("21:00")
+  quietEnd        String   @default("09:00")
+  status          String   @default("enabled")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("sms_frequency_policy")
+}
+
+model SystemSetting {
+  id        String   @id
+  key       String   @unique
+  value     Json
+  remark    String?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@map("system_setting")
+}
+
+model EventSource {
+  id            String   @id
+  appId         String   @unique
+  name          String
+  secretHash    String
+  secretPreview String
+  status        String   @default("enabled")
+  remark        String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  logs EventSourceLog[]
+
+  @@index([status])
+  @@map("event_source")
+}
+
+model EventSourceLog {
+  id        String   @id
+  sourceId  String?
+  appId     String?
+  eventType String?
+  eventId   String?
+  status    String
+  code      String?
+  message   String?
+  ip        String?
+  userAgent String?
+  payload   Json?
+  createdAt DateTime @default(now())
+
+  source EventSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+
+  @@index([appId, status])
+  @@map("event_source_log")
+}
+
+model ExportTask {
+  id          String    @id
+  name        String
+  resource    String
+  status      String    @default("completed")
+  fileName    String?
+  criteria    Json?
+  createdById String?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([resource, status])
+  @@map("export_task")
+}
+
+model BatchJob {
+  id           String   @id
+  name         String
+  jobType      String
+  status       String   @default("completed")
+  totalCount   Int      @default(0)
+  successCount Int      @default(0)
+  failedCount  Int      @default(0)
+  createdById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  items BatchJobItem[]
+
+  @@index([jobType, status])
+  @@map("batch_job")
+}
+
+model BatchJobItem {
+  id        String   @id
+  jobId     String
+  target    String
+  status    String
+  message   String?
+  createdAt DateTime @default(now())
+
+  job BatchJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@map("batch_job_item")
+}
+
+model ApprovalOrder {
+  id          String   @id
+  title       String
+  resource    String
+  resourceId  String?
+  action      String
+  payload     Json?
+  status      String   @default("pending")
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  records ApprovalRecord[]
+
+  @@index([resource, status])
+  @@map("approval_order")
+}
+
+model ApprovalRecord {
+  id         String   @id
+  approvalId String
+  action     String
+  comment    String?
+  operatorId String?
+  createdAt  DateTime @default(now())
+
+  approval ApprovalOrder @relation(fields: [approvalId], references: [id], onDelete: Cascade)
+
+  @@index([approvalId])
+  @@map("approval_record")
 }

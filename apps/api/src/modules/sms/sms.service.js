@@ -5,13 +5,13 @@ import { evaluateTaskCondition } from './sms.condition-evaluator.js';
 import { createSmsProvider } from './providers/index.js';
 import { mutateStore, readStore } from './sms.repository.js';
 import { SMS_STATUS, TASK_STATUS } from './sms.types.js';
+import { checkSendSafety } from '../governance/governance.service.js';
 
 const PHONE_PATTERN = /^1\d{10}$/;
 const EVENT_TYPES = ['user_register', 'membership_expired', 'campaign_start', 'order_completed'];
 
 const now = () => new Date().toISOString();
 const normalizePhone = (phone) => String(phone || '').trim();
-const isWhitelisted = (phone) => config.whitelist.includes(phone);
 const createShortCode = () => Math.random().toString(36).slice(2, 8);
 
 function ok(body, statusCode = 200) {
@@ -166,7 +166,18 @@ async function sendWithProvider({ phone, template, rule, event, triggerType, tem
   const invalid = validatePhone(phone);
   if (invalid) return invalid;
 
-  if (!isWhitelisted(phone)) {
+  const safety = await checkSendSafety({
+    phone,
+    scene: template?.scene || rule?.scene || 'manual',
+    provider: config.smsProvider,
+    triggerType
+  });
+
+  if (!safety.passed) {
+    const blockedReason = safety.blockedReason || {
+      code: 'SEND_SAFETY_BLOCKED',
+      message: 'Send safety check blocked this request.'
+    };
     const log = await persistSendLog({
       phone,
       template,
@@ -177,8 +188,9 @@ async function sendWithProvider({ phone, template, rule, event, triggerType, tem
       status: SMS_STATUS.BLOCKED,
       result: {
         provider: config.smsProvider,
-        code: 'PHONE_NOT_IN_WHITELIST',
-        message: 'Phone number is not allowed in test mode.'
+        code: blockedReason.code,
+        message: blockedReason.message,
+        raw: safety
       }
     });
     return ok(publicResult(log, false), 403);

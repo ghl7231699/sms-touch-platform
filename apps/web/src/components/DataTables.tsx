@@ -1,0 +1,108 @@
+import { api } from '../lib/api';
+import { eventLabels, sceneLabels } from '../constants/labels';
+import type { SendLog, SmsTask } from '../types';
+import { StatusBadge } from './StatusBadge';
+
+export function TaskTable({ tasks, showDetail = false }: { tasks: SmsTask[]; showDetail?: boolean }) {
+  return (
+    <div className="dataTableWrap">
+      <table className="dataTable">
+        <thead>
+          <tr>
+            <th>计划时间</th>
+            <th>触发</th>
+            <th>场景</th>
+            <th>手机号</th>
+            <th>模板</th>
+            <th>状态</th>
+            <th>尝试</th>
+            {showDetail && <th>结果</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {tasks.map((task) => (
+            <tr key={task.id}>
+              <td>{new Date(task.scheduledAt).toLocaleString()}</td>
+              <td>{task.triggerType === 'auto' ? eventLabels[task.eventType || ''] || '自动' : '手动'}</td>
+              <td>{sceneLabels[task.scene] || task.scene}</td>
+              <td>{task.phoneMasked}</td>
+              <td>{task.templateName || task.templateCode}</td>
+              <td><StatusBadge status={task.status} /></td>
+              <td>{task.attemptCount}/{task.maxAttempts}</td>
+              {showDetail && (
+                <td>
+                  {task.logId ? <span>日志 {task.logId.slice(0, 8)}</span> : <span>{task.lastErrorCode || '-'}</span>}
+                  {task.conditionResult && <span>条件：{task.conditionResult}</span>}
+                  {task.conditionReason && <span>{task.conditionReason}</span>}
+                  {task.lastErrorMessage && <span>{task.lastErrorMessage}</span>}
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function LogTable({ logs, showActions = false }: { logs: SendLog[]; showActions?: boolean }) {
+  async function markDelivered(log: SendLog) {
+    await api('/api/sms/provider/callback', {
+      method: 'POST',
+      body: JSON.stringify({
+        bizId: log.bizId,
+        requestId: log.requestId,
+        receiptStatus: 'delivered'
+      })
+    });
+    window.location.reload();
+  }
+
+  return (
+    <div className="dataTableWrap">
+      <table className="dataTable">
+        <thead>
+          <tr>
+            <th>时间</th>
+            <th>触发</th>
+            <th>场景</th>
+            <th>手机号</th>
+            <th>模板</th>
+            <th>状态</th>
+            <th>回执</th>
+            <th>短链</th>
+            <th>返回</th>
+            {showActions && <th>操作</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {logs.map((log) => (
+            <tr key={log.id}>
+              <td>{new Date(log.createdAt).toLocaleString()}</td>
+              <td>{log.triggerType === 'auto' ? '自动' : '手动'}</td>
+              <td>{sceneLabels[log.scene] || log.scene}</td>
+              <td>{log.phoneMasked}</td>
+              <td>{log.templateName || log.templateCode}</td>
+              <td><StatusBadge status={log.status} /></td>
+              <td>{log.receiptStatus || '-'}</td>
+              <td>
+                {log.shortUrl ? (
+                  <a href={log.shortUrl} target="_blank" rel="noreferrer">打开 · {log.clickCount || 0}</a>
+                ) : '-'}
+              </td>
+              <td><strong>{log.code}</strong><span>{log.message}</span></td>
+              {showActions && (
+                <td>
+                  {log.bizId || log.requestId ? (
+                    <button className="tableButton" onClick={() => markDelivered(log)}>标记送达</button>
+                  ) : '-'}
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+

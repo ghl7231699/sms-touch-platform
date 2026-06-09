@@ -25,6 +25,11 @@ import {
   updateTemplateStatus
 } from './modules/sms/sms.service.js';
 import { createTaskWorker } from './modules/sms/sms.worker.js';
+import {
+  handleGovernanceApi,
+  recordEventSourceLog,
+  verifyEventSourceRequest
+} from './modules/governance/governance.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -108,6 +113,12 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  const governanceResult = await handleGovernanceApi(req, url, readJson);
+  if (governanceResult.handled) {
+    sendJson(res, governanceResult.statusCode, governanceResult.body);
+    return;
+  }
+
   if (req.method === 'POST' && url.pathname === '/api/sms/send-test-code') {
     try {
       const body = await readJson(req);
@@ -167,7 +178,21 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === 'POST' && (url.pathname === '/api/events' || url.pathname === '/api/sms/events')) {
-    const result = await receiveEvent(await readJson(req));
+    const body = await readJson(req);
+    const sourceAuth = await verifyEventSourceRequest(req, body);
+    if (!sourceAuth.passed) {
+      sendJson(res, sourceAuth.error.statusCode, sourceAuth.error.body);
+      return;
+    }
+    const result = await receiveEvent(body);
+    await recordEventSourceLog({
+      source: sourceAuth.source,
+      input: body,
+      req,
+      status: result.statusCode >= 400 ? 'failed' : 'success',
+      code: result.body.code || 'EVENT_ACCEPTED',
+      message: result.body.message || '事件已接收。'
+    });
     sendJson(res, result.statusCode, result.body);
     return;
   }
