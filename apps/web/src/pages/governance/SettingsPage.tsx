@@ -36,8 +36,8 @@ export default function SettingsPage({ setNotice }: { setNotice: (value: string)
   }, []);
 
   async function save() {
-    const result = await api<{ approvalRequired?: boolean; approval?: { id: string }; settings?: Record<string, any> }>('/api/settings', {
-      method: 'PATCH',
+    const result = await api<{ approvalRequired?: boolean; approval?: { id: string }; settings?: Record<string, any> }>('/api/settings/update', {
+      method: 'POST',
       body: JSON.stringify({ settings })
     });
     if (result.approvalRequired) {

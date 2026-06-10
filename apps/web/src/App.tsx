@@ -5,6 +5,7 @@ import type { AuthUser, EventItem, Health, Rule, SendLog, SmsTask, Stats, Templa
 import { NavButton } from './components/NavButton';
 import { menuGroups, pageTitles } from './constants/menus';
 import LoginPage from './pages/Login';
+import SetPasswordPage from './pages/Login/SetPasswordPage';
 import Dashboard from './pages/dashboard/Dashboard';
 import Templates from './pages/templates/Templates';
 import Rules from './pages/rules/Rules';
@@ -20,6 +21,34 @@ import AuditPage from './pages/governance/AuditPage';
 import ExportTasksPage from './pages/governance/ExportTasksPage';
 import BatchJobsPage from './pages/governance/BatchJobsPage';
 import ApprovalsPage from './pages/governance/ApprovalsPage';
+import ForbiddenPage from './pages/governance/ForbiddenPage';
+
+const viewPermissions: Partial<Record<View, string[]>> = {
+  dashboard: ['dashboard.read'],
+  templates: ['template.read', 'template.manage'],
+  rules: ['rule.read', 'rule.manage'],
+  manual: ['manual_send.manage'],
+  events: ['event.read', 'event.manage'],
+  tasks: ['task.read', 'task.manage'],
+  logs: ['send_log.read'],
+  users: ['user.manage'],
+  whitelist: ['whitelist.read', 'whitelist.manage'],
+  blacklist: ['blacklist.read', 'blacklist.manage'],
+  unsubscribes: ['unsubscribe.read', 'unsubscribe.manage'],
+  settings: ['setting.read', 'setting.manage'],
+  eventSources: ['event_source.read', 'event_source.manage'],
+  eventSourceLogs: ['event_source.read'],
+  operationLogs: ['operation_log.read'],
+  exportTasks: ['export.read', 'export.manage'],
+  batchJobs: ['batch.read'],
+  approvals: ['approval.read', 'approval.manage']
+};
+
+function canAccess(user: AuthUser, targetView: View) {
+  if (user.permissions.includes('*')) return true;
+  const permissions = viewPermissions[targetView] || [];
+  return permissions.length === 0 || permissions.some((permission) => user.permissions.includes(permission));
+}
 
 export default function App() {
   const [authChecked, setAuthChecked] = useState(false);
@@ -108,10 +137,19 @@ export default function App() {
     return <div className="authShell"><div className="authCard"><strong>正在校验登录态</strong></div></div>;
   }
 
+  if (window.location.pathname === '/set-password') {
+    return <SetPasswordPage />;
+  }
+
   if (!currentUser) {
     return <LoginPage onLogin={handleLogin} />;
   }
 
+  const filteredMenuGroups = menuGroups
+    .map((group) => ({ ...group, items: group.items.filter((item) => canAccess(currentUser, item.key)) }))
+    .filter((group) => group.items.length > 0);
+  const firstAccessibleView = filteredMenuGroups[0]?.items[0]?.key || 'dashboard';
+  const currentViewAllowed = canAccess(currentUser, view);
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -124,7 +162,7 @@ export default function App() {
         </div>
 
         <nav>
-          {menuGroups.map((group) => (
+          {filteredMenuGroups.map((group) => (
             <div className="navGroupBlock" key={group.title}>
               <span className="navGroup">{group.title}</span>
               {group.items.map((item) => (
@@ -167,24 +205,25 @@ export default function App() {
           </div>
         </header>
 
-        {view === 'dashboard' && <Dashboard stats={stats} logs={logs} rules={rules} tasks={tasks} />}
-        {view === 'templates' && <Templates templates={templates} onRefresh={refresh} setNotice={setNotice} />}
-        {view === 'rules' && <Rules rules={rules} templates={templates} logs={logs} onRefresh={refresh} setNotice={setNotice} />}
-        {view === 'manual' && <ManualSend templates={templates} onRefresh={refresh} setNotice={setNotice} />}
-        {view === 'events' && <Events events={events} onRefresh={refresh} setNotice={setNotice} />}
-        {view === 'tasks' && <Tasks tasks={tasks} onRefresh={refresh} setNotice={setNotice} />}
-        {view === 'logs' && <Logs logs={logs} />}
-        {view === 'users' && <UsersPage setNotice={setNotice} />}
-        {view === 'whitelist' && <PhoneListPage kind="whitelist" title="白名单管理" setNotice={setNotice} />}
-        {view === 'blacklist' && <PhoneListPage kind="blacklist" title="黑名单管理" setNotice={setNotice} />}
-        {view === 'unsubscribes' && <PhoneListPage kind="unsubscribes" title="退订管理" setNotice={setNotice} />}
-        {view === 'settings' && <SettingsPage setNotice={setNotice} />}
-        {view === 'eventSources' && <EventSourcesPage setNotice={setNotice} />}
-        {view === 'eventSourceLogs' && <AuditPage mode="eventSourceLogs" />}
-        {view === 'operationLogs' && <AuditPage mode="operationLogs" />}
-        {view === 'exportTasks' && <ExportTasksPage setNotice={setNotice} />}
-        {view === 'batchJobs' && <BatchJobsPage />}
-        {view === 'approvals' && <ApprovalsPage setNotice={setNotice} />}
+        {!currentViewAllowed && <ForbiddenPage onBack={() => setView(firstAccessibleView)} />}
+        {currentViewAllowed && view === 'dashboard' && <Dashboard stats={stats} logs={logs} rules={rules} tasks={tasks} />}
+        {currentViewAllowed && view === 'templates' && <Templates templates={templates} onRefresh={refresh} setNotice={setNotice} />}
+        {currentViewAllowed && view === 'rules' && <Rules rules={rules} templates={templates} logs={logs} onRefresh={refresh} setNotice={setNotice} />}
+        {currentViewAllowed && view === 'manual' && <ManualSend templates={templates} onRefresh={refresh} setNotice={setNotice} />}
+        {currentViewAllowed && view === 'events' && <Events events={events} onRefresh={refresh} setNotice={setNotice} />}
+        {currentViewAllowed && view === 'tasks' && <Tasks tasks={tasks} onRefresh={refresh} setNotice={setNotice} />}
+        {currentViewAllowed && view === 'logs' && <Logs logs={logs} />}
+        {currentViewAllowed && view === 'users' && <UsersPage setNotice={setNotice} />}
+        {currentViewAllowed && view === 'whitelist' && <PhoneListPage kind="whitelist" title="白名单管理" setNotice={setNotice} />}
+        {currentViewAllowed && view === 'blacklist' && <PhoneListPage kind="blacklist" title="黑名单管理" setNotice={setNotice} />}
+        {currentViewAllowed && view === 'unsubscribes' && <PhoneListPage kind="unsubscribes" title="退订管理" setNotice={setNotice} />}
+        {currentViewAllowed && view === 'settings' && <SettingsPage setNotice={setNotice} />}
+        {currentViewAllowed && view === 'eventSources' && <EventSourcesPage setNotice={setNotice} />}
+        {currentViewAllowed && view === 'eventSourceLogs' && <AuditPage mode="eventSourceLogs" />}
+        {currentViewAllowed && view === 'operationLogs' && <AuditPage mode="operationLogs" />}
+        {currentViewAllowed && view === 'exportTasks' && <ExportTasksPage setNotice={setNotice} />}
+        {currentViewAllowed && view === 'batchJobs' && <BatchJobsPage />}
+        {currentViewAllowed && view === 'approvals' && <ApprovalsPage setNotice={setNotice} />}
       </main>
     </div>
   );

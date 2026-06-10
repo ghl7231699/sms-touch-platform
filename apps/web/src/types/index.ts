@@ -134,6 +134,21 @@ export interface AdminUser extends AuthUser {
   createdAt: string;
 }
 
+export interface RegisterRequestItem {
+  id: string;
+  email: string;
+  name: string;
+  phone?: string;
+  reason?: string;
+  requestedRole: string;
+  status: string;
+  reviewedById?: string;
+  reviewedAt?: string;
+  rejectReason?: string;
+  createdUserId?: string;
+  createdAt: string;
+}
+
 export interface RoleItem {
   id: string;
   code: string;
@@ -168,13 +183,23 @@ export interface AuditItem {
   id: string;
   action?: string;
   resource?: string;
+  resourceId?: string;
+  userId?: string;
   userName?: string;
   appId?: string;
   eventType?: string;
+  eventId?: string;
   status?: string;
   code?: string;
   message?: string;
   result?: string;
+  method?: string;
+  path?: string;
+  ip?: string;
+  userAgent?: string;
+  requestBody?: unknown;
+  payload?: unknown;
+  errorMessage?: string;
   createdAt: string;
 }
 

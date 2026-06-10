@@ -36,6 +36,17 @@ button, input, select {
   font: inherit;
 }
 
+textarea {
+  min-height: 132px;
+  resize: vertical;
+  border: 1px solid #d8e0ea;
+  border-radius: 12px;
+  padding: 11px 12px;
+  color: var(--text);
+  background: #fff;
+  font: inherit;
+}
+
 .shell {
   height: 100vh;
   display: grid;
@@ -445,6 +456,36 @@ td span:not([data-ui="status-badge"]) {
   align-items: center;
 }
 
+.filterBar {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+  align-items: center;
+}
+
+.filterBar .primaryButton,
+.filterBar .secondaryButton {
+  min-height: 42px;
+}
+
+.segmentButton {
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--muted);
+  padding: 0 12px;
+  cursor: pointer;
+}
+
+.segmentButton.active {
+  border-color: rgba(37, 99, 235, .24);
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-weight: 700;
+}
+
 .dataTableWrap {
   overflow: auto;
 }
@@ -634,6 +675,25 @@ td > [data-ui="status-badge"] {
 .fieldBlock > span {
   color: var(--muted);
   font-size: 12px;
+}
+
+.emptyState {
+  min-height: 360px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.emptyState svg {
+  color: var(--blue);
+}
+
+.emptyState p {
+  max-width: 420px;
+  margin: 0;
+  color: var(--muted);
 }
 
 .modalActions {

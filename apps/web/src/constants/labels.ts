@@ -82,6 +82,24 @@ export function actionLabel(action?: string) {
   }[action || ''] || action || '-';
 }
 
+export function batchJobLabel(jobType?: string) {
+  return {
+    task_cancel: '批量取消任务',
+    task_retry: '批量重试任务',
+    blacklist_import: '批量导入黑名单',
+    unsubscribe_import: '批量导入退订'
+  }[jobType || ''] || jobType || '-';
+}
+
+export function approvalStatusLabel(status?: string) {
+  return {
+    pending: '待审批',
+    approved: '已通过',
+    rejected: '已驳回',
+    withdrawn: '已撤回'
+  }[status || ''] || status || '-';
+}
+
 export function operationLabel(resource?: string, action?: string) {
   const combined = `${resource || ''}:${action || ''}`;
   return {
