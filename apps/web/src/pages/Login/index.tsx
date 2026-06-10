@@ -132,7 +132,7 @@ export default function LoginPage({ onLogin }: { onLogin: (token: string, user: 
         </form>
       </section>
 
-      <Modal open={dialog === 'apply'} title="申请账号" subtitle="提交后由管理员审核开通" onClose={() => setDialog(null)}>
+      <Modal open={dialog === 'apply'} title="申请账号" subtitle="提交后由管理员审核开通" onClose={() => setDialog(null)} showClose={false}>
         <form className="formPanel" onSubmit={submitApply}>
           <label>姓名<input value={name} onChange={(event) => setName(event.target.value)} required /></label>
           <label>邮箱<input value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
@@ -145,7 +145,7 @@ export default function LoginPage({ onLogin }: { onLogin: (token: string, user: 
         </form>
       </Modal>
 
-      <Modal open={dialog === 'forgot'} title="找回密码" subtitle="先获取验证码，再完成重置流程" onClose={() => setDialog(null)}>
+      <Modal open={dialog === 'forgot'} title="找回密码" subtitle="先获取验证码，再完成重置流程" onClose={() => setDialog(null)} showClose={false}>
         <form className="formPanel" onSubmit={resetToken ? resetForgotPassword : submitForgot}>
           <label>邮箱<input value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
           <label>验证码<input value={forgotCode} onChange={(event) => setForgotCode(event.target.value)} placeholder="输入邮件或测试验证码" /></label>

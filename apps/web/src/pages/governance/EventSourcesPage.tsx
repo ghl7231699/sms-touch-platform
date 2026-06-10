@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Edit3, Eye, KeyRound, RefreshCw, Search } from 'lucide-react';
+import { KeyRound, Search } from 'lucide-react';
 import { api } from '../../lib/api';
 import type { EventSourceItem } from '../../types';
 import { Modal } from '../../components/Modal';
 import { SelectField } from '../../components/SelectField';
 import { StatusBadge } from '../../components/StatusBadge';
+import { AuthC } from '../../lib/auth';
 
 const emptyForm = { name: '', appId: '', remark: '' };
 const emptyFilters = { keyword: '', appId: '', status: '', dateFrom: '', dateTo: '' };
@@ -100,7 +101,9 @@ export default function EventSourcesPage({ setNotice }: { setNotice: (value: str
             <h2>业务系统接入</h2>
             <span>管理来源系统 appId、secret、启停和调用状态</span>
           </div>
-          <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(true)}><KeyRound size={16} />新建来源</button>
+          <AuthC authKey="integration:eventSource:add">
+            <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(true)}><KeyRound size={16} />新建来源</button>
+          </AuthC>
         </div>
 
         <form className="filterBar" onSubmit={applyFilters}>
@@ -129,10 +132,18 @@ export default function EventSourcesPage({ setNotice }: { setNotice: (value: str
                   <td>{new Date(item.createdAt).toLocaleString()}</td>
                   <td>
                     <div className="inlineActions">
-                      <button className="tableButton" type="button" onClick={() => openDetail(item)}><Eye size={15} />详情</button>
-                      <button className="tableButton" type="button" onClick={() => openEdit(item)}><Edit3 size={15} />编辑</button>
-                      <button className="tableButton" type="button" onClick={() => toggle(item)}>{item.status === 'enabled' ? '停用' : '启用'}</button>
-                      <button className="tableButton" type="button" onClick={() => resetSecret(item)}><RefreshCw size={15} />重置密钥</button>
+                      <AuthC authKey="integration:eventSource:detail">
+                        <button className="tableButton" type="button" onClick={() => openDetail(item)}>详情</button>
+                      </AuthC>
+                      <AuthC authKey="integration:eventSource:edit">
+                        <button className="tableButton" type="button" onClick={() => openEdit(item)}>编辑</button>
+                      </AuthC>
+                      <AuthC authKey="integration:eventSource:status">
+                        <button className="tableButton" type="button" onClick={() => toggle(item)}>{item.status === 'enabled' ? '停用' : '启用'}</button>
+                      </AuthC>
+                      <AuthC authKey="integration:eventSource:resetSecret">
+                        <button className="tableButton" type="button" onClick={() => resetSecret(item)}>重置密钥</button>
+                      </AuthC>
                     </div>
                   </td>
                 </tr>
@@ -142,26 +153,26 @@ export default function EventSourcesPage({ setNotice }: { setNotice: (value: str
         </div>
       </section>
 
-      <Modal open={modalOpen} title="新建来源" subtitle="用于事件鉴权" onClose={() => setModalOpen(false)}>
+      <Modal open={modalOpen} title="新建来源" subtitle="用于事件鉴权" onClose={() => setModalOpen(false)} showClose={false}>
         <form className="formPanel" onSubmit={create}>
           <label>名称<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /></label>
           <label>AppId<input value={form.appId} onChange={(event) => setForm({ ...form, appId: event.target.value })} placeholder="留空自动生成" /></label>
           <label>备注<input value={form.remark} onChange={(event) => setForm({ ...form, remark: event.target.value })} /></label>
           <div className="modalActions">
             <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(false)}>取消</button>
-            <button className="primaryButton compact" type="submit"><KeyRound size={16} />创建来源</button>
+            <button className="primaryButton compact" type="submit">创建</button>
           </div>
         </form>
       </Modal>
 
-      <Modal open={Boolean(editing)} title="编辑来源" subtitle={editing?.appId} onClose={() => setEditing(null)}>
+      <Modal open={Boolean(editing)} title="编辑来源" subtitle={editing?.appId} onClose={() => setEditing(null)} showClose={false}>
         <form className="formPanel" onSubmit={update}>
           <label>名称<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /></label>
           <label>AppId<input value={form.appId} disabled /></label>
           <label>备注<input value={form.remark} onChange={(event) => setForm({ ...form, remark: event.target.value })} /></label>
           <div className="modalActions">
             <button className="secondaryButton compact" type="button" onClick={() => setEditing(null)}>取消</button>
-            <button className="primaryButton compact" type="submit"><Edit3 size={16} />保存修改</button>
+            <button className="primaryButton compact" type="submit">保存</button>
           </div>
         </form>
       </Modal>

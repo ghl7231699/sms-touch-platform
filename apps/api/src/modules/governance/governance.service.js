@@ -22,19 +22,55 @@ export const ROLE_DEFINITIONS = [
     name: '运营人员',
     description: '负责模板、规则、事件、任务和发送操作，可查看治理结果。',
     permissions: [
-      'dashboard.read',
-      'template.manage',
-      'rule.manage',
-      'manual_send.manage',
-      'event.manage',
-      'task.manage',
-      'send_log.read',
-      'whitelist.read',
-      'blacklist.read',
-      'unsubscribe.read',
-      'setting.read',
-      'event_source.read',
-      'operation_log.read'
+      'overview:dashboard:base',
+      'touch:template:base',
+      'touch:template:add',
+      'touch:template:status',
+      'touch:rule:base',
+      'touch:rule:add',
+      'touch:rule:enable',
+      'touch:rule:disable',
+      'touch:manual:base',
+      'touch:manual:send',
+      'touch:task:base',
+      'touch:task:batchCancel',
+      'touch:task:batchRetry',
+      'touch:task:runDue',
+      'touch:event:base',
+      'touch:event:simulate',
+      'data:sendLog:base',
+      'data:sendLog:detail',
+      'security:whitelist:base',
+      'security:whitelist:add',
+      'security:whitelist:edit',
+      'security:whitelist:status',
+      'security:whitelist:export',
+      'security:whitelist:detail',
+      'security:blacklist:base',
+      'security:blacklist:add',
+      'security:blacklist:import',
+      'security:blacklist:remove',
+      'security:blacklist:detail',
+      'security:unsubscribe:base',
+      'security:unsubscribe:add',
+      'security:unsubscribe:import',
+      'security:unsubscribe:detail',
+      'security:setting:base',
+      'integration:eventSource:base',
+      'integration:eventSource:detail',
+      'integration:eventSourceLog:base',
+      'integration:eventSourceLog:detail',
+      'audit:operationLog:base',
+      'audit:operationLog:detail',
+      'audit:exportTask:base',
+      'audit:exportTask:add',
+      'audit:exportTask:detail',
+      'audit:exportTask:download',
+      'audit:batchJob:base',
+      'audit:batchJob:detail',
+      'audit:approval:base',
+      'audit:approval:add',
+      'audit:approval:detail'
     ]
   },
   {
@@ -42,18 +78,33 @@ export const ROLE_DEFINITIONS = [
     name: '只读观察员',
     description: '只能查看平台运行数据和审计记录，不允许执行写操作。',
     permissions: [
-      'dashboard.read',
-      'template.read',
-      'rule.read',
-      'event.read',
-      'task.read',
-      'send_log.read',
-      'whitelist.read',
-      'blacklist.read',
-      'unsubscribe.read',
-      'setting.read',
-      'event_source.read',
-      'operation_log.read'
+      'overview:dashboard:base',
+      'touch:template:base',
+      'touch:rule:base',
+      'touch:manual:base',
+      'touch:task:base',
+      'touch:event:base',
+      'data:sendLog:base',
+      'data:sendLog:detail',
+      'security:whitelist:base',
+      'security:whitelist:detail',
+      'security:blacklist:base',
+      'security:blacklist:detail',
+      'security:unsubscribe:base',
+      'security:unsubscribe:detail',
+      'security:setting:base',
+      'integration:eventSource:base',
+      'integration:eventSource:detail',
+      'integration:eventSourceLog:base',
+      'integration:eventSourceLog:detail',
+      'audit:operationLog:base',
+      'audit:operationLog:detail',
+      'audit:exportTask:base',
+      'audit:exportTask:detail',
+      'audit:batchJob:base',
+      'audit:batchJob:detail',
+      'audit:approval:base',
+      'audit:approval:detail'
     ]
   }
 ];
@@ -908,6 +959,35 @@ async function routeUsers(req, url, readJson, actor) {
     return ok({ success: true, item: safeUser(user) });
   }
 
+  const deleteMatch = url.pathname.match(/^\/api\/users\/([^/]+)\/delete$/);
+  if (req.method === 'POST' && deleteMatch) {
+    const target = await prisma.adminUser.findUnique({
+      where: { id: deleteMatch[1] },
+      include: { roles: { include: { role: true } } }
+    });
+    if (!target) return fail('USER_NOT_FOUND', '用户不存在。', 404);
+    if (target.id === actor.id) return fail('CANNOT_DELETE_SELF', '不能删除当前登录账号。', 409);
+    const isAdmin = target.roles.some((item) => item.role.code === 'admin');
+    if (isAdmin) {
+      const remainingAdminCount = await prisma.adminUser.count({
+        where: {
+          id: { not: target.id },
+          status: 'active',
+          roles: { some: { role: { code: 'admin' } } }
+        }
+      });
+      if (remainingAdminCount === 0) return fail('LAST_ADMIN_REQUIRED', '至少需要保留一个可用的系统管理员。', 409);
+    }
+    await prisma.$transaction(async (tx) => {
+      await tx.authPasswordSetupToken.deleteMany({ where: { userId: target.id } });
+      await tx.authSession.deleteMany({ where: { userId: target.id } });
+      await tx.adminUserRole.deleteMany({ where: { userId: target.id } });
+      await tx.adminUser.delete({ where: { id: target.id } });
+    });
+    await writeOperationLog({ req, actor, action: 'delete', resource: 'admin_user', resourceId: target.id, requestBody: { email: target.email, name: target.name } });
+    return ok({ success: true });
+  }
+
   const userMatch = url.pathname.match(/^\/api\/users\/([^/]+)$/);
   if (req.method === 'GET' && userMatch) {
     const user = await prisma.adminUser.findUnique({ where: { id: userMatch[1] }, include: { roles: { include: { role: true } } } });
@@ -973,7 +1053,7 @@ async function routeRegisterRequests(req, url, readJson, actor) {
   return null;
 }
 
-async function routeRoles(req, url) {
+async function routeRoles(req, url, readJson, actor) {
   if (req.method === 'GET' && url.pathname === '/api/roles') {
     const roles = await prisma.adminRole.findMany({ orderBy: { code: 'asc' } });
     return ok({ items: roles.map(toRole), total: roles.length });
@@ -983,6 +1063,28 @@ async function routeRoles(req, url) {
     const role = await prisma.adminRole.findFirst({ where: { OR: [{ id: match[1] }, { code: match[1] }] } });
     if (!role) return fail('ROLE_NOT_FOUND', '角色不存在。', 404);
     return ok({ item: toRole(role) });
+  }
+  const updateMatch = url.pathname.match(/^\/api\/roles\/([^/]+)\/update$/);
+  if (req.method === 'POST' && updateMatch) {
+    const role = await prisma.adminRole.findFirst({ where: { OR: [{ id: updateMatch[1] }, { code: updateMatch[1] }] } });
+    if (!role) return fail('ROLE_NOT_FOUND', '角色不存在。', 404);
+    if (role.code === 'admin') return fail('ADMIN_ROLE_LOCKED', '系统管理员角色权限不可修改。', 409);
+    const body = await readJson(req);
+    const permissions = Array.isArray(body.permissions)
+      ? body.permissions.map(String).map((item) => item.trim()).filter(Boolean)
+      : role.permissions || [];
+    if (!permissions.includes('overview:dashboard:base')) permissions.unshift('overview:dashboard:base');
+    const updated = await prisma.adminRole.update({
+      where: { id: role.id },
+      data: {
+        name: body.name ? String(body.name).trim() : role.name,
+        description: body.description === undefined ? role.description : body.description || null,
+        permissions,
+        status: body.status === 'disabled' ? 'disabled' : 'active'
+      }
+    });
+    await writeOperationLog({ req, actor, action: 'update_permissions', resource: 'admin_role', resourceId: updated.id, requestBody: { code: updated.code, permissions } });
+    return ok({ success: true, item: toRole(updated) });
   }
   return null;
 }
@@ -1564,19 +1666,53 @@ export async function handleGovernanceApi(req, url, readJson) {
 
 function permissionFor(req, url) {
   if (url.pathname.startsWith('/api/auth/me') || url.pathname.startsWith('/api/auth/logout') || url.pathname.startsWith('/api/auth/change-password')) return undefined;
-  if (url.pathname.startsWith('/api/users') || url.pathname.startsWith('/api/auth/register-requests')) return 'user.manage';
-  if (url.pathname.startsWith('/api/roles')) return req.method === 'GET' ? 'setting.read' : 'user.manage';
-  if (url.pathname.startsWith('/api/whitelist')) return req.method === 'GET' ? 'whitelist.read' : 'whitelist.manage';
-  if (url.pathname.startsWith('/api/blacklist')) return req.method === 'GET' ? 'blacklist.read' : 'blacklist.manage';
-  if (url.pathname.startsWith('/api/unsubscribes')) return req.method === 'GET' ? 'unsubscribe.read' : 'unsubscribe.manage';
-  if (url.pathname.startsWith('/api/settings')) return req.method === 'GET' ? 'setting.read' : 'setting.manage';
-  if (url.pathname.startsWith('/api/event-sources')) return req.method === 'GET' ? 'event_source.read' : 'event_source.manage';
-  if (url.pathname.startsWith('/api/event-source-logs')) return 'event_source.read';
-  if (url.pathname.startsWith('/api/operation-logs')) return 'operation_log.read';
-  if (url.pathname.startsWith('/api/export-tasks')) return req.method === 'GET' ? 'export.read' : 'export.manage';
-  if (url.pathname.startsWith('/api/batch-jobs')) return 'batch.read';
-  if (url.pathname.startsWith('/api/tasks/batch-')) return 'task.manage';
-  if (url.pathname.startsWith('/api/approvals')) return req.method === 'GET' ? 'approval.read' : 'approval.manage';
-  if (url.pathname.startsWith('/api/safety')) return 'manual_send.manage';
+  if (url.pathname === '/api/users') return req.method === 'GET' ? 'account:user:base' : 'account:user:add';
+  if (url.pathname.match(/^\/api\/users\/[^/]+\/update$/)) return 'account:user:edit';
+  if (url.pathname.match(/^\/api\/users\/[^/]+\/delete$/)) return 'account:user:delete';
+  if (url.pathname.match(/^\/api\/users\/[^/]+\/status$/)) return 'account:user:status';
+  if (url.pathname.match(/^\/api\/users\/[^/]+\/reset-password$/)) return 'account:user:resetPassword';
+  if (url.pathname.match(/^\/api\/users\/[^/]+$/)) return 'account:user:view';
+  if (url.pathname === '/api/auth/register-requests') return 'account:user:base';
+  if (url.pathname.match(/^\/api\/auth\/register-requests\/[^/]+\/approve$/)) return 'account:user:approveRegister';
+  if (url.pathname.match(/^\/api\/auth\/register-requests\/[^/]+\/reject$/)) return 'account:user:rejectRegister';
+  if (url.pathname.match(/^\/api\/auth\/register-requests\/[^/]+$/)) return 'account:user:view';
+  if (url.pathname.startsWith('/api/roles') && req.method === 'GET') return 'account:user:roleView';
+  if (url.pathname.startsWith('/api/roles')) return 'account:user:roleEdit';
+  if (url.pathname === '/api/whitelist') return req.method === 'GET' ? 'security:whitelist:base' : 'security:whitelist:add';
+  if (url.pathname === '/api/whitelist/export') return 'security:whitelist:export';
+  if (url.pathname.match(/^\/api\/whitelist\/[^/]+\/update$/)) return 'security:whitelist:edit';
+  if (url.pathname.match(/^\/api\/whitelist\/[^/]+\/status$/)) return 'security:whitelist:status';
+  if (url.pathname.match(/^\/api\/whitelist\/[^/]+$/)) return 'security:whitelist:detail';
+  if (url.pathname === '/api/blacklist') return req.method === 'GET' ? 'security:blacklist:base' : 'security:blacklist:add';
+  if (url.pathname === '/api/blacklist/import') return 'security:blacklist:import';
+  if (url.pathname.match(/^\/api\/blacklist\/[^/]+\/remove$/)) return 'security:blacklist:remove';
+  if (url.pathname.match(/^\/api\/blacklist\/[^/]+$/)) return 'security:blacklist:detail';
+  if (url.pathname === '/api/unsubscribes') return req.method === 'GET' ? 'security:unsubscribe:base' : 'security:unsubscribe:add';
+  if (url.pathname === '/api/unsubscribes/import') return 'security:unsubscribe:import';
+  if (url.pathname.match(/^\/api\/unsubscribes\/[^/]+$/)) return 'security:unsubscribe:detail';
+  if (url.pathname === '/api/settings') return 'security:setting:base';
+  if (url.pathname === '/api/settings/update') return 'security:setting:save';
+  if (url.pathname === '/api/event-sources') return req.method === 'GET' ? 'integration:eventSource:base' : 'integration:eventSource:add';
+  if (url.pathname.match(/^\/api\/event-sources\/[^/]+\/update$/)) return 'integration:eventSource:edit';
+  if (url.pathname.match(/^\/api\/event-sources\/[^/]+\/status$/)) return 'integration:eventSource:status';
+  if (url.pathname.match(/^\/api\/event-sources\/[^/]+\/reset-secret$/)) return 'integration:eventSource:resetSecret';
+  if (url.pathname.match(/^\/api\/event-sources\/[^/]+$/)) return 'integration:eventSource:detail';
+  if (url.pathname === '/api/event-source-logs') return 'integration:eventSourceLog:base';
+  if (url.pathname.match(/^\/api\/event-source-logs\/[^/]+$/)) return 'integration:eventSourceLog:detail';
+  if (url.pathname === '/api/operation-logs') return 'audit:operationLog:base';
+  if (url.pathname.match(/^\/api\/operation-logs\/[^/]+$/)) return 'audit:operationLog:detail';
+  if (url.pathname === '/api/export-tasks') return req.method === 'GET' ? 'audit:exportTask:base' : 'audit:exportTask:add';
+  if (url.pathname.match(/^\/api\/export-tasks\/[^/]+\/download$/)) return 'audit:exportTask:download';
+  if (url.pathname.match(/^\/api\/export-tasks\/[^/]+$/)) return 'audit:exportTask:detail';
+  if (url.pathname === '/api/batch-jobs') return 'audit:batchJob:base';
+  if (url.pathname.match(/^\/api\/batch-jobs\/[^/]+$/)) return 'audit:batchJob:detail';
+  if (url.pathname.startsWith('/api/tasks/batch-cancel')) return 'touch:task:batchCancel';
+  if (url.pathname.startsWith('/api/tasks/batch-retry')) return 'touch:task:batchRetry';
+  if (url.pathname === '/api/approvals') return req.method === 'GET' ? 'audit:approval:base' : 'audit:approval:add';
+  if (url.pathname.match(/^\/api\/approvals\/[^/]+\/approve$/)) return 'audit:approval:approve';
+  if (url.pathname.match(/^\/api\/approvals\/[^/]+\/reject$/)) return 'audit:approval:reject';
+  if (url.pathname.match(/^\/api\/approvals\/[^/]+\/withdraw$/)) return 'audit:approval:withdraw';
+  if (url.pathname.match(/^\/api\/approvals\/[^/]+$/)) return 'audit:approval:detail';
+  if (url.pathname.startsWith('/api/safety')) return 'touch:manual:send';
   return undefined;
 }

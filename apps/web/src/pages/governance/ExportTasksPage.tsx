@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Download, Eye, FileText, Search } from 'lucide-react';
+import { FileText, Search } from 'lucide-react';
 import { api } from '../../lib/api';
 import { resourceLabel } from '../../constants/labels';
 import type { ExportTaskItem } from '../../types';
 import { Modal } from '../../components/Modal';
 import { SelectField } from '../../components/SelectField';
 import { StatusBadge } from '../../components/StatusBadge';
+import { AuthC } from '../../lib/auth';
 
 const resourceOptions = [
   { value: 'operation_log', label: '操作日志' },
@@ -85,7 +86,9 @@ export default function ExportTasksPage({ setNotice }: { setNotice: (value: stri
           <h2>导出任务</h2>
           <span>按资源创建导出，明文敏感字段需审批</span>
         </div>
-        <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(true)}><FileText size={16} />新建导出</button>
+        <AuthC authKey="audit:exportTask:add">
+          <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(true)}><FileText size={16} />新建导出</button>
+        </AuthC>
       </div>
 
       <form className="filterBar" onSubmit={applyFilters}>
@@ -110,8 +113,12 @@ export default function ExportTasksPage({ setNotice }: { setNotice: (value: stri
                 <td>{new Date(item.createdAt).toLocaleString()}</td>
                 <td>
                   <div className="inlineActions">
-                    <button className="tableButton" type="button" onClick={() => openDetail(item)}><Eye size={15} />详情</button>
-                    <button className="tableButton" type="button" onClick={() => download(item)}><Download size={15} />下载</button>
+                    <AuthC authKey="audit:exportTask:detail">
+                      <button className="tableButton" type="button" onClick={() => openDetail(item)}>详情</button>
+                    </AuthC>
+                    <AuthC authKey="audit:exportTask:download">
+                      <button className="tableButton" type="button" onClick={() => download(item)}>下载</button>
+                    </AuthC>
                   </div>
                 </td>
               </tr>
@@ -120,7 +127,7 @@ export default function ExportTasksPage({ setNotice }: { setNotice: (value: stri
         </table>
       </div>
 
-      <Modal open={modalOpen} title="新建导出任务" subtitle="导出条件会进入审计" onClose={() => setModalOpen(false)}>
+      <Modal open={modalOpen} title="新建导出任务" subtitle="导出条件会进入审计" onClose={() => setModalOpen(false)} showClose={false}>
         <form className="formPanel" onSubmit={create}>
           <label>导出名称<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /></label>
           <label>导出资源<SelectField value={form.resource} options={resourceOptions} onChange={(resource) => setForm({ ...form, resource })} /></label>
@@ -128,7 +135,7 @@ export default function ExportTasksPage({ setNotice }: { setNotice: (value: stri
           {form.sensitive && <label>申请原因<input value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} placeholder="说明明文导出的业务用途" required /></label>}
           <div className="modalActions">
             <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(false)}>取消</button>
-            <button className="primaryButton compact" type="submit"><FileText size={16} />创建导出</button>
+            <button className="primaryButton compact" type="submit">创建</button>
           </div>
         </form>
       </Modal>

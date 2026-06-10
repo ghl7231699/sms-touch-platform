@@ -3,6 +3,7 @@ import { api } from '../../lib/api';
 import type { SmsTask } from '../../types';
 import { eventLabels, sceneLabels } from '../../constants/labels';
 import { StatusBadge } from '../../components/StatusBadge';
+import { AuthC } from '../../lib/auth';
 
 function taskReason(task: SmsTask) {
   const codeMap: Record<string, string> = {
@@ -81,9 +82,15 @@ export default function Tasks({ tasks, onRefresh, setNotice }: { tasks: SmsTask[
             <span>自动化规则命中后生成短信任务，任务中心负责排队、执行、重试和取消。</span>
           </div>
           <div className="headerActions">
-            <button className="secondaryButton compact" type="button" onClick={batchCancel}><XCircle size={16} />批量取消</button>
-            <button className="secondaryButton compact" type="button" onClick={batchRetry}><RotateCcw size={16} />批量重试</button>
-            <button className="primaryButton compact" type="button" onClick={runDue}><Clock3 size={16} />执行到期任务</button>
+            <AuthC authKey="touch:task:batchCancel">
+              <button className="secondaryButton compact" type="button" onClick={batchCancel}><XCircle size={16} />批量取消</button>
+            </AuthC>
+            <AuthC authKey="touch:task:batchRetry">
+              <button className="secondaryButton compact" type="button" onClick={batchRetry}><RotateCcw size={16} />批量重试</button>
+            </AuthC>
+            <AuthC authKey="touch:task:runDue">
+              <button className="primaryButton compact" type="button" onClick={runDue}><Clock3 size={16} />执行到期任务</button>
+            </AuthC>
           </div>
         </div>
 

@@ -5,6 +5,7 @@ import { statusLabel } from '../../constants/labels';
 import type { Template } from '../../types';
 import { Modal } from '../../components/Modal';
 import { SelectField } from '../../components/SelectField';
+import { AuthC } from '../../lib/auth';
 
 export default function ManualSend({ templates, onRefresh, setNotice }: { templates: Template[]; onRefresh: () => Promise<void>; setNotice: (value: string) => void }) {
   const [phone, setPhone] = useState('18515385071');
@@ -28,7 +29,9 @@ export default function ManualSend({ templates, onRefresh, setNotice }: { templa
       <section className="panel">
         <div className="panelTitle">
           <h2>手动发送</h2>
-          <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(true)}><Send size={16} />发送短信</button>
+          <AuthC authKey="touch:manual:send">
+            <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(true)}><Send size={16} />发送短信</button>
+          </AuthC>
         </div>
         <p>手动发送统一走发送前安全校验，命中黑名单、退订、频控或真实服务商白名单保护时会被拦截。</p>
       </section>
@@ -40,7 +43,7 @@ export default function ManualSend({ templates, onRefresh, setNotice }: { templa
           <li>发送记录统一进入发送记录与统计概览。</li>
         </ul>
       </section>
-      <Modal open={modalOpen} title="手动发送" subtitle="白名单保护" onClose={() => setModalOpen(false)}>
+      <Modal open={modalOpen} title="手动发送" subtitle="白名单保护" onClose={() => setModalOpen(false)} showClose={false}>
         <form className="formPanel" onSubmit={submit}>
           <label>手机号<input value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
           <label>短信模板
@@ -48,7 +51,7 @@ export default function ManualSend({ templates, onRefresh, setNotice }: { templa
           </label>
           <div className="modalActions">
             <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(false)}>取消</button>
-            <button className="primaryButton compact" type="submit"><Send size={16} />发送短信</button>
+            <button className="primaryButton compact" type="submit">发送</button>
           </div>
         </form>
       </Modal>

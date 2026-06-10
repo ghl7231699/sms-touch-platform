@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { ClipboardCheck, Eye, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { api } from '../../lib/api';
 import { actionLabel, approvalStatusLabel, operationLabel, resourceLabel } from '../../constants/labels';
 import type { ApprovalItem } from '../../types';
 import { Modal } from '../../components/Modal';
 import { SelectField } from '../../components/SelectField';
 import { StatusBadge } from '../../components/StatusBadge';
+import { AuthC } from '../../lib/auth';
 
 const emptyFilters = { keyword: '', resource: '', action: '', status: '', dateFrom: '', dateTo: '' };
 
@@ -107,7 +108,11 @@ export default function ApprovalsPage({ setNotice }: { setNotice: (value: string
                   <td>{summary?.impact?.title || item.resourceId || '-'}</td>
                   <td><StatusBadge status={approvalStatus(item.status)} /></td>
                   <td>{new Date(item.createdAt).toLocaleString()}</td>
-                  <td><button className="tableButton" type="button" onClick={() => openDetail(item)}><Eye size={15} />详情</button></td>
+                  <td>
+                    <AuthC authKey="audit:approval:detail">
+                      <button className="tableButton" type="button" onClick={() => openDetail(item)}>详情</button>
+                    </AuthC>
+                  </td>
                 </tr>
               );
             })}
@@ -151,9 +156,15 @@ export default function ApprovalsPage({ setNotice }: { setNotice: (value: string
               <div className="formPanel">
                 <label>审批意见<input value={comment} onChange={(event) => setComment(event.target.value)} placeholder="填写通过、驳回或撤回理由" /></label>
                 <div className="modalActions">
-                  <button className="secondaryButton compact" type="button" onClick={() => act(selected, 'withdraw')}>撤回</button>
-                  <button className="secondaryButton compact" type="button" onClick={() => act(selected, 'reject')}>驳回</button>
-                  <button className="primaryButton compact" type="button" onClick={() => act(selected, 'approve')}><ClipboardCheck size={16} />通过并执行</button>
+                  <AuthC authKey="audit:approval:withdraw">
+                    <button className="secondaryButton compact" type="button" onClick={() => act(selected, 'withdraw')}>撤回</button>
+                  </AuthC>
+                  <AuthC authKey="audit:approval:reject">
+                    <button className="secondaryButton compact" type="button" onClick={() => act(selected, 'reject')}>驳回</button>
+                  </AuthC>
+                  <AuthC authKey="audit:approval:approve">
+                    <button className="primaryButton compact" type="button" onClick={() => act(selected, 'approve')}>通过</button>
+                  </AuthC>
                 </div>
               </div>
             )}

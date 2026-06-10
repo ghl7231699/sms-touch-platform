@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { Edit3, Eye, KeyRound, ShieldCheck, UserCheck, UserX, Users } from 'lucide-react';
+import { ShieldCheck, Trash2, Users } from 'lucide-react';
 import { api } from '../../lib/api';
 import type { AdminUser, RegisterRequestItem, RoleItem } from '../../types';
 import { Modal } from '../../components/Modal';
 import { SelectField } from '../../components/SelectField';
 import { StatusBadge } from '../../components/StatusBadge';
+import { AuthTree } from '../../components/AuthTree';
+import { AuthC } from '../../lib/auth';
 
-type UserTab = 'users' | 'requests';
+type UserTab = 'users' | 'requests' | 'roles';
 
 const emptyUserForm = { email: '', name: '', phone: '', roleCode: 'operator' };
 const emptyRejectForm = { reason: '' };
@@ -21,8 +23,11 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
   const [rejectForm, setRejectForm] = useState(emptyRejectForm);
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<AdminUser | null>(null);
+  const [deletingUser, setDeletingUser] = useState<AdminUser | null>(null);
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [activeRole, setActiveRole] = useState<RoleItem | null>(null);
+  const [editingRole, setEditingRole] = useState<RoleItem | null>(null);
+  const [roleForm, setRoleForm] = useState({ name: '', description: '', permissions: [] as string[] });
   const [selectedRequest, setSelectedRequest] = useState<RegisterRequestItem | null>(null);
   const [rejectingRequest, setRejectingRequest] = useState<RegisterRequestItem | null>(null);
   const roleOptions = roles.map((role) => ({ value: role.code, label: role.name }));
@@ -94,6 +99,14 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
     setNotice(`${user.name} 的设置密码链接 token：${result.setupToken}`);
   }
 
+  async function deleteUser() {
+    if (!deletingUser) return;
+    await api(`/api/users/${deletingUser.id}/delete`, { method: 'POST' });
+    setNotice(`${deletingUser.name} 已删除`);
+    setDeletingUser(null);
+    await load();
+  }
+
   async function approveRequest(item: RegisterRequestItem) {
     await api(`/api/auth/register-requests/${item.id}/approve`, {
       method: 'POST',
@@ -117,6 +130,27 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
     await load();
   }
 
+  function openRoleEditor(role: RoleItem) {
+    setEditingRole(role);
+    setRoleForm({
+      name: role.name,
+      description: role.description || '',
+      permissions: role.permissions.includes('*') ? ['overview:dashboard:base'] : role.permissions
+    });
+  }
+
+  async function saveRole(event: React.FormEvent) {
+    event.preventDefault();
+    if (!editingRole) return;
+    const result = await api<{ item: RoleItem }>(`/api/roles/${editingRole.id}/update`, {
+      method: 'POST',
+      body: JSON.stringify({ ...roleForm, status: editingRole.status })
+    });
+    setNotice(`${result.item.name} 权限已更新`);
+    setEditingRole(null);
+    await load();
+  }
+
   return (
     <section className="stack">
       <section className="panel">
@@ -128,7 +162,12 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
           <div className="inlineActions">
             <button className={`segmentButton${tab === 'users' ? ' active' : ''}`} type="button" onClick={() => setTab('users')}>后台用户</button>
             <button className={`segmentButton${tab === 'requests' ? ' active' : ''}`} type="button" onClick={() => setTab('requests')}>注册申请</button>
-            {tab === 'users' && <button className="secondaryButton compact" type="button" onClick={() => setCreateOpen(true)}><Users size={16} />新建账号</button>}
+            <button className={`segmentButton${tab === 'roles' ? ' active' : ''}`} type="button" onClick={() => setTab('roles')}>角色权限</button>
+            {tab === 'users' && (
+              <AuthC authKey="account:user:add">
+                <button className="secondaryButton compact" type="button" onClick={() => setCreateOpen(true)}><Users size={16} />新建账号</button>
+              </AuthC>
+            )}
           </div>
         </div>
 
@@ -145,9 +184,11 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
                         {user.roles.map((role) => {
                           const roleDetail = roleMap.get(role.code);
                           return (
-                            <button className="tableButton compact" type="button" key={role.code} onClick={() => roleDetail && setActiveRole(roleDetail)} disabled={!roleDetail}>
-                              {role.name}
-                            </button>
+                            <AuthC authKey="account:user:roleView" key={role.code}>
+                              <button className="tableButton compact" type="button" onClick={() => roleDetail && setActiveRole(roleDetail)} disabled={!roleDetail}>
+                                {role.name}
+                              </button>
+                            </AuthC>
                           );
                         })}
                       </div>
@@ -156,10 +197,21 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
                     <td>{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : '-'}</td>
                     <td>
                       <div className="inlineActions">
-                        <button className="tableButton" type="button" onClick={() => setSelectedUser(user)}><Eye size={15} />详情</button>
-                        <button className="tableButton" type="button" onClick={() => openEdit(user)}><Edit3 size={15} />编辑</button>
-                        <button className="tableButton" type="button" onClick={() => resetPassword(user)}><KeyRound size={15} />重置密码</button>
-                        <button className="tableButton" type="button" onClick={() => changeStatus(user)}>{user.status === 'active' ? '禁用' : '启用'}</button>
+                        <AuthC authKey="account:user:view">
+                          <button className="tableButton" type="button" onClick={() => setSelectedUser(user)}>详情</button>
+                        </AuthC>
+                        <AuthC authKey="account:user:edit">
+                          <button className="tableButton" type="button" onClick={() => openEdit(user)}>编辑</button>
+                        </AuthC>
+                        <AuthC authKey="account:user:resetPassword">
+                          <button className="tableButton" type="button" onClick={() => resetPassword(user)}>重置密码</button>
+                        </AuthC>
+                        <AuthC authKey="account:user:status">
+                          <button className="tableButton" type="button" onClick={() => changeStatus(user)}>{user.status === 'active' ? '禁用' : '启用'}</button>
+                        </AuthC>
+                        <AuthC authKey="account:user:delete">
+                          <button className="tableButton danger" type="button" onClick={() => setDeletingUser(user)}>删除</button>
+                        </AuthC>
                       </div>
                     </td>
                   </tr>
@@ -182,9 +234,49 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
                     <td>{new Date(item.createdAt).toLocaleString()}</td>
                     <td>
                       <div className="inlineActions">
-                        <button className="tableButton" type="button" onClick={() => setSelectedRequest(item)}><Eye size={15} />详情</button>
-                        {item.status === 'pending' && <button className="tableButton" type="button" onClick={() => approveRequest(item)}><UserCheck size={15} />通过</button>}
-                        {item.status === 'pending' && <button className="tableButton" type="button" onClick={() => setRejectingRequest(item)}><UserX size={15} />驳回</button>}
+                        <AuthC authKey="account:user:view">
+                          <button className="tableButton" type="button" onClick={() => setSelectedRequest(item)}>详情</button>
+                        </AuthC>
+                        {item.status === 'pending' && (
+                          <AuthC authKey="account:user:approveRegister">
+                            <button className="tableButton" type="button" onClick={() => approveRequest(item)}>通过</button>
+                          </AuthC>
+                        )}
+                        {item.status === 'pending' && (
+                          <AuthC authKey="account:user:rejectRegister">
+                            <button className="tableButton" type="button" onClick={() => setRejectingRequest(item)}>驳回</button>
+                          </AuthC>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {tab === 'roles' && (
+          <div className="dataTableWrap">
+            <table className="dataTable">
+              <thead><tr><th>角色</th><th>说明</th><th>权限数</th><th>状态</th><th>操作</th></tr></thead>
+              <tbody>
+                {roles.map((role) => (
+                  <tr key={role.id}>
+                    <td><strong>{role.name}</strong><span>{role.code}</span></td>
+                    <td>{role.description || '-'}</td>
+                    <td>{role.permissions.includes('*') ? '全部权限' : `${role.permissions.length} 项`}</td>
+                    <td><StatusBadge status={role.status === 'active' ? 'enabled' : 'disabled'} /></td>
+                    <td>
+                      <div className="inlineActions">
+                        <AuthC authKey="account:user:roleView">
+                          <button className="tableButton" type="button" onClick={() => setActiveRole(role)}>查看权限</button>
+                        </AuthC>
+                        {role.code !== 'admin' && (
+                          <AuthC authKey="account:user:roleEdit">
+                            <button className="tableButton" type="button" onClick={() => openRoleEditor(role)}>权限配置</button>
+                          </AuthC>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -195,7 +287,7 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
         )}
       </section>
 
-      <Modal open={createOpen} title="新建账号" subtitle="自动生成初始密码" onClose={() => setCreateOpen(false)}>
+      <Modal open={createOpen} title="新建账号" subtitle="自动生成初始密码" onClose={() => setCreateOpen(false)} showClose={false}>
         <form className="formPanel" onSubmit={create}>
           <label>姓名<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /></label>
           <label>邮箱<input value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /></label>
@@ -203,21 +295,44 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
           <label>角色<SelectField value={form.roleCode} options={roleOptions} onChange={(roleCode) => setForm({ ...form, roleCode })} /></label>
           <div className="modalActions">
             <button className="secondaryButton compact" type="button" onClick={() => setCreateOpen(false)}>取消</button>
-            <button className="primaryButton compact" type="submit"><Users size={16} />创建用户</button>
+            <button className="primaryButton compact" type="submit">创建</button>
           </div>
         </form>
       </Modal>
 
-      <Modal open={Boolean(editing)} title="编辑用户" subtitle={editing?.email} onClose={() => setEditing(null)}>
+      <Modal open={Boolean(editing)} title="编辑用户" subtitle={editing?.email} onClose={() => setEditing(null)} showClose={false}>
         <form className="formPanel" onSubmit={updateUser}>
           <label>姓名<input value={editForm.name} onChange={(event) => setEditForm({ ...editForm, name: event.target.value })} required /></label>
           <label>手机号<input value={editForm.phone} onChange={(event) => setEditForm({ ...editForm, phone: event.target.value })} /></label>
           <label>角色<SelectField value={editForm.roleCode} options={roleOptions} onChange={(roleCode) => setEditForm({ ...editForm, roleCode })} /></label>
           <div className="modalActions">
             <button className="secondaryButton compact" type="button" onClick={() => setEditing(null)}>取消</button>
-            <button className="primaryButton compact" type="submit"><Edit3 size={16} />保存修改</button>
+            <button className="primaryButton compact" type="submit">保存</button>
           </div>
         </form>
+      </Modal>
+
+      <Modal open={Boolean(deletingUser)} title="删除用户" subtitle={deletingUser?.email} onClose={() => setDeletingUser(null)} showClose={false}>
+        {deletingUser && (
+          <div className="formPanel">
+            <div className="readonlyBox">
+              <Trash2 size={18} />
+              <div>
+                <strong>确认删除 {deletingUser.name}？</strong>
+                <span>删除后该账号会立即失去登录能力，历史操作日志会保留但不再关联到用户。</span>
+              </div>
+            </div>
+            <div className="detailCard">
+              <div><span>邮箱</span><strong>{deletingUser.email}</strong></div>
+              <div><span>角色</span><strong>{deletingUser.roles.map((role) => role.name).join(' / ') || '-'}</strong></div>
+              <div><span>状态</span><StatusBadge status={deletingUser.status === 'active' ? 'enabled' : 'disabled'} /></div>
+            </div>
+            <div className="modalActions">
+              <button className="secondaryButton compact" type="button" onClick={() => setDeletingUser(null)}>取消</button>
+              <button className="primaryButton compact dangerButton" type="button" onClick={deleteUser}>删除</button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       <Modal open={Boolean(selectedUser)} title="用户详情" subtitle={selectedUser?.email} onClose={() => setSelectedUser(null)}>
@@ -252,25 +367,29 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
             {selectedRequest.rejectReason && <div className="fieldBlock"><span>驳回原因</span><strong>{selectedRequest.rejectReason}</strong></div>}
             {selectedRequest.status === 'pending' && (
               <div className="modalActions">
-                <button className="secondaryButton compact" type="button" onClick={() => setRejectingRequest(selectedRequest)}>驳回</button>
-                <button className="primaryButton compact" type="button" onClick={() => approveRequest(selectedRequest)}><UserCheck size={16} />通过并创建账号</button>
+                <AuthC authKey="account:user:rejectRegister">
+                  <button className="secondaryButton compact" type="button" onClick={() => setRejectingRequest(selectedRequest)}>驳回</button>
+                </AuthC>
+                <AuthC authKey="account:user:approveRegister">
+                  <button className="primaryButton compact" type="button" onClick={() => approveRequest(selectedRequest)}>通过</button>
+                </AuthC>
               </div>
             )}
           </div>
         )}
       </Modal>
 
-      <Modal open={Boolean(rejectingRequest)} title="驳回注册申请" subtitle={rejectingRequest?.email} onClose={() => setRejectingRequest(null)}>
+      <Modal open={Boolean(rejectingRequest)} title="驳回注册申请" subtitle={rejectingRequest?.email} onClose={() => setRejectingRequest(null)} showClose={false}>
         <form className="formPanel" onSubmit={rejectRequest}>
           <label>驳回原因<input value={rejectForm.reason} onChange={(event) => setRejectForm({ reason: event.target.value })} required /></label>
           <div className="modalActions">
             <button className="secondaryButton compact" type="button" onClick={() => setRejectingRequest(null)}>取消</button>
-            <button className="primaryButton compact" type="submit"><UserX size={16} />确认驳回</button>
+            <button className="primaryButton compact" type="submit">驳回</button>
           </div>
         </form>
       </Modal>
 
-      <Modal open={Boolean(activeRole)} title={activeRole?.name || '角色详情'} subtitle={activeRole ? `${activeRole.code} · 内置固定角色` : undefined} onClose={() => setActiveRole(null)}>
+      <Modal open={Boolean(activeRole)} title={activeRole?.name || '角色详情'} subtitle={activeRole ? `${activeRole.code} · 角色权限` : undefined} onClose={() => setActiveRole(null)} size="wide">
         {activeRole && (
           <div className="formPanel">
             <div className="detailCard">
@@ -282,9 +401,42 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
               <div className="chips">{activeRole.permissions.map((permission) => <span key={permission}>{permission}</span>)}</div>
             </div>
             <div className="modalActions">
-              <button className="secondaryButton compact" type="button" onClick={() => setActiveRole(null)}><ShieldCheck size={16} />关闭</button>
+              {activeRole.code !== 'admin' && (
+                <AuthC authKey="account:user:roleEdit">
+                  <button className="primaryButton compact" type="button" onClick={() => { openRoleEditor(activeRole); setActiveRole(null); }}>权限配置</button>
+                </AuthC>
+              )}
             </div>
           </div>
+        )}
+      </Modal>
+
+      <Modal open={Boolean(editingRole)} title="角色权限配置" subtitle={editingRole ? `${editingRole.name} · ${editingRole.code}` : undefined} onClose={() => setEditingRole(null)} size="wide" showClose={false}>
+        {editingRole && (
+          <form className="formPanel" onSubmit={saveRole}>
+            <div className="formGrid two">
+              <label>角色名称<input value={roleForm.name} onChange={(event) => setRoleForm({ ...roleForm, name: event.target.value })} required /></label>
+              <label>角色状态
+                <SelectField
+                  value={editingRole.status}
+                  options={[{ value: 'active', label: '启用' }, { value: 'disabled', label: '停用' }]}
+                  onChange={(status) => setEditingRole({ ...editingRole, status })}
+                />
+              </label>
+            </div>
+            <label>角色说明<input value={roleForm.description} onChange={(event) => setRoleForm({ ...roleForm, description: event.target.value })} /></label>
+            <div className="fieldBlock">
+              <span>权限树</span>
+              <AuthTree
+                checkedKeys={roleForm.permissions}
+                onCheck={(permissions) => setRoleForm({ ...roleForm, permissions })}
+              />
+            </div>
+            <div className="modalActions">
+              <button className="secondaryButton compact" type="button" onClick={() => setEditingRole(null)}>取消</button>
+              <button className="primaryButton compact" type="submit">保存</button>
+            </div>
+          </form>
         )}
       </Modal>
     </section>

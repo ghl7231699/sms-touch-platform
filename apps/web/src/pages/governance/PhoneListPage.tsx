@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Download, Edit3, Eye, FileUp, Search, ShieldCheck } from 'lucide-react';
+import { Download, FileUp, Search, ShieldCheck } from 'lucide-react';
 import { api } from '../../lib/api';
 import { statusLabel } from '../../constants/labels';
 import type { PhoneGovernanceItem } from '../../types';
 import { Modal } from '../../components/Modal';
 import { SelectField } from '../../components/SelectField';
 import { StatusBadge } from '../../components/StatusBadge';
+import { AuthC } from '../../lib/auth';
 
 type PhoneListKind = 'whitelist' | 'blacklist' | 'unsubscribes';
 
@@ -31,6 +32,7 @@ export default function PhoneListPage({ kind, title, setNotice }: { kind: PhoneL
   const endpoint = `/api/${kind}`;
   const canImport = kind === 'blacklist' || kind === 'unsubscribes';
   const canEdit = kind === 'whitelist';
+  const authPrefix = kind === 'whitelist' ? 'security:whitelist' : kind === 'blacklist' ? 'security:blacklist' : 'security:unsubscribe';
 
   const statusOptions = useMemo(() => {
     if (kind === 'whitelist') return [{ value: '', label: '全部状态' }, { value: 'enabled', label: '启用' }, { value: 'disabled', label: '停用' }];
@@ -128,9 +130,19 @@ export default function PhoneListPage({ kind, title, setNotice }: { kind: PhoneL
             <span>共 {items.length} 条，支持按手机号、状态、场景和日期查询</span>
           </div>
           <div className="inlineActions">
-            <button className="secondaryButton compact" type="button" onClick={() => setModal('create')}><ShieldCheck size={16} />新增记录</button>
-            {canImport && <button className="secondaryButton compact" type="button" onClick={() => setModal('import')}><FileUp size={16} />批量导入</button>}
-            {kind === 'whitelist' && <button className="secondaryButton compact" type="button" onClick={exportWhitelist}><Download size={16} />导出</button>}
+            <AuthC authKey={`${authPrefix}:add`}>
+              <button className="secondaryButton compact" type="button" onClick={() => setModal('create')}><ShieldCheck size={16} />新增记录</button>
+            </AuthC>
+            {canImport && (
+              <AuthC authKey={`${authPrefix}:import`}>
+                <button className="secondaryButton compact" type="button" onClick={() => setModal('import')}><FileUp size={16} />批量导入</button>
+              </AuthC>
+            )}
+            {kind === 'whitelist' && (
+              <AuthC authKey="security:whitelist:export">
+                <button className="secondaryButton compact" type="button" onClick={exportWhitelist}><Download size={16} />导出</button>
+              </AuthC>
+            )}
           </div>
         </div>
 
@@ -158,9 +170,24 @@ export default function PhoneListPage({ kind, title, setNotice }: { kind: PhoneL
                   <td>{new Date(item.createdAt).toLocaleString()}</td>
                   <td>
                     <div className="inlineActions">
-                      <button className="tableButton" type="button" onClick={() => openDetail(item)}><Eye size={15} />详情</button>
-                      {canEdit && <button className="tableButton" type="button" onClick={() => openEdit(item)}><Edit3 size={15} />编辑</button>}
-                      {kind !== 'unsubscribes' && <button className="tableButton" type="button" onClick={() => toggle(item)}>{kind === 'blacklist' ? '移除' : item.status === 'enabled' ? '停用' : '启用'}</button>}
+                      <AuthC authKey={`${authPrefix}:detail`}>
+                        <button className="tableButton" type="button" onClick={() => openDetail(item)}>详情</button>
+                      </AuthC>
+                      {canEdit && (
+                        <AuthC authKey="security:whitelist:edit">
+                          <button className="tableButton" type="button" onClick={() => openEdit(item)}>编辑</button>
+                        </AuthC>
+                      )}
+                      {kind === 'whitelist' && (
+                        <AuthC authKey="security:whitelist:status">
+                          <button className="tableButton" type="button" onClick={() => toggle(item)}>{item.status === 'enabled' ? '停用' : '启用'}</button>
+                        </AuthC>
+                      )}
+                      {kind === 'blacklist' && (
+                        <AuthC authKey="security:blacklist:remove">
+                          <button className="tableButton" type="button" onClick={() => toggle(item)}>移除</button>
+                        </AuthC>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -170,7 +197,7 @@ export default function PhoneListPage({ kind, title, setNotice }: { kind: PhoneL
         </div>
       </section>
 
-      <Modal open={modal === 'create'} title="新增记录" subtitle={kind === 'whitelist' ? '真实发送保护' : '发送前拦截'} onClose={() => setModal(null)}>
+      <Modal open={modal === 'create'} title="新增记录" subtitle={kind === 'whitelist' ? '真实发送保护' : '发送前拦截'} onClose={() => setModal(null)} showClose={false}>
         <form className="formPanel" onSubmit={submit}>
           <label>手机号<input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} required /></label>
           <label>场景<input value={form.scene} onChange={(event) => setForm({ ...form, scene: event.target.value })} placeholder="留空表示全部场景" /></label>
@@ -179,12 +206,12 @@ export default function PhoneListPage({ kind, title, setNotice }: { kind: PhoneL
             : <label>备注<input value={form.remark} onChange={(event) => setForm({ ...form, remark: event.target.value })} /></label>}
           <div className="modalActions">
             <button className="secondaryButton compact" type="button" onClick={() => setModal(null)}>取消</button>
-            <button className="primaryButton compact" type="submit"><ShieldCheck size={16} />保存</button>
+            <button className="primaryButton compact" type="submit">保存</button>
           </div>
         </form>
       </Modal>
 
-      <Modal open={modal === 'import'} title="批量导入" subtitle="每行、逗号或空格分隔手机号" onClose={() => setModal(null)}>
+      <Modal open={modal === 'import'} title="批量导入" subtitle="每行、逗号或空格分隔手机号" onClose={() => setModal(null)} showClose={false}>
         <form className="formPanel" onSubmit={importPhones}>
           <label>号码列表<textarea value={importText} onChange={(event) => setImportText(event.target.value)} required /></label>
           <label>场景<input value={form.scene} onChange={(event) => setForm({ ...form, scene: event.target.value })} placeholder="留空表示全部场景" /></label>
@@ -193,18 +220,18 @@ export default function PhoneListPage({ kind, title, setNotice }: { kind: PhoneL
             : <label>备注<input value={form.remark} onChange={(event) => setForm({ ...form, remark: event.target.value })} /></label>}
           <div className="modalActions">
             <button className="secondaryButton compact" type="button" onClick={() => setModal(null)}>取消</button>
-            <button className="primaryButton compact" type="submit"><FileUp size={16} />导入</button>
+            <button className="primaryButton compact" type="submit">导入</button>
           </div>
         </form>
       </Modal>
 
-      <Modal open={Boolean(editing)} title="编辑白名单" subtitle={editing?.phoneMasked} onClose={() => setEditing(null)}>
+      <Modal open={Boolean(editing)} title="编辑白名单" subtitle={editing?.phoneMasked} onClose={() => setEditing(null)} showClose={false}>
         <form className="formPanel" onSubmit={updateWhitelist}>
           <label>场景<input value={form.scene} onChange={(event) => setForm({ ...form, scene: event.target.value })} /></label>
           <label>备注<input value={form.remark} onChange={(event) => setForm({ ...form, remark: event.target.value })} /></label>
           <div className="modalActions">
             <button className="secondaryButton compact" type="button" onClick={() => setEditing(null)}>取消</button>
-            <button className="primaryButton compact" type="submit"><Edit3 size={16} />保存修改</button>
+            <button className="primaryButton compact" type="submit">保存</button>
           </div>
         </form>
       </Modal>

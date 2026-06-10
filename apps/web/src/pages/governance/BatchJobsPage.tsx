@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Eye, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { api } from '../../lib/api';
 import { batchJobLabel } from '../../constants/labels';
 import type { BatchJobItem } from '../../types';
 import { Modal } from '../../components/Modal';
 import { SelectField } from '../../components/SelectField';
 import { StatusBadge } from '../../components/StatusBadge';
+import { AuthC } from '../../lib/auth';
 
 const emptyFilters = { keyword: '', jobType: '', status: '', dateFrom: '', dateTo: '' };
 
@@ -84,7 +85,11 @@ export default function BatchJobsPage() {
                 <td>{item.successCount}/{item.totalCount}<span>失败 {item.failedCount}</span></td>
                 <td><StatusBadge status={item.status === 'completed' ? 'success' : item.status} /></td>
                 <td>{new Date(item.createdAt).toLocaleString()}</td>
-                <td><button className="tableButton" type="button" onClick={() => openDetail(item)}><Eye size={15} />明细</button></td>
+                <td>
+                  <AuthC authKey="audit:batchJob:detail">
+                    <button className="tableButton" type="button" onClick={() => openDetail(item)}>明细</button>
+                  </AuthC>
+                </td>
               </tr>
             ))}
           </tbody>

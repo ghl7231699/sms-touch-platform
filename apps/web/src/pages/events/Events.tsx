@@ -5,6 +5,7 @@ import { eventLabels } from '../../constants/labels';
 import type { EventItem } from '../../types';
 import { Modal } from '../../components/Modal';
 import { SelectField } from '../../components/SelectField';
+import { AuthC } from '../../lib/auth';
 
 export default function Events({ events, onRefresh, setNotice }: { events: EventItem[]; onRefresh: () => Promise<void>; setNotice: (value: string) => void }) {
   const [phone, setPhone] = useState('18515385071');
@@ -33,7 +34,9 @@ export default function Events({ events, onRefresh, setNotice }: { events: Event
       <section className="panel">
         <div className="panelTitle">
           <h2>事件流水</h2>
-          <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(true)}><Zap size={16} />模拟事件</button>
+          <AuthC authKey="touch:event:simulate">
+            <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(true)}><Zap size={16} />模拟事件</button>
+          </AuthC>
         </div>
         <div className="eventList">
           {events.map((item) => (
@@ -44,7 +47,7 @@ export default function Events({ events, onRefresh, setNotice }: { events: Event
           ))}
         </div>
       </section>
-      <Modal open={modalOpen} title="模拟业务事件" subtitle="自动规则触发" onClose={() => setModalOpen(false)}>
+      <Modal open={modalOpen} title="模拟业务事件" subtitle="自动规则触发" onClose={() => setModalOpen(false)} showClose={false}>
         <form className="formPanel" onSubmit={submit}>
           <label>事件类型
             <SelectField value={eventType} options={eventOptions} onChange={setEventType} />
@@ -52,7 +55,7 @@ export default function Events({ events, onRefresh, setNotice }: { events: Event
           <label>手机号<input value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
           <div className="modalActions">
             <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(false)}>取消</button>
-            <button className="primaryButton compact" type="submit"><Zap size={16} />触发事件</button>
+            <button className="primaryButton compact" type="submit">触发</button>
           </div>
         </form>
       </Modal>

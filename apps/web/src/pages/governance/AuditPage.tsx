@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Eye, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { api } from '../../lib/api';
 import { eventLabels, operationLabel, resourceLabel } from '../../constants/labels';
 import type { AuditItem } from '../../types';
 import { Modal } from '../../components/Modal';
 import { SelectField } from '../../components/SelectField';
 import { StatusBadge } from '../../components/StatusBadge';
+import { AuthC } from '../../lib/auth';
 
 const emptyFilters = {
   keyword: '',
@@ -43,6 +44,7 @@ export default function AuditPage({ mode }: { mode: 'eventSourceLogs' | 'operati
   const [selected, setSelected] = useState<AuditItem | null>(null);
   const endpoint = mode === 'eventSourceLogs' ? '/api/event-source-logs' : '/api/operation-logs';
   const title = mode === 'eventSourceLogs' ? '事件接入日志' : '操作日志';
+  const detailAuthKey = mode === 'eventSourceLogs' ? 'integration:eventSourceLog:detail' : 'audit:operationLog:detail';
 
   async function load(nextFilters = filters) {
     const data = await api<{ items: AuditItem[] }>(`${endpoint}?${queryString(nextFilters, mode)}`);
@@ -105,7 +107,11 @@ export default function AuditPage({ mode }: { mode: 'eventSourceLogs' | 'operati
                 <td>{mode === 'eventSourceLogs' ? eventLabels[item.eventType || ''] || item.eventType || '-' : operationLabel(item.resource, item.action)}</td>
                 <td><StatusBadge status={(item.status || item.result) === 'success' ? 'success' : 'failed'} /></td>
                 <td><strong>{item.code || resourceLabel(item.resource)}</strong><span>{item.message || item.errorMessage || item.path || '-'}</span></td>
-                <td><button className="tableButton" type="button" onClick={() => openDetail(item)}><Eye size={15} />详情</button></td>
+                <td>
+                  <AuthC authKey={detailAuthKey}>
+                    <button className="tableButton" type="button" onClick={() => openDetail(item)}>详情</button>
+                  </AuthC>
+                </td>
               </tr>
             ))}
           </tbody>

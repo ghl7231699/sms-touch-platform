@@ -3,6 +3,7 @@ import { Clock3, KeyRound, Link2, Power, Settings, ShieldCheck } from 'lucide-re
 import { api } from '../../lib/api';
 import { SelectField } from '../../components/SelectField';
 import { StatusBadge } from '../../components/StatusBadge';
+import { AuthC } from '../../lib/auth';
 
 const sceneOptions = [
   { value: 'register', label: '注册转化' },
@@ -213,7 +214,9 @@ export default function SettingsPage({ setNotice }: { setNotice: (value: string)
             <article><Clock3 size={18} /><strong>安静时段</strong><span>命中夜间时段时，任务会被拦截或顺延。</span></article>
             <article><Link2 size={18} /><strong>短链追踪</strong><span>短链点击用于发送记录和统计复盘。</span></article>
           </div>
-          <button className="primaryButton" onClick={save}><Settings size={16} />保存发送控制</button>
+          <AuthC authKey="security:setting:save">
+            <button className="primaryButton" onClick={save}><Settings size={16} />保存发送控制</button>
+          </AuthC>
         </section>
       </section>
     </section>

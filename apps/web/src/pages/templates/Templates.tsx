@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { FileText, PauseCircle, PlayCircle } from 'lucide-react';
+import { FileText } from 'lucide-react';
 import { api } from '../../lib/api';
 import { sceneLabels } from '../../constants/labels';
 import type { Template } from '../../types';
 import { Modal } from '../../components/Modal';
 import { SelectField } from '../../components/SelectField';
 import { StatusBadge } from '../../components/StatusBadge';
+import { AuthC } from '../../lib/auth';
 
 export default function Templates({ templates, onRefresh, setNotice }: { templates: Template[]; onRefresh: () => Promise<void>; setNotice: (value: string) => void }) {
   const [form, setForm] = useState({
@@ -43,7 +44,9 @@ export default function Templates({ templates, onRefresh, setNotice }: { templat
       <section className="panel">
         <div className="panelTitle">
           <h2>模板库</h2>
-          <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(true)}><FileText size={16} />新建模板</button>
+          <AuthC authKey="touch:template:add">
+            <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(true)}><FileText size={16} />新建模板</button>
+          </AuthC>
         </div>
         <div className="templateGrid">
           {templates.map((template) => (
@@ -59,16 +62,17 @@ export default function Templates({ templates, onRefresh, setNotice }: { templat
               <div className="chips">
                 {template.variables.map((item) => <span key={item}>{item}</span>)}
               </div>
-              <button className="secondaryButton" onClick={() => toggle(template)}>
-                {template.status === 'enabled' ? <PauseCircle size={16} /> : <PlayCircle size={16} />}
-                {template.status === 'enabled' ? '停用模板' : '启用模板'}
-              </button>
+              <AuthC authKey="touch:template:status">
+                <button className="secondaryButton" onClick={() => toggle(template)}>
+                  {template.status === 'enabled' ? '停用模板' : '启用模板'}
+                </button>
+              </AuthC>
             </article>
           ))}
         </div>
       </section>
 
-      <Modal open={modalOpen} title="新建模板" subtitle="变量 code/min" onClose={() => setModalOpen(false)}>
+      <Modal open={modalOpen} title="新建模板" subtitle="变量 code/min" onClose={() => setModalOpen(false)} showClose={false}>
         <form className="formPanel" onSubmit={create}>
           <label>模板名称<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /></label>
           <label>业务场景
@@ -78,7 +82,7 @@ export default function Templates({ templates, onRefresh, setNotice }: { templat
           <label>模板内容<input value={form.content} onChange={(event) => setForm({ ...form, content: event.target.value })} /></label>
           <div className="modalActions">
             <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(false)}>取消</button>
-            <button className="primaryButton compact" type="submit"><FileText size={16} />创建模板</button>
+            <button className="primaryButton compact" type="submit">创建</button>
           </div>
         </form>
       </Modal>

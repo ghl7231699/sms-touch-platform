@@ -1,59 +1,55 @@
-import { useEffect, useState } from 'react';
-import { Lock, LogOut, RefreshCw } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { ChevronDown, LogOut, Menu } from 'lucide-react';
 import { api } from './lib/api';
-import type { AuthUser, EventItem, Health, Rule, SendLog, SmsTask, Stats, Template, View } from './types';
-import { NavButton } from './components/NavButton';
-import { menuGroups, pageTitles } from './constants/menus';
+import {
+  getAccessData,
+  getAuthToken,
+  removeAccessData,
+  removeAuthToken,
+  requireAuth,
+  setAccessData,
+  setAuthToken
+} from './lib/auth';
+import {
+  filterAuthorizedMenus,
+  flattenMenus,
+  getFirstAccessiblePath,
+  resolveMenus,
+  type ResolvedMenuItem
+} from './lib/menu-permissions';
+import type { AuthUser, EventItem, Health, Rule, SendLog, SmsTask, Stats, Template } from './types';
+import { menus, pageTitles, type PageContext } from './constants/menus';
 import LoginPage from './pages/Login';
 import SetPasswordPage from './pages/Login/SetPasswordPage';
-import Dashboard from './pages/dashboard/Dashboard';
-import Templates from './pages/templates/Templates';
-import Rules from './pages/rules/Rules';
-import ManualSend from './pages/manual-send/ManualSend';
-import Events from './pages/events/Events';
-import Tasks from './pages/tasks/Tasks';
-import Logs from './pages/logs/Logs';
-import UsersPage from './pages/governance/UsersPage';
-import PhoneListPage from './pages/governance/PhoneListPage';
-import SettingsPage from './pages/governance/SettingsPage';
-import EventSourcesPage from './pages/governance/EventSourcesPage';
-import AuditPage from './pages/governance/AuditPage';
-import ExportTasksPage from './pages/governance/ExportTasksPage';
-import BatchJobsPage from './pages/governance/BatchJobsPage';
-import ApprovalsPage from './pages/governance/ApprovalsPage';
 import ForbiddenPage from './pages/governance/ForbiddenPage';
 
-const viewPermissions: Partial<Record<View, string[]>> = {
-  dashboard: ['dashboard.read'],
-  templates: ['template.read', 'template.manage'],
-  rules: ['rule.read', 'rule.manage'],
-  manual: ['manual_send.manage'],
-  events: ['event.read', 'event.manage'],
-  tasks: ['task.read', 'task.manage'],
-  logs: ['send_log.read'],
-  users: ['user.manage'],
-  whitelist: ['whitelist.read', 'whitelist.manage'],
-  blacklist: ['blacklist.read', 'blacklist.manage'],
-  unsubscribes: ['unsubscribe.read', 'unsubscribe.manage'],
-  settings: ['setting.read', 'setting.manage'],
-  eventSources: ['event_source.read', 'event_source.manage'],
-  eventSourceLogs: ['event_source.read'],
-  operationLogs: ['operation_log.read'],
-  exportTasks: ['export.read', 'export.manage'],
-  batchJobs: ['batch.read'],
-  approvals: ['approval.read', 'approval.manage']
-};
+function routeElement(item: ResolvedMenuItem, context: PageContext, firstAccessiblePath: string, navigate: (path: string) => void) {
+  if (item.authDisabled || requireAuth(item.fullKey)) {
+    return item.component?.(context) || <ForbiddenPage onBack={() => navigate(firstAccessiblePath)} />;
+  }
+  return <ForbiddenPage onBack={() => navigate(firstAccessiblePath)} />;
+}
 
-function canAccess(user: AuthUser, targetView: View) {
-  if (user.permissions.includes('*')) return true;
-  const permissions = viewPermissions[targetView] || [];
-  return permissions.length === 0 || permissions.some((permission) => user.permissions.includes(permission));
+function renderRoutes(items: ResolvedMenuItem[], context: PageContext, firstAccessiblePath: string, navigate: (path: string) => void) {
+  return flattenMenus(items).map((item) => (
+    <Route
+      key={item.path}
+      path={item.path}
+      element={routeElement(item, context, firstAccessiblePath, navigate)}
+    />
+  ));
+}
+
+function formatChineseToday() {
+  const today = new Date();
+  const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+  return `${today.getFullYear()}年${today.getMonth() + 1}月${today.getDate()}日，${weekdays[today.getDay()]}`;
 }
 
 export default function App() {
   const [authChecked, setAuthChecked] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
-  const [view, setView] = useState<View>('dashboard');
   const [templates, setTemplates] = useState<Template[]>([]);
   const [rules, setRules] = useState<Rule[]>([]);
   const [logs, setLogs] = useState<SendLog[]>([]);
@@ -62,19 +58,33 @@ export default function App() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
   const [notice, setNotice] = useState('就绪');
-  const [loading, setLoading] = useState(false);
+  const [, setLoading] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const resolvedMenus = useMemo(() => resolveMenus(menus), []);
+  const filteredMenus = useMemo(() => filterAuthorizedMenus(resolvedMenus), [resolvedMenus, currentUser]);
+  const accessibleRoutes = useMemo(() => flattenMenus(filteredMenus), [filteredMenus]);
+  const firstAccessiblePath = useMemo(() => getFirstAccessiblePath(resolvedMenus), [resolvedMenus, currentUser]);
+  const currentTitle = pageTitles[location.pathname] || '短信触达平台';
 
   async function loadMe() {
-    const token = window.localStorage.getItem('sms_auth_token');
+    const token = getAuthToken();
+    const cachedUser = getAccessData();
     if (!token) {
+      removeAccessData();
       setAuthChecked(true);
       return;
     }
+    if (cachedUser) setCurrentUser(cachedUser);
     try {
       const data = await api<{ user: AuthUser }>('/api/auth/me');
+      setAccessData(data.user);
       setCurrentUser(data.user);
     } catch {
-      window.localStorage.removeItem('sms_auth_token');
+      removeAuthToken();
+      removeAccessData();
       setCurrentUser(null);
     } finally {
       setAuthChecked(true);
@@ -82,18 +92,21 @@ export default function App() {
   }
 
   async function handleLogin(token: string, user: AuthUser) {
-    window.localStorage.setItem('sms_auth_token', token);
+    setAuthToken(token);
+    setAccessData(user);
     setCurrentUser(user);
     setNotice(`欢迎回来，${user.name}`);
+    navigate(firstAccessiblePath, { replace: true });
   }
 
   async function logout() {
     try {
       await api('/api/auth/logout', { method: 'POST' });
     } finally {
-      window.localStorage.removeItem('sms_auth_token');
+      removeAuthToken();
+      removeAccessData();
       setCurrentUser(null);
-      setView('dashboard');
+      navigate('/login', { replace: true });
     }
   }
 
@@ -131,99 +144,147 @@ export default function App() {
     if (currentUser) refresh();
   }, [currentUser]);
 
-  const currentTitle = pageTitles[view];
+  const pageContext: PageContext = {
+    templates,
+    rules,
+    logs,
+    events,
+    tasks,
+    stats,
+    health,
+    onRefresh: refresh,
+    setNotice
+  };
 
   if (!authChecked) {
     return <div className="authShell"><div className="authCard"><strong>正在校验登录态</strong></div></div>;
   }
 
-  if (window.location.pathname === '/set-password') {
-    return <SetPasswordPage />;
-  }
-
   if (!currentUser) {
-    return <LoginPage onLogin={handleLogin} />;
+    return (
+      <Routes>
+        <Route path="/set-password" element={<SetPasswordPage />} />
+        <Route path="*" element={<LoginPage onLogin={handleLogin} />} />
+      </Routes>
+    );
   }
 
-  const filteredMenuGroups = menuGroups
-    .map((group) => ({ ...group, items: group.items.filter((item) => canAccess(currentUser, item.key)) }))
-    .filter((group) => group.items.length > 0);
-  const firstAccessibleView = filteredMenuGroups[0]?.items[0]?.key || 'dashboard';
-  const currentViewAllowed = canAccess(currentUser, view);
+  const isKnownRoute = accessibleRoutes.some((item) => item.path === location.pathname);
+  const selectedPath = accessibleRoutes.find((item) => item.path === location.pathname)?.path || firstAccessiblePath;
+  const selectedGroup = filteredMenus.find((group) => (group.children?.length ? group.children : [group]).some((item) => item.path === selectedPath));
+  const selectedMenu = (selectedGroup?.children?.length ? selectedGroup.children : selectedGroup ? [selectedGroup] : []).find((item) => item.path === selectedPath);
+
+  function isGroupExpanded(group: ResolvedMenuItem) {
+    return expandedGroups[group.key] ?? selectedGroup?.key === group.key;
+  }
+
+  function toggleGroup(group: ResolvedMenuItem) {
+    setExpandedGroups((value) => ({ ...value, [group.key]: !isGroupExpanded(group) }));
+  }
+
+  function handleGroupClick(group: ResolvedMenuItem) {
+    if (sidebarCollapsed) {
+      const target = (group.children?.length ? group.children[0] : group)?.path;
+      if (target) navigate(target);
+      return;
+    }
+    toggleGroup(group);
+  }
+
   return (
-    <div className="shell">
+    <div className={`shell${sidebarCollapsed ? ' sidebarCollapsed' : ''}`}>
       <aside className="sidebar">
         <div className="brand">
           <div className="brandMark">SMS</div>
-          <div>
+          <div className="brandText">
             <strong>短信触达平台</strong>
             <span>运营工作台</span>
           </div>
         </div>
 
         <nav>
-          {filteredMenuGroups.map((group) => (
-            <div className="navGroupBlock" key={group.title}>
-              <span className="navGroup">{group.title}</span>
-              {group.items.map((item) => (
-                <NavButton
-                  key={item.key}
-                  active={view === item.key}
-                  icon={item.icon}
-                  label={item.label}
-                  onClick={() => setView(item.key)}
-                />
-              ))}
+          {filteredMenus.map((group) => (
+            <div className="navSection" key={group.key}>
+              <button
+                className={`navSectionButton${selectedGroup?.key === group.key ? ' active' : ''}`}
+                type="button"
+                onClick={() => handleGroupClick(group)}
+                aria-expanded={isGroupExpanded(group)}
+                title={group.title}
+              >
+                <span className="navSectionLabel">
+                  {group.icon}
+                  <span className="navSectionLabelText">{group.title}</span>
+                </span>
+                <ChevronDown className="navChevron" size={20} />
+              </button>
+              {!sidebarCollapsed && isGroupExpanded(group) && (
+                <div className="navSubMenu">
+                  {(group.children?.length ? group.children : [group]).map((item) => (
+                    <button
+                      className={`navSubItem${selectedPath === item.path ? ' active' : ''}`}
+                      key={item.path}
+                      type="button"
+                      onClick={() => navigate(item.path)}
+                      title={item.title}
+                    >
+                      {item.icon}
+                      <span>{item.title}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </nav>
-
-        <div className="guard">
-          <Lock size={18} />
-          <div>
-            <strong>{currentUser.name}</strong>
-            <span>{currentUser.roles.map((role) => role.name).join(' / ')} · {health?.provider || 'mock'}</span>
-          </div>
-        </div>
       </aside>
 
       <main className="content">
         <header className="pageHeader">
-          <div>
-            <h1>{currentTitle}</h1>
-            <p>{notice}</p>
+          <div className="pageHeaderMain">
+            <button
+              className="menuToggle"
+              type="button"
+              onClick={() => setSidebarCollapsed((value) => !value)}
+              aria-label={sidebarCollapsed ? '展开菜单栏' : '收起菜单栏'}
+              title={sidebarCollapsed ? '展开菜单栏' : '收起菜单栏'}
+            >
+              <Menu size={22} />
+            </button>
           </div>
-          <div className="headerActions">
-            <button className="iconButton" onClick={refresh} disabled={loading}>
-              <RefreshCw size={18} />
-              刷新
-            </button>
-            <button className="iconButton" onClick={logout}>
-              <LogOut size={18} />
-              退出
-            </button>
+          <div className="headerRight">
+            <span className="headerWelcome">
+              欢迎回来，{currentUser.name} · 今天是 {formatChineseToday()} · 祝你工作顺利！
+            </span>
+            <div className="headerActions">
+              <div className="userMeta">
+                <strong>{currentUser.name}</strong>
+                <span>{currentUser.email}</span>
+              </div>
+              <button className="iconButton topLogoutButton" onClick={logout}>
+                <LogOut size={15} />
+                退出
+              </button>
+            </div>
           </div>
         </header>
 
-        {!currentViewAllowed && <ForbiddenPage onBack={() => setView(firstAccessibleView)} />}
-        {currentViewAllowed && view === 'dashboard' && <Dashboard stats={stats} logs={logs} rules={rules} tasks={tasks} />}
-        {currentViewAllowed && view === 'templates' && <Templates templates={templates} onRefresh={refresh} setNotice={setNotice} />}
-        {currentViewAllowed && view === 'rules' && <Rules rules={rules} templates={templates} logs={logs} onRefresh={refresh} setNotice={setNotice} />}
-        {currentViewAllowed && view === 'manual' && <ManualSend templates={templates} onRefresh={refresh} setNotice={setNotice} />}
-        {currentViewAllowed && view === 'events' && <Events events={events} onRefresh={refresh} setNotice={setNotice} />}
-        {currentViewAllowed && view === 'tasks' && <Tasks tasks={tasks} onRefresh={refresh} setNotice={setNotice} />}
-        {currentViewAllowed && view === 'logs' && <Logs logs={logs} />}
-        {currentViewAllowed && view === 'users' && <UsersPage setNotice={setNotice} />}
-        {currentViewAllowed && view === 'whitelist' && <PhoneListPage kind="whitelist" title="白名单管理" setNotice={setNotice} />}
-        {currentViewAllowed && view === 'blacklist' && <PhoneListPage kind="blacklist" title="黑名单管理" setNotice={setNotice} />}
-        {currentViewAllowed && view === 'unsubscribes' && <PhoneListPage kind="unsubscribes" title="退订管理" setNotice={setNotice} />}
-        {currentViewAllowed && view === 'settings' && <SettingsPage setNotice={setNotice} />}
-        {currentViewAllowed && view === 'eventSources' && <EventSourcesPage setNotice={setNotice} />}
-        {currentViewAllowed && view === 'eventSourceLogs' && <AuditPage mode="eventSourceLogs" />}
-        {currentViewAllowed && view === 'operationLogs' && <AuditPage mode="operationLogs" />}
-        {currentViewAllowed && view === 'exportTasks' && <ExportTasksPage setNotice={setNotice} />}
-        {currentViewAllowed && view === 'batchJobs' && <BatchJobsPage />}
-        {currentViewAllowed && view === 'approvals' && <ApprovalsPage setNotice={setNotice} />}
+        <div className="contentBreadcrumb breadcrumb" aria-label="当前位置">
+          <span>{selectedGroup?.title || '后台'}</span>
+          <span>/</span>
+          <span>{selectedMenu?.title || currentTitle}</span>
+        </div>
+
+        <Routes>
+          <Route path="/" element={<Navigate to={firstAccessiblePath} replace />} />
+          <Route path="/login" element={<Navigate to={firstAccessiblePath} replace />} />
+          <Route path="/set-password" element={<SetPasswordPage />} />
+          {renderRoutes(resolvedMenus, pageContext, firstAccessiblePath, navigate)}
+          <Route
+            path="*"
+            element={isKnownRoute ? <Navigate to={firstAccessiblePath} replace /> : <ForbiddenPage onBack={() => navigate(firstAccessiblePath)} />}
+          />
+        </Routes>
       </main>
     </div>
   );

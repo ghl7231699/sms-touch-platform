@@ -6,6 +6,7 @@ import type { Rule, SendLog, Template } from '../../types';
 import { Modal } from '../../components/Modal';
 import { SelectField } from '../../components/SelectField';
 import { StatusBadge } from '../../components/StatusBadge';
+import { AuthC } from '../../lib/auth';
 
 export default function Rules({ rules, templates, logs, onRefresh, setNotice }: { rules: Rule[]; templates: Template[]; logs: SendLog[]; onRefresh: () => Promise<void>; setNotice: (value: string) => void }) {
   const [form, setForm] = useState({
@@ -121,7 +122,9 @@ export default function Rules({ rules, templates, logs, onRefresh, setNotice }: 
             <h2>自动化规则</h2>
             <span>每条规则都是一个独立触达单元</span>
           </div>
-          <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(true)}><ListChecks size={16} />新建规则</button>
+          <AuthC authKey="touch:rule:add">
+            <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(true)}><ListChecks size={16} />新建规则</button>
+          </AuthC>
         </div>
         <div className="automationRuleGrid">
           {rules.map((rule) => {
@@ -151,16 +154,18 @@ export default function Rules({ rules, templates, logs, onRefresh, setNotice }: 
                   <div><span>发送</span><strong>{ruleLogs.length}</strong></div>
                   <div><span>CTR</span><strong>{ctr}</strong></div>
                 </div>
-                <button className="tableButton ruleActionButton" type="button" onClick={() => toggle(rule)}>
-                  {rule.status === 'enabled' ? '停用规则' : '启用规则'}
-                </button>
+                <AuthC authKey={`touch:rule:${rule.status === 'enabled' ? 'disable' : 'enable'}`}>
+                  <button className="tableButton ruleActionButton" type="button" onClick={() => toggle(rule)}>
+                    {rule.status === 'enabled' ? '停用规则' : '启用规则'}
+                  </button>
+                </AuthC>
               </article>
             );
           })}
         </div>
       </section>
 
-      <Modal open={modalOpen} title="新建规则" subtitle="单事件单动作" onClose={() => setModalOpen(false)}>
+      <Modal open={modalOpen} title="新建规则" subtitle="单事件单动作" onClose={() => setModalOpen(false)} showClose={false}>
         <form className="formPanel" onSubmit={create}>
           <label>规则名称<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /></label>
           <label>触发事件
@@ -181,7 +186,7 @@ export default function Rules({ rules, templates, logs, onRefresh, setNotice }: 
           )}
           <div className="modalActions">
             <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(false)}>取消</button>
-            <button className="primaryButton compact" type="submit"><ListChecks size={16} />创建规则</button>
+            <button className="primaryButton compact" type="submit">创建</button>
           </div>
         </form>
       </Modal>

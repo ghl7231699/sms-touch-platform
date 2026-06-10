@@ -1,5 +1,7 @@
+import { getAuthToken } from './auth';
+
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
-  const token = window.localStorage.getItem('sms_auth_token');
+  const token = getAuthToken();
   const response = await fetch(path, {
     headers: {
       'Content-Type': 'application/json',
@@ -14,4 +16,3 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   }
   return json as T;
 }
-
