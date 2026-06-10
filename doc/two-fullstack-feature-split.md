@@ -2,541 +2,564 @@
 
 ## 1. 文档目的
 
-本文用于指导短信触达平台 V1.0 由两名全栈工程师并行开发时的功能拆分、代码边界和协作规则。
+本文基于当前代码实现重新梳理短信触达平台 V1.0 的双全栈分工，用于避免两名全栈工程师并行开发时反复修改同一模块、同一接口、同一张表，造成返工和合并冲突。
 
-目标不是把人拆成“前端”和“后端”，而是让每个人负责一条完整业务链路，减少跨人等待和代码冲突。
+本文不再只按 PRD 规划拆分，而是结合当前项目已有代码：
+
+1. 前端现有路由与页面。
+2. 后端现有 API 和 service。
+3. Prisma 当前数据模型。
+4. 已有权限、治理、审计、批量、审批能力。
+5. UI/UX 重构计划中“Marketing Automation Platform”的新方向。
 
 核心原则：
 
-1. 每个人都负责自己模块的前端页面、后端接口、数据模型、权限校验和测试。
-2. 公共基础能力先定契约，再由主责人实现，另一人只接入使用。
-3. 尽量避免两个人同时修改同一页面、同一接口、同一张表、同一个状态机。
-4. 涉及真实发送、安全开关、权限、手机号明文、操作日志的改动必须先同步。
+1. 每个人都负责一条完整业务链路，不按纯前端/纯后端拆。
+2. 全栈 A 负责触达增长链路：短信怎么被配置、触发、发送、追踪和分析。
+3. 全栈 B 负责治理安全链路：谁能操作、哪些号码能发、系统是否安全、问题如何审计。
+4. 公共能力必须先定契约，再各自接入。
+5. 涉及权限、发送前安全校验、状态枚举、手机号处理、操作日志、批量任务、审批的改动必须提前同步。
 
-## 2. 总体拆分
+## 2. 当前项目已有功能盘点
+
+### 2.1 前端已有页面
+
+当前前端页面主要由 `apps/web/src/constants/menus.tsx` 注册。
+
+| 当前分组 | 页面 | 当前路径 |
+| --- | --- | --- |
+| 运营总览 | 增长总览 | `/overview/dashboard` |
+| 触达运营 | 模板中心 | `/touch/templates` |
+| 触达运营 | 规则中心 | `/touch/rules` |
+| 触达运营 | 手动发送 | `/touch/manual-send` |
+| 触达运营 | 任务中心 | `/touch/tasks` |
+| 触达运营 | 事件触发 | `/touch/events` |
+| 数据分析 | 发送记录 | `/data/send-logs` |
+| 账号权限 | 用户管理、注册申请、角色权限 | `/account/users` |
+| 安全治理 | 白名单 | `/security/whitelist` |
+| 安全治理 | 黑名单 | `/security/blacklist` |
+| 安全治理 | 退订记录 | `/security/unsubscribes` |
+| 安全治理 | 发送控制 | `/security/settings` |
+| 接入管理 | 事件来源 | `/integration/event-sources` |
+| 接入管理 | 接入日志 | `/integration/event-source-logs` |
+| 审计与流程 | 操作日志 | `/audit/operation-logs` |
+| 审计与流程 | 导出任务 | `/audit/export-tasks` |
+| 审计与流程 | 批量操作 | `/audit/batch-jobs` |
+| 审计与流程 | 审批记录 | `/audit/approvals` |
+| 登录 | 登录、注册申请、忘记密码 | `/login` 内部状态 |
+| 登录 | 设置密码 | `/set-password` |
+
+### 2.2 后端已有能力
+
+| 能力域 | 当前实现 |
+| --- | --- |
+| 短信主链路 | 模板、规则、事件、任务、手动发送、发送记录、回执、短链、统计 |
+| Provider | mock provider、阿里云测试 provider、provider callback |
+| Worker | 内置任务 worker、到期任务扫描和执行 |
+| 账号权限 | 登录、退出、注册申请、忘记密码、重置密码、设置密码、用户管理、角色权限 |
+| 安全治理 | 白名单、黑名单、退订、频控、发送前安全校验、发送控制 |
+| 接入管理 | 事件来源、secret、事件鉴权、接入日志 |
+| 审计流程 | 操作日志、导出任务、批量任务、审批单 |
+| 权限体系 | 固定角色、权限点、前端菜单/按钮权限、后端接口鉴权 |
+
+### 2.3 当前数据模型
+
+| 领域 | 表 |
+| --- | --- |
+| 触达主链路 | `sms_template`、`sms_rule`、`sms_event`、`sms_task`、`sms_send_log`、`sms_receipt`、`sms_short_link`、`sms_click_log` |
+| 账号权限 | `admin_user`、`admin_role`、`admin_user_role`、`auth_session`、`auth_verification_code`、`auth_register_request`、`auth_password_setup_token` |
+| 审计 | `admin_operation_log` |
+| 安全治理 | `sms_whitelist`、`sms_blacklist`、`sms_unsubscribe`、`sms_frequency_policy`、`system_setting` |
+| 接入管理 | `event_source`、`event_source_log` |
+| 流程工具 | `export_task`、`batch_job`、`batch_job_item`、`approval_order`、`approval_record` |
+
+## 3. 总体拆分
 
 | 角色 | 方向 | 一句话边界 |
 | --- | --- | --- |
-| 全栈 A | 触达主链路 | 负责“短信怎么被生成、怎么发出去、怎么看结果” |
-| 全栈 B | 治理与安全链路 | 负责“谁能进来、谁能操作、哪些号码能发、出问题怎么追责” |
+| 全栈 A | 触达增长链路 | 负责“短信怎么被配置、触发、发送、追踪和分析” |
+| 全栈 B | 治理安全链路 | 负责“谁能操作、哪些号码能发、系统是否安全、问题如何审计” |
 
-推荐排期方式：
+### 3.1 A/B 最终边界
 
-1. 第一阶段共同定公共契约：接口返回、错误码、权限、操作日志、手机号处理、数据库 migration 规则。
-2. 第二阶段各自开发主责模块，按照本文边界推进。
-3. 第三阶段围绕发送前安全校验、权限校验、日志审计和验收用例联调。
+全栈 A 的边界：
 
-## 3. 全栈 A：触达主链路
+> 触达运营 + 数据分析。负责模板、规则、手动发送、事件、任务、发送记录、回执、短链、统计，以及这些页面的 UI/UX 重构。
 
-### 3.1 模块归属
+全栈 B 的边界：
 
-全栈 A 主责以下模块：
+> 账号权限 + 安全治理 + 接入管理 + 审计流程。负责登录、用户、权限、白名单、黑名单、退订、发送控制、事件来源、操作日志、导出、批量操作、审批，以及这些页面的 UI/UX 重构。
 
-| 一级模块 | 二级模块 | 说明 |
-| --- | --- | --- |
-| 运营总览 | 指标概览、最近发送、待处理任务 | 展示触达运行情况 |
-| 短信模板 | 模板列表、详情、新建、编辑、变量预览、测试发送 | 提供可发送短信内容 |
-| 规则中心 | 规则列表、详情、新建、编辑、测试、影响范围、草稿、发布、回滚 | 决定什么事件触发什么短信 |
-| 手动发送 | 单手机号发送 | 支持运营手动触达 |
-| 事件触发 | 事件流水、模拟触发 | 支持联调业务事件 |
-| 任务队列 | 任务列表、任务详情、重试、取消、执行到期任务 | 管理待发送和失败任务 |
-| 发送记录 | 发送日志、详情、测试环境标记送达 | 查询每次发送尝试 |
-| 回执与短链 | 服务商回执、短链跳转、点击日志 | 沉淀送达和点击结果 |
-| 统计分析 | 趋势、维度、漏斗 | 做基础效果复盘 |
+两人交汇点：
 
-### 3.2 前端页面边界
+> 权限校验、发送前安全校验、操作日志、手机号处理、状态枚举、批量任务、审批、菜单结构、接口错误码。
 
-全栈 A 负责开发和维护：
+## 4. 全栈 A 功能清单
 
-| 页面 | 路径建议 | 说明 |
-| --- | --- | --- |
-| 运营总览 | `/dashboard` | 发送量、成功量、失败量、待发送、点击量、CTR、拦截量 |
-| 模板列表 | `/templates` | 查询、新建、复制、启停、测试发送入口 |
-| 模板详情 | `/templates/:id` | 基础信息、变量配置、预览、关联规则、发送效果 |
-| 规则列表 | `/rules` | 查询、创建、复制、启停、草稿状态 |
-| 规则详情 | `/rules/:id` | 条件、模板、版本、测试结果、影响范围 |
-| 规则编辑 | `/rules/:id/edit` | 编辑单事件、单条件、单动作规则 |
-| 规则测试 | `/rules/:id/test` 或弹窗 | 输入模拟 payload，展示命中结果和短信预览 |
-| 手动发送 | `/manual-send` | 选择模板、输入手机号和变量，提交发送 |
-| 事件流水 | `/events` | 查询事件、查看匹配规则和生成任务 |
-| 模拟事件 | `/events/simulate` 或弹窗 | 构造测试事件，不依赖真实业务系统 |
-| 任务列表 | `/tasks` | 查询任务状态、重试、取消、批量操作入口 |
-| 任务详情 | `/tasks/:id` | 展示事件、规则、模板、安全校验、发送日志、回执、短链 |
-| 发送记录列表 | `/send-logs` | 查询发送明细、Provider 返回和回执 |
-| 发送记录详情 | `/send-logs/:id` | 展示请求、响应、回执、短链和点击 |
-| 统计分析 | `/stats` | 趋势、维度、漏斗 |
+### 4.1 A 主责模块
 
-全栈 A 不直接负责登录页、用户管理、白名单、黑名单、退订、发送控制、操作日志、事件来源管理页面。需要跳转或展示相关结果时，通过全栈 B 提供的接口和组件使用。
+| 模块 | 当前前端页面 | 当前后端能力 | 主责说明 |
+| --- | --- | --- | --- |
+| 运营总览 | `/overview/dashboard` | `/api/dashboard`、`/api/stats/overview` | 展示发送、成功、失败、拦截、点击、CTR、规则和任务概览 |
+| 模板中心 | `/touch/templates` | `/api/templates`、`/api/templates/{id}/status` | 模板列表、创建、启停 |
+| 规则中心 | `/touch/rules` | `/api/rules`、`/api/rules/{id}/status` | 规则列表、创建、启停、高风险启停接入审批 |
+| 手动发送 | `/touch/manual-send` | `/api/manual-send` | 选择模板和手机号发起手动发送 |
+| 事件触发 | `/touch/events` | `/api/events` | 事件流水、模拟事件、事件触发规则匹配 |
+| 任务中心 | `/touch/tasks` | `/api/tasks`、`/api/tasks/run-due` | 任务列表、执行到期任务、批量取消、批量重试 |
+| 发送记录 | `/data/send-logs` | `/api/send-logs` | 查询发送日志、状态、Provider 返回、短链数据 |
+| 回执 | 无独立主页面 | `/api/sms/provider/callback`、`/api/receipts` | Provider 回执写入和发送状态更新 |
+| 短链 | 无独立主页面 | `/s/{shortCode}`、`/api/click-logs` | 短链跳转、点击记录、点击统计 |
+| 统计分析 | 当前在总览和发送记录中体现 | `/api/stats/overview`、后续 stats 子接口 | 发送、成功、失败、点击、CTR、场景表现 |
 
-### 3.2.1 任务中心交互要求
+### 4.2 A 主责前端文件
 
-任务中心由全栈 A 负责实现，不作为全栈 B 的后续任务。该页面需要让用户第一眼看到“哪里有任务、每条任务是什么状态、不同状态能做什么”。
-
-页面操作：
-
-| 操作 | 说明 | 全栈归属 |
-| --- | --- | --- |
-| 执行到期任务 | 扫描并执行 `pending` 且已到计划时间的任务 | A |
-| 批量取消 | 对当前筛选结果中的 `pending` 任务生成批量取消动作 | A 发起，B 记录批次和审计 |
-| 批量重试 | 对当前筛选结果中的 `failed` 任务生成批量重试动作 | A 发起，B 记录批次和审计 |
-| 单条取消 | `pending` 任务行展示取消按钮 | A |
-| 单条重试 | `failed` 且未超过最大重试次数的任务行展示重试按钮 | A |
-| 查看原因 | `blocked/skipped/failed` 任务展示可读原因和详情入口 | A |
-
-状态与按钮：
-
-| 状态 | 行级按钮 |
+| 文件 | 说明 |
 | --- | --- |
-| `pending` | 取消、详情 |
-| `sending` | 详情 |
-| `success` | 详情、发送记录 |
-| `failed` | 重试、详情 |
-| `blocked` | 查看原因、详情 |
-| `skipped` | 查看原因、详情 |
-| `cancelled` | 详情 |
+| `apps/web/src/pages/dashboard/Dashboard.tsx` | 运营总览 |
+| `apps/web/src/pages/templates/Templates.tsx` | 模板中心 |
+| `apps/web/src/pages/rules/Rules.tsx` | 规则中心 |
+| `apps/web/src/pages/manual-send/ManualSend.tsx` | 手动发送 |
+| `apps/web/src/pages/events/Events.tsx` | 事件触发 |
+| `apps/web/src/pages/tasks/Tasks.tsx` | 任务中心 |
+| `apps/web/src/pages/logs/Logs.tsx` | 发送记录 |
 
-B 的边界是提供权限、批量任务记录、操作日志、白名单/黑名单/退订/频控等治理结果；A 负责任务列表、任务详情、状态解释、单条操作和执行链路。
+A 可以修改上述页面的布局、组件、交互和视觉。涉及权限按钮、菜单 key、全局 AppShell 时必须同步 B。
 
-### 3.3 后端接口边界
+### 4.3 A 主责后端文件
 
-全栈 A 主责以下接口：
+| 文件 | 说明 |
+| --- | --- |
+| `apps/api/src/modules/sms/sms.service.js` | 短信主链路 service |
+| `apps/api/src/modules/sms/sms.repository.js` | 短信主链路 repository |
+| `apps/api/src/modules/sms/sms.worker.js` | 任务 worker |
+| `apps/api/src/modules/sms/sms.condition-evaluator.js` | 规则条件判断 |
+| `apps/api/src/modules/sms/providers/mock-sms-provider.js` | mock provider |
+| `apps/api/src/modules/sms/providers/aliyun-dypns-provider.js` | 阿里云测试 provider |
+| `apps/api/src/modules/sms/providers/index.js` | provider 入口 |
+| `apps/api/src/modules/sms/sms.types.js` | 短信主链路类型常量 |
 
-| 接口 | 方法 | 说明 |
-| --- | --- | --- |
-| `/api/dashboard` | GET | 查询运营总览 |
-| `/api/templates` | GET/POST | 查询和创建模板 |
-| `/api/templates/{id}` | GET/PATCH | 查询和编辑模板 |
-| `/api/templates/{id}/copy` | POST | 复制模板 |
-| `/api/templates/{id}/preview` | POST | 模板变量预览 |
-| `/api/templates/{id}/test-send` | POST | 模板测试发送 |
-| `/api/templates/{id}/status` | PATCH | 启停模板 |
-| `/api/rules` | GET/POST | 查询和创建规则 |
-| `/api/rules/{id}` | GET/PATCH | 查询和编辑规则 |
-| `/api/rules/{id}/copy` | POST | 复制规则 |
-| `/api/rules/{id}/test` | POST | 规则测试 |
-| `/api/rules/{id}/impact` | GET | 影响范围预估 |
-| `/api/rules/{id}/drafts` | POST | 保存规则草稿 |
-| `/api/rules/{id}/publish` | POST | 发布规则 |
-| `/api/rules/{id}/rollback` | POST | 回滚版本 |
-| `/api/rules/{id}/versions` | GET | 查询版本 |
-| `/api/rules/{id}/status` | PATCH | 启停规则 |
-| `/api/manual-send` | POST | 手动发送 |
-| `/api/events` | GET/POST | 查询事件流水、接收测试事件 |
-| `/api/tasks` | GET | 查询任务 |
-| `/api/tasks/{id}` | GET | 查询任务详情 |
-| `/api/tasks/{id}/retry` | POST | 重试失败任务 |
-| `/api/tasks/{id}/cancel` | POST | 取消待发送任务 |
-| `/api/tasks/batch-retry` | POST | 批量重试 |
-| `/api/tasks/batch-cancel` | POST | 批量取消 |
-| `/api/tasks/run-due` | POST | 执行到期任务 |
-| `/api/send-logs` | GET | 查询发送记录 |
-| `/api/send-logs/{id}` | GET | 查询发送记录详情 |
-| `/api/send-logs/{id}/mark-delivered` | POST | 测试环境标记送达 |
-| `/api/sms/provider/callback` | POST | 接收服务商回执 |
-| `/api/receipts` | GET | 查询回执 |
-| `/api/click-logs` | GET | 查询点击日志 |
-| `/api/stats/overview` | GET | 统计概览 |
-| `/api/stats/trends` | GET | 趋势分析 |
-| `/api/stats/dimensions` | GET | 维度分析 |
-| `/api/stats/funnel` | GET | 漏斗分析 |
-| `/s/{shortCode}` | GET | 短链跳转 |
-
-接口注意事项：
-
-1. 所有写接口必须调用权限校验中间件。
-2. 手动发送、测试发送、任务执行前必须调用全栈 B 提供的发送前安全校验服务。
-3. 新建、编辑、启停、发送、重试、取消、标记送达等操作必须调用操作日志 helper。
-4. 不在 A 侧自行实现白名单、黑名单、退订、频控逻辑，只调用统一安全校验服务。
-
-### 3.4 数据表边界
-
-全栈 A 主责以下表：
+### 4.4 A 主责数据表
 
 | 表 | 说明 |
 | --- | --- |
-| `sms_template` | 短信模板 |
-| `sms_rule` | 自动触达规则 |
-| `sms_rule_version` | 规则版本 |
-| `sms_event` | 业务事件 |
-| `sms_task` | 发送任务 |
-| `sms_send_log` | 发送请求和 Provider 响应日志 |
-| `sms_receipt` | 回执记录 |
-| `sms_short_link` | 短链配置 |
+| `sms_template` | 模板 |
+| `sms_rule` | 规则 |
+| `sms_event` | 事件 |
+| `sms_task` | 任务 |
+| `sms_send_log` | 发送记录 |
+| `sms_receipt` | 回执 |
+| `sms_short_link` | 短链 |
 | `sms_click_log` | 点击日志 |
 
-A 修改这些表结构前，需要检查是否影响 B 的统计、导出、操作日志、安全校验和权限判断。
+### 4.5 A 当前已有接口清单
 
-## 4. 全栈 B：治理与安全链路
+| 接口 | 说明 |
+| --- | --- |
+| `GET /api/dashboard` | 运营总览 |
+| `GET /api/stats/overview` | 统计概览 |
+| `GET /api/templates` | 模板列表 |
+| `POST /api/templates` | 创建模板 |
+| `POST /api/templates/{id}/status` | 启停模板 |
+| `GET /api/rules` | 规则列表 |
+| `POST /api/rules` | 创建规则 |
+| `POST /api/rules/{id}/status` | 启停规则 |
+| `POST /api/manual-send` | 手动发送 |
+| `GET /api/events` | 事件流水 |
+| `POST /api/events` | 接收/模拟事件 |
+| `GET /api/tasks` | 任务列表 |
+| `POST /api/tasks/run-due` | 执行到期任务 |
+| `GET /api/send-logs` | 发送记录 |
+| `POST /api/sms/provider/callback` | Provider 回执 |
+| `GET /api/receipts` | 回执列表 |
+| `GET /api/click-logs` | 点击日志 |
+| `GET /s/{shortCode}` | 短链跳转 |
 
-### 4.1 模块归属
+### 4.6 A 不应主改的内容
 
-全栈 B 主责以下模块：
+A 不应主改以下区域：
 
-| 一级模块 | 二级模块 | 说明 |
-| --- | --- | --- |
-| 登录与账号 | 登录、退出、忘记密码、重置密码、设置密码、注册申请 | 管理后台入口 |
-| 用户与角色 | 用户管理、注册申请审核、内置角色说明、角色权限配置 | 管理后台用户和内置角色 |
-| 权限控制 | 菜单、路由、按钮、接口鉴权 | 控制谁能看、谁能操作 |
-| 白名单管理 | 查询、添加、启停、导出 | 控制真实发送范围 |
-| 黑名单与退订 | 黑名单、退订记录 | 触达拦截 |
-| 发送频控 | 日频控、周频控、场景冷却、安静时段 | 防骚扰 |
-| 发送控制 | Provider、worker、短链、验证码、频控、事件来源 | 管理短信发送的通道、开关和安全保护 |
-| 事件来源 | appId、secret、启停、重置密钥 | 管理业务系统接入 |
-| 事件接入日志 | 查询、详情 | 排查上报问题 |
-| 操作日志 | 查询、详情、导出 | 审计关键操作 |
-| 数据导出 | 导出任务、下载 | 列表和统计导出 |
-| 批量操作 | 批量任务、明细 | 批量取消、批量重试、导入结果 |
-| 轻量审批 | 审批单、处理记录 | 高风险操作单级审批 |
+1. 登录、注册申请、忘记密码、设置密码。
+2. 用户管理、角色权限、权限点定义。
+3. 白名单、黑名单、退订管理页面和接口。
+4. 发送控制配置页面和接口。
+5. 事件来源管理和接入日志。
+6. 操作日志、导出任务、批量操作列表、审批记录页面。
+7. `governance.service.js` 中账号、权限、安全治理、审计流程的主逻辑。
 
-### 4.2 前端页面边界
+如果 A 需要这些能力，应该调用 B 提供的接口或 helper，而不是在 A 侧重复实现。
 
-全栈 B 负责开发和维护：
+## 5. 全栈 B 功能清单
 
-| 页面 | 路径建议 | 说明 |
-| --- | --- | --- |
-| 登录页 | `/login` | 账号密码登录 |
-| 注册申请页 | `/register/apply` | 用户提交账号申请和密码 |
-| 忘记密码页 | `/forgot-password` | 验证码校验并重置密码 |
-| 设置密码页 | `/set-password` | 管理员创建账号或重置密码后设置密码 |
-| 用户列表 | `/users` | 查询、新建、编辑、启停、解锁、重置密码，并内联查看角色详情 |
-| 用户详情 | `/users/:id` | 用户信息、角色、权限说明、状态、登录记录 |
-| 注册申请审核 | `/users/register-requests` | 审核通过、驳回、分配角色 |
-| 内置角色详情 | 用户管理内联弹窗或用户详情内联区域 | 展示管理员、运营、只读内置权限说明，不单独设置菜单 |
-| 白名单管理 | `/settings/whitelist` | 查询、添加、启停、导出 |
-| 黑名单管理 | `/blacklist` | 查询、添加、移除、导入 |
-| 退订管理 | `/unsubscribes` | 查询、新增、导入、详情 |
-| 发送控制 | `/settings` | Provider、worker、短链、验证码、频控 |
-| 事件来源管理 | `/settings/event-sources` | appId、secret、启停、重置密钥 |
-| 事件接入日志 | `/settings/event-source-logs` | 查询和详情 |
-| 操作日志 | `/operation-logs` | 查询、详情、导出 |
-| 导出任务 | `/export-tasks` | 查询、下载 |
-| 批量操作 | `/batch-jobs` | 批次列表和明细 |
-| 审批记录 | `/approvals` | 审批列表、详情、通过、驳回、撤回 |
-| 无权限页 | `/403` | 路由无权限提示 |
+### 5.1 B 主责模块
 
-B 不直接负责模板、规则、任务、发送记录、统计的业务页面实现。但 B 需要提供权限组件、安全校验结果展示规范、操作日志接口，供 A 使用。
+| 模块 | 当前前端页面 | 当前后端能力 | 主责说明 |
+| --- | --- | --- | --- |
+| 登录账号 | `/login`、`/set-password` | `/api/auth/*` | 登录、注册申请、忘记密码、重置密码、设置密码、退出 |
+| 用户管理 | `/account/users` | `/api/users` | 用户列表、创建、编辑、启停、删除、重置密码、详情 |
+| 注册申请 | `/account/users` 内部 tab | `/api/auth/register-requests` | 注册申请列表、审核通过、驳回 |
+| 角色权限 | `/account/users` 内部角色区 | `/api/roles` | 内置角色、权限点展示与配置 |
+| 白名单 | `/security/whitelist` | `/api/whitelist` | 白名单查询、添加、编辑、启停、导出 |
+| 黑名单 | `/security/blacklist` | `/api/blacklist` | 黑名单查询、添加、导入、移除 |
+| 退订记录 | `/security/unsubscribes` | `/api/unsubscribes` | 退订查询、添加、导入、状态 |
+| 发送控制 | `/security/settings` | `/api/settings`、`/api/settings/update` | Provider、worker、短链、验证码、安全配置、频控 |
+| 事件来源 | `/integration/event-sources` | `/api/event-sources` | appId、secret、启停、重置密钥 |
+| 接入日志 | `/integration/event-source-logs` | `/api/event-source-logs` | 事件接入日志查询、详情 |
+| 操作日志 | `/audit/operation-logs` | `/api/operation-logs` | 操作日志查询、详情 |
+| 导出任务 | `/audit/export-tasks` | `/api/export-tasks` | 导出任务创建、详情、下载 |
+| 批量操作 | `/audit/batch-jobs` | `/api/batch-jobs` | 批量任务和明细 |
+| 审批记录 | `/audit/approvals` | `/api/approvals` | 审批列表、详情、通过、驳回、撤回 |
+| 权限鉴权 | 全局 | `permissionFor`、`requireActor` | 前端菜单/按钮权限、后端接口鉴权 |
+| 发送前安全校验 | 被 A 调用 | `/api/safety/send-check`、`checkSendSafety` | 白名单、黑名单、退订、频控、安静时段、Provider/worker 校验 |
 
-### 4.3 后端接口边界
+### 5.2 B 主责前端文件
 
-全栈 B 主责以下接口：
+| 文件 | 说明 |
+| --- | --- |
+| `apps/web/src/pages/Login/index.tsx` | 登录、注册申请、忘记密码 |
+| `apps/web/src/pages/Login/SetPasswordPage.tsx` | 设置密码 |
+| `apps/web/src/pages/governance/UsersPage.tsx` | 用户管理、注册申请、角色权限 |
+| `apps/web/src/pages/governance/PhoneListPage.tsx` | 白名单、黑名单、退订 |
+| `apps/web/src/pages/governance/SettingsPage.tsx` | 发送控制 |
+| `apps/web/src/pages/governance/EventSourcesPage.tsx` | 事件来源 |
+| `apps/web/src/pages/governance/AuditPage.tsx` | 操作日志、接入日志 |
+| `apps/web/src/pages/governance/ExportTasksPage.tsx` | 导出任务 |
+| `apps/web/src/pages/governance/BatchJobsPage.tsx` | 批量操作 |
+| `apps/web/src/pages/governance/ApprovalsPage.tsx` | 审批记录 |
+| `apps/web/src/pages/governance/ForbiddenPage.tsx` | 无权限页 |
+| `apps/web/src/lib/auth.ts` | 登录态存取 |
+| `apps/web/src/lib/menu-permissions.ts` | 菜单和按钮权限 |
+| `apps/web/src/components/AuthTree.tsx` | 权限树展示/配置 |
 
-| 接口 | 方法 | 说明 |
-| --- | --- | --- |
-| `/api/auth/register-request` | POST | 提交注册申请 |
-| `/api/auth/register-requests` | GET | 查询注册申请 |
-| `/api/auth/register-requests/{id}` | GET | 注册申请详情 |
-| `/api/auth/register-requests/{id}/approve` | POST | 审核通过并分配角色 |
-| `/api/auth/register-requests/{id}/reject` | POST | 驳回申请 |
-| `/api/auth/set-password` | POST | 设置密码 |
-| `/api/auth/login` | POST | 登录 |
-| `/api/auth/logout` | POST | 退出 |
-| `/api/auth/forgot-password/send-code` | POST | 发送验证码 |
-| `/api/auth/forgot-password/verify-code` | POST | 校验验证码 |
-| `/api/auth/reset-password` | POST | 重置密码 |
-| `/api/auth/change-password` | POST | 登录后改密 |
-| `/api/auth/me` | GET | 当前用户和权限 |
-| `/api/users` | GET/POST | 用户列表和创建账号 |
-| `/api/users/{id}` | GET | 用户详情 |
-| `/api/users/{id}/update` | POST | 编辑用户信息和角色 |
-| `/api/users/{id}/status` | POST | 启用、禁用、锁定、解锁 |
-| `/api/users/{id}/reset-password` | POST | 管理员重置密码 |
-| `/api/roles` | GET | 内置角色列表 |
-| `/api/roles/{id}` | GET | 角色详情 |
-| `/api/whitelist` | GET/POST | 查询和添加白名单 |
-| `/api/whitelist/{id}` | GET | 白名单详情 |
-| `/api/whitelist/{id}/update` | POST | 编辑白名单备注 |
-| `/api/whitelist/{id}/status` | POST | 启停白名单 |
-| `/api/whitelist/export` | POST | 导出白名单 |
-| `/api/blacklist` | GET/POST | 查询和添加黑名单 |
-| `/api/blacklist/{id}` | GET | 黑名单详情 |
-| `/api/blacklist/import` | POST | 批量导入黑名单 |
-| `/api/blacklist/{id}/remove` | POST | 移除黑名单 |
-| `/api/unsubscribes` | GET/POST | 查询和新增退订 |
-| `/api/unsubscribes/{id}` | GET | 退订详情 |
-| `/api/unsubscribes/import` | POST | 批量导入退订 |
-| `/api/settings` | GET | 查询系统配置 |
-| `/api/settings/update` | POST | 修改系统配置 |
-| `/api/event-sources` | GET/POST | 查询和创建事件来源 |
-| `/api/event-sources/{id}` | GET | 事件来源详情 |
-| `/api/event-sources/{id}/update` | POST | 编辑事件来源 |
-| `/api/event-sources/{id}/status` | POST | 启停事件来源 |
-| `/api/event-sources/{id}/reset-secret` | POST | 重置密钥 |
-| `/api/event-source-logs` | GET | 查询事件接入日志 |
-| `/api/event-source-logs/{id}` | GET | 事件接入日志详情 |
-| `/api/operation-logs` | GET | 查询操作日志 |
-| `/api/operation-logs/{id}` | GET | 操作日志详情 |
-| `/api/export-tasks` | GET/POST | 查询和创建导出任务 |
-| `/api/export-tasks/{id}` | GET | 导出任务详情 |
-| `/api/export-tasks/{id}/download` | GET | 下载导出文件 |
-| `/api/batch-jobs` | GET | 查询批量任务 |
-| `/api/batch-jobs/{id}` | GET | 批量任务详情 |
-| `/api/approvals` | GET/POST | 查询和创建审批单 |
-| `/api/approvals/{id}` | GET | 审批详情 |
-| `/api/approvals/{id}/approve` | POST | 通过审批 |
-| `/api/approvals/{id}/reject` | POST | 驳回审批 |
-| `/api/approvals/{id}/withdraw` | POST | 撤回审批 |
+### 5.3 B 主责后端文件
 
-### 4.4 数据表边界
+| 文件 | 说明 |
+| --- | --- |
+| `apps/api/src/modules/governance/governance.service.js` | 账号权限、安全治理、接入、审计、导出、批量、审批 |
 
-全栈 B 主责以下表：
+### 5.4 B 主责数据表
 
 | 表 | 说明 |
 | --- | --- |
 | `admin_user` | 后台用户 |
-| `admin_role` | 内置角色 |
+| `admin_role` | 内置角色与权限 |
 | `admin_user_role` | 用户角色关系 |
+| `auth_session` | 登录会话 |
 | `auth_verification_code` | 验证码 |
 | `auth_register_request` | 注册申请 |
 | `auth_password_setup_token` | 设置密码 token |
-| `auth_session` | 登录会话 |
 | `admin_operation_log` | 操作日志 |
 | `sms_whitelist` | 白名单 |
 | `sms_blacklist` | 黑名单 |
-| `sms_unsubscribe` | 退订记录 |
-| `sms_frequency_policy` | 频控策略 |
+| `sms_unsubscribe` | 退订 |
+| `sms_frequency_policy` | 频控 |
 | `system_setting` | 系统配置 |
 | `event_source` | 事件来源 |
 | `event_source_log` | 事件接入日志 |
 | `export_task` | 导出任务 |
-| `batch_job` | 批量操作任务 |
-| `batch_job_item` | 批量操作明细 |
+| `batch_job` | 批量任务 |
+| `batch_job_item` | 批量任务明细 |
 | `approval_order` | 审批单 |
 | `approval_record` | 审批处理记录 |
 
-B 修改这些表结构前，需要检查是否影响 A 的发送前校验、任务执行、统计、导出和事件接入。
+### 5.5 B 当前已有接口清单
 
-## 5. 公共契约
-
-以下能力属于公共能力，必须先约定再开发。主责人负责实现，另一人只通过约定接口或 helper 使用。
-
-| 公共能力 | 主责 | 使用方 | 约定内容 |
-| --- | --- | --- | --- |
-| 接口返回结构 | 共同 | A/B | 成功响应、错误响应、分页结构、错误码 |
-| 权限中间件 | B | A/B | 后端接口角色校验、前端菜单/按钮权限 |
-| `/api/auth/me` | B | A | 当前用户、角色、菜单权限、操作权限 |
-| 手机号处理 | B | A/B | 脱敏展示、加密/hash 存储、查询方式 |
-| 操作日志 helper | B | A/B | 操作人、模块、对象、动作、前后差异、IP |
-| 发送前安全校验 | B | A | 白名单、黑名单、退订、频控、安静时段、worker、Provider |
-| mock Provider | A | A/B | 测试发送、发送记录、回执模拟 |
-| 状态枚举 | 共同 | A/B | task、sendLog、template、rule、approval、account 状态 |
-| 数据库 migration 规范 | 共同 | A/B | 命名、生成顺序、回滚策略、seed |
-| 错误码 | 共同 | A/B | `PHONE_NOT_IN_WHITELIST`、`PERMISSION_DENIED` 等统一命名 |
-
-### 5.1 发送前安全校验契约
-
-A 在以下场景必须调用 B 提供的发送前安全校验：
-
-1. 模板测试发送。
-2. 手动发送。
-3. 自动任务执行。
-4. 失败任务重试。
-5. 批量任务执行。
-
-建议返回结构：
-
-```json
-{
-  "passed": true,
-  "finalAction": "send",
-  "checks": {
-    "provider": "passed",
-    "worker": "passed",
-    "whitelist": "passed",
-    "blacklist": "passed",
-    "unsubscribe": "passed",
-    "frequency": "passed",
-    "quietHours": "passed"
-  },
-  "blockedReason": null,
-  "nextPlanTime": null
-}
-```
-
-当 `passed=false` 时，A 不允许调用短信服务商，并按返回结果将任务标记为 `blocked` 或 `skipped`。
-
-### 5.2 操作日志契约
-
-A/B 在以下操作必须写操作日志：
-
-1. 模板新建、编辑、启用、停用、测试发送。
-2. 规则新建、编辑、复制、测试、发布、回滚、启用、停用。
-3. 手动发送、任务重试、任务取消、批量操作。
-4. Provider、worker、白名单、黑名单、退订、频控、事件来源配置变更。
-5. 创建账号、审核注册申请、禁用账号、重置密码、修改角色。
-6. 导出任务创建、下载、过期访问。
-
-建议日志字段：
-
-| 字段 | 说明 |
+| 接口 | 说明 |
 | --- | --- |
-| `operatorId` | 操作人 |
-| `module` | 模块 |
-| `action` | 操作类型 |
-| `targetType` | 操作对象类型 |
-| `targetId` | 操作对象 ID |
-| `before` | 操作前快照 |
-| `after` | 操作后快照 |
-| `result` | 成功或失败 |
-| `ip` | 请求 IP |
-| `userAgent` | 浏览器或调用方 |
+| `POST /api/auth/login` | 登录 |
+| `POST /api/auth/logout` | 退出 |
+| `GET /api/auth/me` | 当前用户和权限 |
+| `POST /api/auth/register-request` | 提交注册申请 |
+| `GET /api/auth/register-requests` | 注册申请列表 |
+| `POST /api/auth/register-requests/{id}/approve` | 审核通过 |
+| `POST /api/auth/register-requests/{id}/reject` | 驳回申请 |
+| `POST /api/auth/forgot-password/send-code` | 忘记密码发送验证码 |
+| `POST /api/auth/forgot-password/verify-code` | 校验验证码 |
+| `POST /api/auth/reset-password` | 重置密码 |
+| `POST /api/auth/set-password` | 设置密码 |
+| `POST /api/auth/change-password` | 登录后改密 |
+| `GET /api/users` | 用户列表 |
+| `POST /api/users` | 创建用户 |
+| `GET /api/users/{id}` | 用户详情 |
+| `POST /api/users/{id}/update` | 编辑用户 |
+| `POST /api/users/{id}/status` | 启停用户 |
+| `POST /api/users/{id}/reset-password` | 重置用户密码 |
+| `POST /api/users/{id}/delete` | 删除用户 |
+| `GET /api/roles` | 角色列表 |
+| `GET /api/roles/{id}` | 角色详情 |
+| `POST /api/roles/{id}/update` | 更新角色权限 |
+| `GET /api/whitelist` | 白名单列表 |
+| `POST /api/whitelist` | 添加白名单 |
+| `POST /api/whitelist/{id}/update` | 编辑白名单 |
+| `POST /api/whitelist/{id}/status` | 启停白名单 |
+| `POST /api/whitelist/export` | 导出白名单 |
+| `GET /api/blacklist` | 黑名单列表 |
+| `POST /api/blacklist` | 添加黑名单 |
+| `POST /api/blacklist/import` | 导入黑名单 |
+| `POST /api/blacklist/{id}/remove` | 移除黑名单 |
+| `GET /api/unsubscribes` | 退订列表 |
+| `POST /api/unsubscribes` | 添加退订 |
+| `POST /api/unsubscribes/import` | 导入退订 |
+| `GET /api/settings` | 查询发送控制配置 |
+| `POST /api/settings/update` | 更新发送控制配置 |
+| `GET /api/event-sources` | 事件来源列表 |
+| `POST /api/event-sources` | 创建事件来源 |
+| `GET /api/event-sources/{id}` | 事件来源详情 |
+| `POST /api/event-sources/{id}/update` | 编辑事件来源 |
+| `POST /api/event-sources/{id}/status` | 启停事件来源 |
+| `POST /api/event-sources/{id}/reset-secret` | 重置密钥 |
+| `GET /api/event-source-logs` | 接入日志 |
+| `GET /api/event-source-logs/{id}` | 接入日志详情 |
+| `GET /api/operation-logs` | 操作日志 |
+| `GET /api/operation-logs/{id}` | 操作日志详情 |
+| `GET /api/export-tasks` | 导出任务 |
+| `POST /api/export-tasks` | 创建导出任务 |
+| `GET /api/export-tasks/{id}` | 导出任务详情 |
+| `GET /api/export-tasks/{id}/download` | 下载导出文件 |
+| `GET /api/batch-jobs` | 批量任务列表 |
+| `GET /api/batch-jobs/{id}` | 批量任务详情 |
+| `GET /api/approvals` | 审批列表 |
+| `POST /api/approvals` | 创建审批 |
+| `GET /api/approvals/{id}` | 审批详情 |
+| `POST /api/approvals/{id}/approve` | 通过审批 |
+| `POST /api/approvals/{id}/reject` | 驳回审批 |
+| `POST /api/approvals/{id}/withdraw` | 撤回审批 |
+| `POST /api/safety/send-check` | 发送前安全校验 |
 
-### 5.3 权限契约
+### 5.6 B 不应主改的内容
 
-V1.0 只支持内置角色，不提供独立角色菜单；非管理员角色的权限树配置内联在用户管理中完成。
+B 不应主改以下区域：
 
-内置角色：
+1. 模板创建、模板启停业务规则。
+2. 规则创建、规则匹配、任务生成逻辑。
+3. 手动发送、任务执行、Provider 调用。
+4. 回执处理、短链点击、发送记录统计口径。
+5. `sms.service.js` 中短信主链路核心流程。
+6. `sms.repository.js` 中短信主链路持久化逻辑。
 
-1. 管理员。
-2. 运营。
-3. 只读。
+如果 B 需要触达数据用于审计、导出、批量、审批，应通过明确接口或共享 repository 读取，不要直接改 A 的执行逻辑。
 
-规则：
+## 6. 共享区域和冲突高发点
 
-1. 前端根据 `/api/auth/me` 渲染菜单和按钮。
-2. 后端接口必须独立校验角色权限。
-3. 无权限页面返回无权限页，不加载业务数据。
-4. 无权限接口返回 403。
-5. 管理员修改用户角色后，下次接口鉴权立即生效。
+### 6.1 共享文件
 
-## 6. 禁止跨边界直接修改的区域
+| 文件 | 建议主责 | 协作规则 |
+| --- | --- | --- |
+| `apps/web/src/constants/menus.tsx` | B 主责菜单和权限框架，A 主责触达菜单项 | 新增菜单、改权限 key、改路径必须同步 |
+| `apps/web/src/App.tsx` | B 主责 AppShell/auth，A 可接入数据刷新 | 不随意改全局状态结构和 auth 流程 |
+| `apps/web/src/types/index.ts` | 双方共享 | 新增/调整类型前确认接口来源 |
+| `apps/web/src/components/*` | 按组件使用归属 | 通用组件不要各自复制一套 |
+| `apps/web/src/lib/api.ts` | 双方共享 | 请求拦截、错误处理、403 逻辑必须同步 |
+| `prisma/schema.prisma` | 按表归属 | 修改对方表前先同步 |
+| `apps/api/src/app.js` | 双方共享 | 新增路由入口要避免重复路径 |
 
-为减少冲突，以下规则需要严格遵守。
+### 6.2 共享能力
+
+| 能力 | 主责 | 使用方 | 规则 |
+| --- | --- | --- | --- |
+| 权限体系 | B | A/B | A 页面和按钮必须接入 B 权限点 |
+| 发送前安全校验 | B | A | A 所有发送入口必须调用 |
+| 操作日志 | B | A/B | A 的关键写操作需要写日志或调用日志 helper |
+| 批量任务框架 | B | A/B | A 定义任务语义，B 记录批次和明细 |
+| 审批流程 | B | A/B | A 发起高风险业务动作，B 管审批状态和处理 |
+| 手机号脱敏 | B | A/B | 页面和导出统一使用脱敏规则 |
+| 状态枚举 | 双方 | A/B | 不允许单方新增状态 |
+| 错误码 | 双方 | A/B | 不允许同一错误含义多个 code |
+
+## 7. 特殊边界说明
+
+### 7.1 批量取消和批量重试
+
+批量取消/批量重试横跨 A 和 B。
+
+| 事项 | 归属 |
+| --- | --- |
+| 哪些任务可取消/重试 | A |
+| 任务状态如何变化 | A |
+| 任务中心页面入口 | A |
+| 批量任务记录 | B |
+| 批量任务明细 | B |
+| 操作日志 | B |
+| 权限校验 | B |
+| 失败明细格式 | A/B 共同确认 |
+
+### 7.2 规则启停和审批
+
+规则本身属于 A，审批流程属于 B。
+
+| 事项 | 归属 |
+| --- | --- |
+| 规则状态和规则业务逻辑 | A |
+| 启停按钮和规则卡片展示 | A |
+| 高风险动作是否需要审批 | B 提供判断，A 调用 |
+| 审批单创建和处理 | B |
+| 审批通过后执行规则状态变更 | A/B 共同确认执行入口 |
+
+### 7.3 手动发送和安全校验
+
+手动发送属于 A，但发送前安全校验属于 B。
+
+| 事项 | 归属 |
+| --- | --- |
+| 选择模板、填写手机号、发送预览 | A |
+| 调用发送接口和展示发送结果 | A |
+| 白名单、黑名单、退订、频控、安静时段校验 | B |
+| Provider/worker 配置 | B |
+| 安全校验结果在页面的展示规范 | A/B 共同确认 |
+
+### 7.4 事件接收和事件来源
+
+事件业务处理属于 A，事件来源鉴权属于 B。
+
+| 事项 | 归属 |
+| --- | --- |
+| 事件入库、规则匹配、任务生成 | A |
+| appId、secret、来源启停 | B |
+| HMAC/secret 校验和接入日志 | B |
+| 事件流水页面 | A |
+| 接入日志页面 | B |
+
+### 7.5 UI/UX 重构边界
+
+当前 UI/UX 重构目标是 Marketing Automation Platform。
+
+| 页面/区域 | UI 重构主责 |
+| --- | --- |
+| 总览 Hero KPI、运营状态、场景表现 | A |
+| 模板中心卡片化 | A |
+| 规则中心自动化规则卡片 | A |
+| 手动发送预览体验 | A |
+| 任务中心状态分组 | A |
+| 发送记录可读性 | A |
+| 登录、用户、权限页面视觉统一 | B |
+| 黑白名单、退订、发送控制视觉统一 | B |
+| 事件来源、接入日志 | B |
+| 操作日志、导出、批量、审批 | B |
+| AppShell、导航、权限菜单 | B 主责，A 协作 |
+| 通用状态 Pill、卡片、数据组件 | A/B 共同沉淀，按页面复用 |
+
+UI 重构限制：
+
+1. 不修改业务逻辑。
+2. 不修改 API。
+3. 不修改数据库结构。
+4. 不新增业务功能。
+5. 仅做布局、组件、视觉、交互和信息层级优化。
+
+## 8. 禁止跨边界直接修改的区域
 
 | 区域 | 规则 |
 | --- | --- |
-| A 主责页面 | B 不直接改模板、规则、任务、发送记录、统计页面，除非只接入权限组件且提前同步 |
-| B 主责页面 | A 不直接改登录、用户、权限、白名单、黑名单、发送控制、日志页面 |
-| A 主责接口 | B 不直接改模板、规则、任务、发送记录、统计接口业务逻辑 |
-| B 主责接口 | A 不直接改鉴权、用户、白名单、黑名单、频控、配置、日志接口业务逻辑 |
-| 共享 helper | 改动前必须同步，尤其是权限、手机号、安全校验、操作日志 |
-| 状态枚举 | 改动前必须同步并更新 PRD、接口文档、测试用例 |
-| 数据表字段 | 修改非自己主责表前必须同步主责人 |
-| migration | 每次只解决当前模块需求，不把无关表结构一起改掉 |
+| A 主责页面 | B 不直接改模板、规则、手动发送、事件、任务、发送记录、统计页面 |
+| B 主责页面 | A 不直接改登录、用户、权限、白名单、黑名单、退订、设置、日志、导出、审批页面 |
+| A 主责 service | B 不直接改短信发送、任务执行、规则匹配、Provider、回执、短链逻辑 |
+| B 主责 service | A 不直接改账号、权限、安全治理、接入、审计、导出、审批逻辑 |
+| Prisma 表结构 | 修改对方主责表前必须同步 |
+| 状态枚举 | 改动前必须同步并更新类型和页面展示 |
+| 菜单和权限 key | 改动前必须同步，否则容易导致页面消失或按钮误隐藏 |
+| 批量和审批 | 必须共同确认请求参数、返回结构和状态流转 |
 
 允许跨边界的情况：
 
-1. 修复阻塞主链路的 bug，但需要在提交信息里说明影响范围。
+1. 修复阻塞主链路的 bug，但提交信息必须说明影响范围。
 2. 接入已约定的公共 helper 或组件。
-3. 调整类型定义以适配已确认的接口契约。
+3. 调整类型定义以适配已确认接口。
 4. 补测试用例覆盖对方提供的公共契约。
 
-## 7. 分支和提交建议
+## 9. 修改前必须同步的事项
 
-建议拆分为小分支，避免一个大分支堆太久。
+以下改动必须先同步：
+
+1. 新增或修改任务状态、发送状态、规则状态、模板状态、审批状态。
+2. 修改 `/api/auth/me` 返回结构。
+3. 修改权限点命名或菜单 key。
+4. 修改发送前安全校验逻辑。
+5. 修改手机号存储、脱敏、查询规则。
+6. 修改 Provider、worker、白名单、黑名单、退订、频控配置。
+7. 修改 `sms_task`、`sms_send_log`、`admin_user`、`system_setting` 等核心表。
+8. 新增或调整批量操作。
+9. 新增或调整审批前置条件。
+10. 调整 UI/UX 重构中的一级导航或页面归属。
+11. 调整 PRD 中 P0/P1/P2 范围。
+
+## 10. 开发顺序建议
+
+### 10.1 第一阶段：按当前功能稳定边界
+
+| 全栈 A | 全栈 B |
+| --- | --- |
+| 梳理模板、规则、任务、发送记录现状 | 梳理账号、权限、安全治理、审计现状 |
+| 补齐 A 页面 UI/UX 改造结构 | 补齐 B 页面 UI/UX 改造结构 |
+| 确认任务状态和发送状态展示 | 确认权限点、菜单和按钮规则 |
+
+### 10.2 第二阶段：核心 UI/UX 重构
+
+| 全栈 A | 全栈 B |
+| --- | --- |
+| 总览 Hero KPI、场景表现 | AppShell、导航、权限菜单 |
+| 规则中心卡片化 | 登录、用户、权限页面统一视觉 |
+| 任务中心状态分组 | 安全治理页面统一视觉 |
+| 发送记录可读性优化 | 日志、导出、审批页面统一视觉 |
+
+### 10.3 第三阶段：联调和验收
+
+| 全栈 A | 全栈 B |
+| --- | --- |
+| 验证发送链路不受 UI 重构影响 | 验证权限、审计、安全校验不受 UI 重构影响 |
+| 验证任务、规则、发送记录状态 | 验证白名单、黑名单、退订、频控拦截 |
+| 验证统计指标展示 | 验证操作日志、批量、审批记录 |
+
+## 11. 联调检查清单
+
+每次联调至少检查：
+
+1. 登录后菜单是否按角色展示。
+2. 无权限页面是否展示 403。
+3. 无权限接口是否返回 403。
+4. 模板创建、启停是否正常。
+5. 规则创建、启停是否正常。
+6. 手动发送是否经过安全校验。
+7. 自动任务执行是否经过安全校验。
+8. 非白名单真实发送是否不调用 Provider。
+9. 黑名单、退订、频控命中是否不调用 Provider。
+10. 事件来源停用或鉴权失败是否写入接入日志。
+11. 批量取消/批量重试是否产生批量任务记录。
+12. 高风险规则启停是否能创建审批。
+13. 关键写操作是否写入操作日志。
+14. 短链点击是否能写入点击日志。
+15. Provider 回执是否能更新发送记录。
+
+## 12. 提交和分支建议
+
+建议分支：
 
 | 分支 | 主责 | 内容 |
 | --- | --- | --- |
-| `feature/v1-auth-governance` | B | 登录、用户、角色、权限、白名单、黑名单、配置 |
-| `feature/v1-touch-core` | A | 模板、规则、事件、任务、发送记录、统计 |
-| `feature/v1-integration` | A/B | 发送前安全校验、操作日志、联调修复 |
+| `feature/v1-touch-growth` | A | 触达增长链路和 A 侧 UI/UX 重构 |
+| `feature/v1-governance-security` | B | 治理安全链路和 B 侧 UI/UX 重构 |
+| `feature/v1-ui-integration` | A/B | 导航、通用组件、联调和视觉收口 |
 
 提交建议：
 
 1. 每个 commit 只覆盖一个模块或一个明确闭环。
 2. commit message 使用 `feat:`、`fix:`、`docs:`、`test:`、`refactor:` 前缀。
 3. 涉及公共契约变更时，commit message 标明 `contract`。
-4. 不在同一个 commit 里同时改 A 主责模块和 B 主责模块，除非是联调分支。
+4. 不在同一个 commit 里同时大改 A 主责模块和 B 主责模块，除非是在联调分支。
+5. UI/UX 重构 commit 不应夹带业务逻辑、API 或数据库结构变更。
 
-## 8. 开发顺序
+## 13. 最终边界总结
 
-### 8.1 第 0 阶段：共同准备
+全栈 A：
 
-| 任务 | 主责 | 输出 |
-| --- | --- | --- |
-| 接口返回结构 | 共同 | response schema |
-| 错误码 | 共同 | error code list |
-| 数据库 migration 规范 | 共同 | migration 命名和执行规则 |
-| 状态枚举 | 共同 | enum 文件或常量 |
-| 菜单结构 | B 主导 | menu config |
-| Provider mock 方案 | A 主导 | mock send provider |
+> 负责触达增长链路。模板、规则、手动发送、事件、任务、发送记录、回执、短链、统计都归 A。
 
-### 8.2 第 1 阶段：基础骨架
+全栈 B：
 
-| 全栈 A | 全栈 B |
-| --- | --- |
-| 模板 CRUD | 登录/退出 |
-| 规则 CRUD | 用户管理 |
-| 事件流水 | 内置角色权限 |
-| 任务模型 | 发送控制基础 |
-| mock Provider | 白名单基础 |
+> 负责治理安全链路。登录、用户、权限、白名单、黑名单、退订、发送控制、事件来源、操作日志、导出、批量、审批都归 B。
 
-### 8.3 第 2 阶段：主链路跑通
+共享但必须先定契约：
 
-| 全栈 A | 全栈 B |
-| --- | --- |
-| 事件触发生成任务 | 发送前安全校验 |
-| 手动发送 | 黑名单、退订、频控 |
-| 执行到期任务 | worker、Provider 开关 |
-| 发送记录 | 操作日志 helper |
-| 回执和短链 | 事件来源鉴权 |
+> 菜单权限、发送前安全校验、操作日志、手机号处理、状态枚举、批量任务、审批、错误码、通用 UI 组件。
 
-### 8.4 第 3 阶段：排查和验收
+最重要的协作规则：
 
-| 全栈 A | 全栈 B |
-| --- | --- |
-| 任务详情完整链路 | 操作日志详情 |
-| 发送记录详情 | 事件接入日志详情 |
-| 统计分析 | 权限回归 |
-| 批量任务接入 | 导出、审批、批量操作 |
-| 回执标记送达 | 安全验收 |
-
-## 9. 联调检查清单
-
-每次联调至少检查：
-
-1. 登录后菜单是否按角色展示。
-2. 无权限接口是否返回 403。
-3. 模板测试发送是否经过白名单校验。
-4. 手动发送是否经过白名单、黑名单、退订、频控、安静时段校验。
-5. 自动任务执行是否经过同一套安全校验。
-6. 非白名单真实发送是否不调用 Provider。
-7. 黑名单和退订命中是否不调用 Provider。
-8. 任务取消后 worker 是否不再执行。
-9. Provider 回执是否能更新发送记录。
-10. 短链点击是否能写入点击日志。
-11. 关键写操作是否写入操作日志。
-12. 事件来源停用或签名失败是否写入事件接入日志。
-
-## 10. 修改前同步规则
-
-以下改动必须先同步，否则容易造成返工：
-
-1. 新增或修改任务状态、发送状态、规则状态、模板状态。
-2. 修改发送前安全校验逻辑。
-3. 修改手机号存储、脱敏、查询规则。
-4. 修改 `/api/auth/me` 返回结构。
-5. 修改权限矩阵或菜单结构。
-6. 修改 Provider、worker、白名单、黑名单、退订、频控配置。
-7. 修改 `sms_task`、`sms_send_log`、`admin_user`、`system_setting` 这类核心表。
-8. 新增批量操作或导出逻辑。
-9. 新增审批前置条件。
-10. 调整 PRD 中 P0/P1/P2 范围。
-
-## 11. 验收责任
-
-| 验收项 | 主责 | 协作 |
-| --- | --- | --- |
-| 模板、规则、事件、任务、发送记录闭环 | A | B 提供安全校验和权限 |
-| 登录、用户、角色、权限闭环 | B | A 接入权限 |
-| 白名单、黑名单、退订、频控拦截 | B | A 在发送前调用 |
-| mock Provider 到发送记录 | A | B 校验配置 |
-| 操作日志覆盖 | B | A 调用 helper |
-| 事件接入鉴权和日志 | B | A 使用接收后的事件 |
-| 统计分析 | A | B 提供权限和导出约束 |
-| 数据导出、批量操作、审批 | B | A 提供任务和发送记录数据源 |
-
-## 12. 最终边界总结
-
-全栈 A 的边界：
-
-> 负责触达主链路。模板、规则、事件、任务、发送、回执、短链、统计都归 A。
-
-全栈 B 的边界：
-
-> 负责治理和安全链路。登录、用户、权限、白名单、黑名单、退订、频控、发送控制、日志、导出、审批都归 B。
-
-两人交汇点：
-
-> 发送前安全校验、权限校验、操作日志、手机号处理、状态枚举、接口错误码。
-
-交汇点要先定契约，再写代码。只要这个规则守住，后期冲突会少很多。
+> A 不绕过 B 的权限和安全校验，B 不改写 A 的触达执行链路。交汇点先定契约，再写代码。
