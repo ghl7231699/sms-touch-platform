@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
+import { eventLabels, operationLabel } from '../../constants/labels';
 import type { AuditItem } from '../../types';
 import { StatusBadge } from '../../components/StatusBadge';
 
@@ -20,7 +21,7 @@ export default function AuditPage({ mode }: { mode: 'eventSourceLogs' | 'operati
               <tr key={item.id}>
                 <td>{new Date(item.createdAt).toLocaleString()}</td>
                 <td>{mode === 'eventSourceLogs' ? item.appId || '-' : item.userName || '-'}</td>
-                <td>{mode === 'eventSourceLogs' ? item.eventType || '-' : `${item.resource || '-'} · ${item.action || '-'}`}</td>
+                <td>{mode === 'eventSourceLogs' ? eventLabels[item.eventType || ''] || item.eventType || '-' : operationLabel(item.resource, item.action)}</td>
                 <td><StatusBadge status={(item.status || item.result) === 'success' ? 'success' : 'failed'} /></td>
                 <td><strong>{item.code || '-'}</strong><span>{item.message || '-'}</span></td>
               </tr>
@@ -31,4 +32,3 @@ export default function AuditPage({ mode }: { mode: 'eventSourceLogs' | 'operati
     </section>
   );
 }
-

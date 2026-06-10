@@ -13,7 +13,6 @@ import Events from './pages/events/Events';
 import Tasks from './pages/tasks/Tasks';
 import Logs from './pages/logs/Logs';
 import UsersPage from './pages/governance/UsersPage';
-import RolesPage from './pages/governance/RolesPage';
 import PhoneListPage from './pages/governance/PhoneListPage';
 import SettingsPage from './pages/governance/SettingsPage';
 import EventSourcesPage from './pages/governance/EventSourcesPage';
@@ -176,7 +175,6 @@ export default function App() {
         {view === 'tasks' && <Tasks tasks={tasks} onRefresh={refresh} setNotice={setNotice} />}
         {view === 'logs' && <Logs logs={logs} />}
         {view === 'users' && <UsersPage setNotice={setNotice} />}
-        {view === 'roles' && <RolesPage />}
         {view === 'whitelist' && <PhoneListPage kind="whitelist" title="白名单管理" setNotice={setNotice} />}
         {view === 'blacklist' && <PhoneListPage kind="blacklist" title="黑名单管理" setNotice={setNotice} />}
         {view === 'unsubscribes' && <PhoneListPage kind="unsubscribes" title="退订管理" setNotice={setNotice} />}

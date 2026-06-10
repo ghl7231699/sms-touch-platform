@@ -5,6 +5,7 @@ const toneClass: Record<string, string> = {
   success: 'bg-emerald-50 text-emerald-700',
   disabled: 'bg-rose-50 text-rose-700',
   failed: 'bg-rose-50 text-rose-700',
+  partial_failed: 'bg-amber-50 text-amber-700',
   blocked: 'bg-amber-50 text-amber-700',
   pending: 'bg-amber-50 text-amber-700',
   sending: 'bg-blue-50 text-blue-700',

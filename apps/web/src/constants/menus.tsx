@@ -13,7 +13,6 @@ import {
   Settings,
   ShieldCheck,
   ScrollText,
-  UserCheck,
   Users,
   Zap
 } from 'lucide-react';
@@ -39,11 +38,10 @@ export const pageTitles: Record<View, string> = {
   tasks: '任务队列',
   logs: '发送记录',
   users: '用户管理',
-  roles: '角色权限',
   whitelist: '白名单管理',
   blacklist: '黑名单管理',
   unsubscribes: '退订管理',
-  settings: '系统配置',
+  settings: '发送控制',
   eventSources: '事件来源',
   eventSourceLogs: '事件接入日志',
   operationLogs: '操作日志',
@@ -79,11 +77,10 @@ export const menuGroups: MenuGroup[] = [
     title: '系统设置',
     items: [
       { key: 'users', label: '用户管理', icon: <Users size={18} /> },
-      { key: 'roles', label: '角色权限', icon: <UserCheck size={18} /> },
       { key: 'whitelist', label: '白名单', icon: <ShieldCheck size={18} /> },
       { key: 'blacklist', label: '黑名单', icon: <Ban size={18} /> },
       { key: 'unsubscribes', label: '退订记录', icon: <Bell size={18} /> },
-      { key: 'settings', label: '运行配置', icon: <Settings size={18} /> },
+      { key: 'settings', label: '发送控制', icon: <Settings size={18} /> },
       { key: 'eventSources', label: '事件来源', icon: <KeyRound size={18} /> },
       { key: 'eventSourceLogs', label: '接入日志', icon: <Database size={18} /> },
       { key: 'operationLogs', label: '操作日志', icon: <ScrollText size={18} /> },

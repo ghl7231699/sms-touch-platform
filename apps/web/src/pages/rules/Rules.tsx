@@ -34,11 +34,38 @@ export default function Rules({ rules, templates, logs, onRefresh, setNotice }: 
   ];
 
   async function toggle(rule: Rule) {
+    if (rule.status !== 'enabled') {
+      const template = templates.find((item) => item.id === rule.templateId);
+      await api('/api/approvals', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: `启用规则审批：${rule.name}`,
+          resource: 'sms_rule',
+          resourceId: rule.id,
+          action: 'enable',
+          comment: '启用自动触达规则前提交审批。',
+          payload: {
+            scenario: '规则启用',
+            reason: '启用规则后会自动匹配业务事件并创建发送任务。',
+            riskLevel: 'high',
+            before: { status: rule.status },
+            after: { status: 'enabled' },
+            impact: {
+              title: rule.name,
+              description: `${eventLabels[rule.eventType] || rule.eventType} · ${template?.name || '未配置模板'} · 延迟 ${rule.delayValue}${rule.delayUnit}`
+            },
+            execute: { type: 'update_rule_status', ruleId: rule.id, status: 'enabled' }
+          }
+        })
+      });
+      setNotice(`${rule.name} 已提交启用审批，通过后自动启用`);
+      return;
+    }
     await api(`/api/rules/${rule.id}/status`, {
       method: 'POST',
-      body: JSON.stringify({ status: rule.status === 'enabled' ? 'disabled' : 'enabled' })
+      body: JSON.stringify({ status: 'disabled' })
     });
-    setNotice(`${rule.name} 已${rule.status === 'enabled' ? '停用' : '启用'}`);
+    setNotice(`${rule.name} 已停用`);
     await onRefresh();
   }
 

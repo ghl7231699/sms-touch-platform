@@ -3,10 +3,12 @@ import { PrismaClient } from '@prisma/client';
 import { config } from '../../config/env.js';
 import { createId } from '../../utils/ids.js';
 import { maskPhone } from '../../utils/mask-phone.js';
+import { mutateStore, readStore } from '../sms/sms.repository.js';
 
 const prisma = new PrismaClient();
 const PHONE_PATTERN = /^1\d{10}$/;
 const SESSION_TTL_DAYS = 7;
+const now = () => new Date().toISOString();
 
 export const ROLE_DEFINITIONS = [
   {
@@ -58,10 +60,23 @@ export const ROLE_DEFINITIONS = [
 
 const SYSTEM_SETTING_DEFAULTS = {
   'sms.provider': { provider: config.smsProvider },
-  'sms.worker': { enabled: config.taskWorker.enabled, batchSize: config.taskWorker.batchSize },
+  'sms.worker': {
+    enabled: config.taskWorker.enabled,
+    intervalMs: config.taskWorker.intervalMs,
+    batchSize: config.taskWorker.batchSize,
+    allowRealSend: config.taskWorker.allowRealSend
+  },
   'sms.short_link': { enabled: true, baseUrl: config.shortLinkBaseUrl, targetUrl: config.shortLinkDefaultTarget },
   'sms.safety': { requireWhitelistForMock: false, requireWhitelistForRealProvider: true },
-  'sms.verification_code': { validMinutes: 5, dailyLimit: 10 }
+  'sms.verification_code': { validMinutes: 5, resendIntervalSeconds: 60, dailyLimit: 10 },
+  'sms.receipt': { enabled: true, allowMockDelivered: true },
+  'sms.aliyun': {
+    credentialMode: 'env',
+    endpoint: config.aliyun.endpoint,
+    region: config.aliyun.region,
+    signName: config.aliyun.signName,
+    templateCode: config.aliyun.templateCode
+  }
 };
 
 function ok(body, statusCode = 200) {
@@ -213,6 +228,19 @@ async function ensureRole(code) {
   });
 }
 
+async function resolveRoleIds(input = {}) {
+  if (Array.isArray(input.roleIds) && input.roleIds.length) {
+    const roles = await prisma.adminRole.findMany({ where: { id: { in: input.roleIds }, status: 'active' } });
+    return roles.map((role) => role.id);
+  }
+  const codes = Array.isArray(input.roleCodes) ? input.roleCodes : input.roleCode ? [input.roleCode] : [];
+  if (codes.length) {
+    const roles = await prisma.adminRole.findMany({ where: { code: { in: codes }, status: 'active' } });
+    if (roles.length) return roles.map((role) => role.id);
+  }
+  return null;
+}
+
 function parsePage(filters = {}) {
   const page = Math.max(Number(filters.page) || 1, 1);
   const pageSize = Math.min(Math.max(Number(filters.pageSize) || 20, 1), 100);
@@ -221,6 +249,24 @@ function parsePage(filters = {}) {
 
 function contains(value) {
   return value ? { contains: String(value), mode: 'insensitive' } : undefined;
+}
+
+function dateRange(filters = {}, field = 'createdAt') {
+  const from = filters.dateFrom || filters.startDate || filters.createdFrom;
+  const to = filters.dateTo || filters.endDate || filters.createdTo;
+  const range = {};
+  if (from) {
+    const value = new Date(from);
+    if (!Number.isNaN(value.getTime())) range.gte = value;
+  }
+  if (to) {
+    const value = new Date(to);
+    if (!Number.isNaN(value.getTime())) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(String(to))) value.setHours(23, 59, 59, 999);
+      range.lte = value;
+    }
+  }
+  return Object.keys(range).length ? { [field]: range } : {};
 }
 
 async function listWithCount(model, args, mapItem = (item) => item) {
@@ -236,13 +282,172 @@ async function getSettingsObject() {
   const rows = await prisma.systemSetting.findMany();
   const settings = { ...SYSTEM_SETTING_DEFAULTS };
   for (const row of rows) settings[row.key] = row.value;
+  const policies = await prisma.smsFrequencyPolicy.findMany({ orderBy: { scene: 'asc' } });
+  settings['sms.frequency'] = {
+    policies: policies.map((policy) => ({
+      scene: policy.scene,
+      dailyLimit: policy.dailyLimit,
+      weeklyLimit: policy.weeklyLimit,
+      cooldownMinutes: policy.cooldownMinutes,
+      quietStart: policy.quietStart,
+      quietEnd: policy.quietEnd,
+      status: policy.status
+    }))
+  };
   return settings;
+}
+
+export async function getSmsProviderName() {
+  const settings = await getSettingsObject();
+  return settings['sms.provider']?.provider || config.smsProvider;
+}
+
+export async function getShortLinkSettings() {
+  const settings = await getSettingsObject();
+  return settings['sms.short_link'] || SYSTEM_SETTING_DEFAULTS['sms.short_link'];
+}
+
+async function getVerificationCodeSettings() {
+  const settings = await getSettingsObject();
+  return settings['sms.verification_code'] || SYSTEM_SETTING_DEFAULTS['sms.verification_code'];
 }
 
 function settingRowsFromObject(input = {}) {
   return Object.entries(input)
     .filter(([key]) => Object.prototype.hasOwnProperty.call(SYSTEM_SETTING_DEFAULTS, key))
     .map(([key, value]) => ({ key, value }));
+}
+
+function approvalSummary(payload = {}) {
+  const impact = payload.impact || {};
+  return {
+    scenario: payload.scenario || payload.execute?.type || 'manual',
+    reason: payload.reason || '',
+    riskLevel: payload.riskLevel || 'medium',
+    impact
+  };
+}
+
+async function createApproval({ req, actor, title, resource, resourceId, action, payload, comment }) {
+  const item = await prisma.approvalOrder.create({
+    data: {
+      id: createId(),
+      title,
+      resource,
+      resourceId: resourceId || null,
+      action,
+      payload: {
+        ...payload,
+        summary: approvalSummary(payload)
+      },
+      createdById: actor.id,
+      records: { create: { id: createId(), action: 'create', operatorId: actor.id, comment: comment || null } }
+    },
+    include: { records: true }
+  });
+  await writeOperationLog({ req, actor, action: 'create', resource: 'approval_order', resourceId: item.id, requestBody: { title, resource, resourceId, action, payload } });
+  return item;
+}
+
+async function applySystemSettings(settings = {}) {
+  const rows = settingRowsFromObject(settings);
+  for (const row of rows) {
+    await prisma.systemSetting.upsert({
+      where: { key: row.key },
+      create: { id: createId(), key: row.key, value: row.value },
+      update: { value: row.value }
+    });
+  }
+  const frequencyPolicies = Array.isArray(settings['sms.frequency']?.policies) ? settings['sms.frequency'].policies : [];
+  for (const policy of frequencyPolicies) {
+    const scene = String(policy.scene || '').trim();
+    if (!scene) continue;
+    await prisma.smsFrequencyPolicy.upsert({
+      where: { scene },
+      create: {
+        id: createId(),
+        scene,
+        dailyLimit: Math.max(Number(policy.dailyLimit) || 1, 1),
+        weeklyLimit: Math.max(Number(policy.weeklyLimit) || 1, 1),
+        cooldownMinutes: Math.max(Number(policy.cooldownMinutes) || 0, 0),
+        quietStart: policy.quietStart || '21:00',
+        quietEnd: policy.quietEnd || '09:00',
+        status: policy.status === 'disabled' ? 'disabled' : 'enabled'
+      },
+      update: {
+        dailyLimit: Math.max(Number(policy.dailyLimit) || 1, 1),
+        weeklyLimit: Math.max(Number(policy.weeklyLimit) || 1, 1),
+        cooldownMinutes: Math.max(Number(policy.cooldownMinutes) || 0, 0),
+        quietStart: policy.quietStart || '21:00',
+        quietEnd: policy.quietEnd || '09:00',
+        status: policy.status === 'disabled' ? 'disabled' : 'enabled'
+      }
+    });
+  }
+  return {
+    appliedKeys: [
+      ...rows.map((row) => row.key),
+      ...(frequencyPolicies.length ? ['sms.frequency'] : [])
+    ]
+  };
+}
+
+async function applyRuleStatus(ruleId, status) {
+  let updated = null;
+  await mutateStore((store) => {
+    const item = store.rules.find((rule) => rule.id === ruleId);
+    if (!item) return;
+    item.status = status === 'disabled' ? 'disabled' : 'enabled';
+    item.updatedAt = now();
+    updated = item;
+  });
+  if (!updated) throw new Error('规则不存在，审批动作无法执行。');
+  return { ruleId, status: updated.status };
+}
+
+async function executeApproval(item) {
+  const execute = item.payload?.execute;
+  if (!execute?.type) return { executed: false, message: '审批单未绑定待执行动作。' };
+  if (execute.type === 'update_system_settings') {
+    const result = await applySystemSettings(execute.settings || {});
+    return { executed: true, type: execute.type, result };
+  }
+  if (execute.type === 'update_rule_status') {
+    const result = await applyRuleStatus(execute.ruleId, execute.status);
+    return { executed: true, type: execute.type, result };
+  }
+  if (execute.type === 'create_export_task') {
+    const task = await prisma.exportTask.create({
+      data: {
+        id: createId(),
+        name: execute.name || `${execute.resource || 'data'} 导出`,
+        resource: execute.resource || 'operation_log',
+        status: 'completed',
+        fileName: `${execute.resource || 'data'}_${Date.now()}.json`,
+        criteria: execute.criteria || {},
+        createdById: item.createdById,
+        completedAt: new Date()
+      }
+    });
+    return { executed: true, type: execute.type, result: { exportTaskId: task.id } };
+  }
+  throw new Error(`不支持的审批执行类型：${execute.type}`);
+}
+
+function isHighRiskSettingsChange(current, next) {
+  const currentProvider = current['sms.provider']?.provider || 'mock';
+  const nextProvider = next['sms.provider']?.provider || currentProvider;
+  const currentSafety = current['sms.safety'] || {};
+  const nextSafety = next['sms.safety'] || currentSafety;
+  const currentWorker = current['sms.worker'] || {};
+  const nextWorker = next['sms.worker'] || currentWorker;
+  const nextRealProvider = nextProvider !== 'mock';
+  return (
+    currentProvider !== nextProvider ||
+    currentSafety.requireWhitelistForRealProvider !== false && nextSafety.requireWhitelistForRealProvider === false ||
+    nextRealProvider && !currentWorker.enabled && nextWorker.enabled ||
+    nextRealProvider && !currentWorker.allowRealSend && nextWorker.allowRealSend
+  );
 }
 
 function timeToMinutes(value) {
@@ -310,9 +515,10 @@ export async function checkSendSafety({ phone, scene = 'manual', provider = conf
     ? Boolean(settings['sms.safety']?.requireWhitelistForMock)
     : settings['sms.safety']?.requireWhitelistForRealProvider !== false;
 
+  const workerSettings = settings['sms.worker'] || {};
   const checks = {
     provider: { status: provider === 'mock' || config.aliyun.accessKeyId ? 'passed' : 'blocked' },
-    worker: { status: triggerType === 'auto' && !config.taskWorker.enabled ? 'warning' : 'passed' },
+    worker: { status: triggerType === 'auto' && !workerSettings.enabled ? 'warning' : 'passed' },
     whitelist: { status: 'skipped' },
     blacklist: { status: 'passed' },
     unsubscribe: { status: 'passed' },
@@ -518,6 +724,21 @@ async function routePublicAuth(req, url, readJson) {
     const email = String(body.email || '').trim().toLowerCase();
     const user = await prisma.adminUser.findUnique({ where: { email } });
     if (!user) return fail('USER_NOT_FOUND', '账号不存在。', 404);
+    const codeSettings = await getVerificationCodeSettings();
+    const resendAfter = new Date(Date.now() - Number(codeSettings.resendIntervalSeconds || 60) * 1000);
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
+    const [recentCode, dailyCount] = await Promise.all([
+      prisma.authVerificationCode.findFirst({
+        where: { email, purpose: 'reset_password', createdAt: { gte: resendAfter } },
+        orderBy: { createdAt: 'desc' }
+      }),
+      prisma.authVerificationCode.count({
+        where: { email, purpose: 'reset_password', createdAt: { gte: dayStart } }
+      })
+    ]);
+    if (recentCode) return fail('VERIFICATION_CODE_TOO_FREQUENT', '验证码发送过于频繁，请稍后再试。', 429);
+    if (dailyCount >= Number(codeSettings.dailyLimit || 10)) return fail('VERIFICATION_CODE_DAILY_LIMIT', '今日验证码发送次数已达上限。', 429);
     const code = String(Math.floor(100000 + Math.random() * 900000));
     await prisma.authVerificationCode.create({
       data: {
@@ -525,10 +746,10 @@ async function routePublicAuth(req, url, readJson) {
         email,
         codeHash: hashValue(code),
         purpose: 'reset_password',
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000)
+        expiresAt: new Date(Date.now() + Number(codeSettings.validMinutes || 5) * 60 * 1000)
       }
     });
-    return ok({ success: true, message: '验证码已生成。', devCode: config.smsProvider === 'mock' ? code : undefined });
+    return ok({ success: true, message: '验证码已生成。', devCode: await getSmsProviderName() === 'mock' ? code : undefined });
   }
 
   if (req.method === 'POST' && url.pathname === '/api/auth/forgot-password/verify-code') {
@@ -601,8 +822,9 @@ async function routeUsers(req, url, readJson, actor) {
       filters,
       query: {
         where: {
-          ...(filters.keyword ? { OR: [{ email: contains(filters.keyword) }, { name: contains(filters.keyword) }] } : {}),
-          ...(filters.status ? { status: filters.status } : {})
+          ...(filters.keyword ? { OR: [{ email: contains(filters.keyword) }, { name: contains(filters.keyword) }, { phone: contains(filters.keyword) }] } : {}),
+          ...(filters.status ? { status: filters.status } : {}),
+          ...dateRange(filters)
         },
         orderBy: { createdAt: 'desc' },
         include: { roles: { include: { role: true } } }
@@ -631,11 +853,15 @@ async function routeUsers(req, url, readJson, actor) {
   }
 
   const statusMatch = url.pathname.match(/^\/api\/users\/([^/]+)\/status$/);
-  if (req.method === 'PATCH' && statusMatch) {
+  if (req.method === 'POST' && statusMatch) {
     const body = await readJson(req);
-    const user = await prisma.adminUser.update({ where: { id: statusMatch[1] }, data: { status: body.status || 'active' } });
+    const user = await prisma.adminUser.update({
+      where: { id: statusMatch[1] },
+      data: { status: body.status || 'active' },
+      include: { roles: { include: { role: true } } }
+    });
     await writeOperationLog({ req, actor, action: 'change_status', resource: 'admin_user', resourceId: user.id, requestBody: body });
-    return ok({ success: true, item: user });
+    return ok({ success: true, item: safeUser(user) });
   }
 
   const resetMatch = url.pathname.match(/^\/api\/users\/([^/]+)\/reset-password$/);
@@ -654,21 +880,39 @@ async function routeUsers(req, url, readJson, actor) {
     return ok({ success: true, setupToken: token });
   }
 
+  const updateMatch = url.pathname.match(/^\/api\/users\/([^/]+)\/update$/);
+  if (req.method === 'POST' && updateMatch) {
+    const body = await readJson(req);
+    const roleIds = await resolveRoleIds(body);
+    if ((body.roleIds || body.roleCodes || body.roleCode) && (!roleIds || !roleIds.length)) {
+      return fail('ROLE_REQUIRED', '至少需要分配一个有效角色。');
+    }
+    await prisma.$transaction(async (tx) => {
+      await tx.adminUser.update({
+        where: { id: updateMatch[1] },
+        data: {
+          ...(body.name !== undefined ? { name: body.name } : {}),
+          ...(body.phone !== undefined ? { phone: body.phone ? normalizePhone(body.phone) : null } : {})
+        }
+      });
+      if (roleIds) {
+        await tx.adminUserRole.deleteMany({ where: { userId: updateMatch[1] } });
+        for (const roleId of roleIds) {
+          await tx.adminUserRole.create({ data: { id: createId(), userId: updateMatch[1], roleId } });
+        }
+      }
+    });
+    const user = await prisma.adminUser.findUnique({ where: { id: updateMatch[1] }, include: { roles: { include: { role: true } } } });
+    if (!user) return fail('USER_NOT_FOUND', '用户不存在。', 404);
+    await writeOperationLog({ req, actor, action: 'update', resource: 'admin_user', resourceId: user.id, requestBody: body });
+    return ok({ success: true, item: safeUser(user) });
+  }
+
   const userMatch = url.pathname.match(/^\/api\/users\/([^/]+)$/);
   if (req.method === 'GET' && userMatch) {
     const user = await prisma.adminUser.findUnique({ where: { id: userMatch[1] }, include: { roles: { include: { role: true } } } });
     if (!user) return fail('USER_NOT_FOUND', '用户不存在。', 404);
     return ok({ item: safeUser(user) });
-  }
-  if (req.method === 'PATCH' && userMatch) {
-    const body = await readJson(req);
-    const user = await prisma.adminUser.update({
-      where: { id: userMatch[1] },
-      data: { name: body.name, phone: body.phone ? normalizePhone(body.phone) : null },
-      include: { roles: { include: { role: true } } }
-    });
-    await writeOperationLog({ req, actor, action: 'update', resource: 'admin_user', resourceId: user.id, requestBody: body });
-    return ok({ success: true, item: safeUser(user) });
   }
 
   return null;
@@ -757,7 +1001,10 @@ async function routePhoneList(req, url, readJson, actor) {
         query: {
           where: {
             ...(filters.phone ? { phone: contains(filters.phone) } : {}),
-            ...(filters.status ? { status: filters.status } : {})
+            ...(filters.status ? { status: filters.status } : {}),
+            ...(filters.scene ? { scene: filters.scene } : {}),
+            ...(filters.source && item.path !== 'whitelist' ? { source: filters.source } : {}),
+            ...dateRange(filters)
           },
           orderBy: { createdAt: 'desc' }
         }
@@ -788,19 +1035,27 @@ async function routePhoneList(req, url, readJson, actor) {
   }
 
   const whitelistStatusMatch = url.pathname.match(/^\/api\/whitelist\/([^/]+)\/status$/);
-  if (req.method === 'PATCH' && whitelistStatusMatch) {
+  if (req.method === 'POST' && whitelistStatusMatch) {
     const body = await readJson(req);
     const updated = await prisma.smsWhitelist.update({ where: { id: whitelistStatusMatch[1] }, data: { status: body.status === 'disabled' ? 'disabled' : 'enabled' } });
     await writeOperationLog({ req, actor, action: 'change_status', resource: 'sms_whitelist', resourceId: updated.id, requestBody: body });
     return ok({ success: true, item: updated });
   }
 
-  const whitelistMatch = url.pathname.match(/^\/api\/whitelist\/([^/]+)$/);
-  if (req.method === 'PATCH' && whitelistMatch) {
+  const whitelistUpdateMatch = url.pathname.match(/^\/api\/whitelist\/([^/]+)\/update$/);
+  if (req.method === 'POST' && whitelistUpdateMatch) {
     const body = await readJson(req);
-    const updated = await prisma.smsWhitelist.update({ where: { id: whitelistMatch[1] }, data: { remark: body.remark || null, scene: body.scene || null } });
+    const updated = await prisma.smsWhitelist.update({ where: { id: whitelistUpdateMatch[1] }, data: { remark: body.remark || null, scene: body.scene || null } });
     await writeOperationLog({ req, actor, action: 'update', resource: 'sms_whitelist', resourceId: updated.id, requestBody: body });
     return ok({ success: true, item: updated });
+  }
+
+  const detailMatch = url.pathname.match(/^\/api\/(whitelist|blacklist|unsubscribes)\/([^/]+)$/);
+  if (req.method === 'GET' && detailMatch) {
+    const resource = resources.find((entry) => entry.path === detailMatch[1]);
+    const detail = await resource.model.findUnique({ where: { id: detailMatch[2] } });
+    if (!detail) return fail('PHONE_LIST_ITEM_NOT_FOUND', '号码记录不存在。', 404);
+    return ok({ item: detail });
   }
 
   const removeBlacklistMatch = url.pathname.match(/^\/api\/blacklist\/([^/]+)\/remove$/);
@@ -867,16 +1122,42 @@ async function routePhoneList(req, url, readJson, actor) {
 
 async function routeSettings(req, url, readJson, actor) {
   if (req.method === 'GET' && url.pathname === '/api/settings') return ok({ settings: await getSettingsObject() });
-  if (req.method === 'PATCH' && url.pathname === '/api/settings') {
+  if (req.method === 'POST' && url.pathname === '/api/settings/update') {
     const body = await readJson(req);
-    const rows = settingRowsFromObject(body.settings || body);
-    for (const row of rows) {
-      await prisma.systemSetting.upsert({
-        where: { key: row.key },
-        create: { id: createId(), key: row.key, value: row.value },
-        update: { value: row.value }
+    const nextSettings = body.settings || body;
+    const currentSettings = await getSettingsObject();
+    if (!body.approvalId && isHighRiskSettingsChange(currentSettings, nextSettings)) {
+      const approval = await createApproval({
+        req,
+        actor,
+        title: '高风险发送控制变更',
+        resource: 'system_setting',
+        action: 'update',
+        payload: {
+          scenario: '配置变更',
+          reason: body.reason || 'Provider、worker 或白名单保护策略变更',
+          riskLevel: 'high',
+          before: {
+            provider: currentSettings['sms.provider'],
+            safety: currentSettings['sms.safety'],
+            worker: currentSettings['sms.worker']
+          },
+          after: {
+            provider: nextSettings['sms.provider'],
+            safety: nextSettings['sms.safety'],
+            worker: nextSettings['sms.worker']
+          },
+          impact: {
+            title: '真实发送安全策略',
+            description: '审批通过后才会写入发送控制。'
+          },
+          execute: { type: 'update_system_settings', settings: nextSettings }
+        },
+        comment: body.reason || null
       });
+      return ok({ success: true, approvalRequired: true, approval }, 202);
     }
+    await applySystemSettings(nextSettings);
     await writeOperationLog({ req, actor, action: 'update', resource: 'system_setting', requestBody: body });
     return ok({ success: true, settings: await getSettingsObject() });
   }
@@ -888,7 +1169,15 @@ async function routeEventSources(req, url, readJson, actor) {
     const filters = Object.fromEntries(url.searchParams.entries());
     return ok(await listWithCount(prisma.eventSource, {
       filters,
-      query: { where: filters.status ? { status: filters.status } : {}, orderBy: { createdAt: 'desc' } }
+      query: {
+        where: {
+          ...(filters.status ? { status: filters.status } : {}),
+          ...(filters.appId ? { appId: contains(filters.appId) } : {}),
+          ...(filters.keyword ? { OR: [{ name: contains(filters.keyword) }, { appId: contains(filters.keyword) }] } : {}),
+          ...dateRange(filters)
+        },
+        orderBy: { createdAt: 'desc' }
+      }
     }, (item) => ({ ...item, secretHash: undefined })));
   }
   if (req.method === 'POST' && url.pathname === '/api/event-sources') {
@@ -910,7 +1199,7 @@ async function routeEventSources(req, url, readJson, actor) {
     return ok({ success: true, item: { ...item, secretHash: undefined }, secret }, 201);
   }
   const statusMatch = url.pathname.match(/^\/api\/event-sources\/([^/]+)\/status$/);
-  if (req.method === 'PATCH' && statusMatch) {
+  if (req.method === 'POST' && statusMatch) {
     const body = await readJson(req);
     const item = await prisma.eventSource.update({ where: { id: statusMatch[1] }, data: { status: body.status === 'disabled' ? 'disabled' : 'enabled' } });
     await writeOperationLog({ req, actor, action: 'change_status', resource: 'event_source', resourceId: item.id, requestBody: body });
@@ -926,12 +1215,18 @@ async function routeEventSources(req, url, readJson, actor) {
     await writeOperationLog({ req, actor, action: 'reset_secret', resource: 'event_source', resourceId: item.id });
     return ok({ success: true, item: { ...item, secretHash: undefined }, secret });
   }
-  const sourceMatch = url.pathname.match(/^\/api\/event-sources\/([^/]+)$/);
-  if (req.method === 'PATCH' && sourceMatch) {
+  const sourceUpdateMatch = url.pathname.match(/^\/api\/event-sources\/([^/]+)\/update$/);
+  if (req.method === 'POST' && sourceUpdateMatch) {
     const body = await readJson(req);
-    const item = await prisma.eventSource.update({ where: { id: sourceMatch[1] }, data: { name: body.name, remark: body.remark || null } });
+    const item = await prisma.eventSource.update({ where: { id: sourceUpdateMatch[1] }, data: { name: body.name, remark: body.remark || null } });
     await writeOperationLog({ req, actor, action: 'update', resource: 'event_source', resourceId: item.id, requestBody: body });
     return ok({ success: true, item: { ...item, secretHash: undefined } });
+  }
+  const sourceMatch = url.pathname.match(/^\/api\/event-sources\/([^/]+)$/);
+  if (req.method === 'GET' && sourceMatch) {
+    const item = await prisma.eventSource.findUnique({ where: { id: sourceMatch[1] } });
+    if (!item) return fail('EVENT_SOURCE_NOT_FOUND', '事件来源不存在。', 404);
+    return ok({ item: { ...item, secretHash: undefined } });
   }
   return null;
 }
@@ -944,7 +1239,11 @@ async function routeAudit(req, url) {
       query: {
         where: {
           ...(filters.appId ? { appId: filters.appId } : {}),
-          ...(filters.status ? { status: filters.status } : {})
+          ...(filters.status ? { status: filters.status } : {}),
+          ...(filters.eventId ? { eventId: contains(filters.eventId) } : {}),
+          ...(filters.eventType ? { eventType: filters.eventType } : {}),
+          ...(filters.code ? { code: filters.code } : {}),
+          ...dateRange(filters)
         },
         orderBy: { createdAt: 'desc' }
       }
@@ -963,7 +1262,12 @@ async function routeAudit(req, url) {
       query: {
         where: {
           ...(filters.resource ? { resource: filters.resource } : {}),
-          ...(filters.action ? { action: filters.action } : {})
+          ...(filters.action ? { action: filters.action } : {}),
+          ...(filters.userId ? { userId: filters.userId } : {}),
+          ...(filters.userName ? { userName: contains(filters.userName) } : {}),
+          ...(filters.result ? { result: filters.result } : {}),
+          ...(filters.keyword ? { OR: [{ userName: contains(filters.keyword) }, { resource: contains(filters.keyword) }, { action: contains(filters.keyword) }, { path: contains(filters.keyword) }] } : {}),
+          ...dateRange(filters)
         },
         orderBy: { createdAt: 'desc' }
       }
@@ -979,14 +1283,113 @@ async function routeAudit(req, url) {
 }
 
 async function routeAuxiliary(req, url, readJson, actor) {
+  if (req.method === 'POST' && (url.pathname === '/api/tasks/batch-cancel' || url.pathname === '/api/tasks/batch-retry')) {
+    const body = await readJson(req);
+    const isCancel = url.pathname.endsWith('batch-cancel');
+    const targetStatus = isCancel ? 'pending' : 'failed';
+    const ids = Array.isArray(body.taskIds) ? body.taskIds : [];
+    const store = await readStore();
+    const candidates = store.tasks.filter((task) => (
+      ids.length ? ids.includes(task.id) : task.status === targetStatus
+    ));
+    const limited = candidates.slice(0, Math.min(Math.max(Number(body.limit) || 50, 1), 200));
+    const resultItems = [];
+    await mutateStore((current) => {
+      for (const task of limited) {
+        const currentTask = current.tasks.find((item) => item.id === task.id);
+        if (!currentTask) continue;
+        if (isCancel && currentTask.status !== 'pending') {
+          resultItems.push({ target: task.id, status: 'failed', message: `任务状态为 ${currentTask.status}，不可取消。` });
+          continue;
+        }
+        if (!isCancel && currentTask.status !== 'failed') {
+          resultItems.push({ target: task.id, status: 'failed', message: `任务状态为 ${currentTask.status}，不可重试。` });
+          continue;
+        }
+        if (isCancel) {
+          currentTask.status = 'cancelled';
+          currentTask.lastErrorCode = undefined;
+          currentTask.lastErrorMessage = undefined;
+        } else {
+          currentTask.status = 'pending';
+          currentTask.lastErrorCode = undefined;
+          currentTask.lastErrorMessage = undefined;
+          currentTask.scheduledAt = now();
+        }
+        currentTask.updatedAt = now();
+        resultItems.push({ target: task.id, status: 'success', message: isCancel ? '已取消' : '已重新进入待执行队列' });
+      }
+    });
+    const successCount = resultItems.filter((item) => item.status === 'success').length;
+    const job = await prisma.batchJob.create({
+      data: {
+        id: createId(),
+        name: isCancel ? '批量取消待发送任务' : '批量重试失败任务',
+        jobType: isCancel ? 'task_cancel' : 'task_retry',
+        status: resultItems.some((item) => item.status === 'failed') ? 'partial_failed' : 'completed',
+        totalCount: resultItems.length,
+        successCount,
+        failedCount: resultItems.length - successCount,
+        createdById: actor.id,
+        items: {
+          create: resultItems.map((item) => ({
+            id: createId(),
+            target: item.target,
+            status: item.status,
+            message: item.message
+          }))
+        }
+      },
+      include: { items: true }
+    });
+    await writeOperationLog({ req, actor, action: isCancel ? 'batch_cancel' : 'batch_retry', resource: 'sms_task', resourceId: job.id, requestBody: { taskIds: ids, count: resultItems.length } });
+    return ok({ success: true, job });
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/export-tasks') {
+    const filters = Object.fromEntries(url.searchParams.entries());
     return ok(await listWithCount(prisma.exportTask, {
-      filters: Object.fromEntries(url.searchParams.entries()),
-      query: { orderBy: { createdAt: 'desc' } }
+      filters,
+      query: {
+        where: {
+          ...(filters.resource ? { resource: filters.resource } : {}),
+          ...(filters.status ? { status: filters.status } : {}),
+          ...(filters.createdById ? { createdById: filters.createdById } : {}),
+          ...(filters.keyword ? { OR: [{ name: contains(filters.keyword) }, { resource: contains(filters.keyword) }, { fileName: contains(filters.keyword) }] } : {}),
+          ...dateRange(filters)
+        },
+        orderBy: { createdAt: 'desc' }
+      }
     }));
   }
   if (req.method === 'POST' && url.pathname === '/api/export-tasks') {
     const body = await readJson(req);
+    if (body.sensitive === true || body.maskSensitive === false) {
+      const approval = await createApproval({
+        req,
+        actor,
+        title: `明文${body.name || body.resource || '数据'}导出审批`,
+        resource: 'export_task',
+        action: 'create',
+        payload: {
+          scenario: '明文数据导出',
+          reason: body.reason || '导出包含敏感字段，需要审批后生成文件。',
+          riskLevel: 'high',
+          impact: {
+            title: body.resource || 'data',
+            description: '审批通过后创建导出任务，文件默认 7 天有效。'
+          },
+          execute: {
+            type: 'create_export_task',
+            name: body.name,
+            resource: body.resource,
+            criteria: { ...(body.criteria || {}), sensitive: true }
+          }
+        },
+        comment: body.reason || null
+      });
+      return ok({ success: true, approvalRequired: true, approval }, 202);
+    }
     const task = await prisma.exportTask.create({
       data: {
         id: createId(),
@@ -1006,12 +1409,28 @@ async function routeAuxiliary(req, url, readJson, actor) {
   if (req.method === 'GET' && downloadMatch) {
     const task = await prisma.exportTask.findUnique({ where: { id: downloadMatch[1] } });
     if (!task) return fail('EXPORT_TASK_NOT_FOUND', '导出任务不存在。', 404);
-    return ok({ fileName: task.fileName, resource: task.resource, criteria: task.criteria || {}, generatedAt: new Date().toISOString() });
+    return ok({ fileName: task.fileName, resource: task.resource, criteria: task.criteria || {}, generatedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() });
+  }
+  const exportTaskMatch = url.pathname.match(/^\/api\/export-tasks\/([^/]+)$/);
+  if (req.method === 'GET' && exportTaskMatch) {
+    const item = await prisma.exportTask.findUnique({ where: { id: exportTaskMatch[1] } });
+    if (!item) return fail('EXPORT_TASK_NOT_FOUND', '导出任务不存在。', 404);
+    return ok({ item });
   }
   if (req.method === 'GET' && url.pathname === '/api/batch-jobs') {
+    const filters = Object.fromEntries(url.searchParams.entries());
     return ok(await listWithCount(prisma.batchJob, {
-      filters: Object.fromEntries(url.searchParams.entries()),
-      query: { orderBy: { createdAt: 'desc' } }
+      filters,
+      query: {
+        where: {
+          ...(filters.jobType ? { jobType: filters.jobType } : {}),
+          ...(filters.status ? { status: filters.status } : {}),
+          ...(filters.createdById ? { createdById: filters.createdById } : {}),
+          ...(filters.keyword ? { OR: [{ name: contains(filters.keyword) }, { jobType: contains(filters.keyword) }] } : {}),
+          ...dateRange(filters)
+        },
+        orderBy: { createdAt: 'desc' }
+      }
     }));
   }
   const batchMatch = url.pathname.match(/^\/api\/batch-jobs\/([^/]+)$/);
@@ -1021,38 +1440,66 @@ async function routeAuxiliary(req, url, readJson, actor) {
     return ok({ item });
   }
   if (req.method === 'GET' && url.pathname === '/api/approvals') {
+    const filters = Object.fromEntries(url.searchParams.entries());
     return ok(await listWithCount(prisma.approvalOrder, {
-      filters: Object.fromEntries(url.searchParams.entries()),
-      query: { orderBy: { createdAt: 'desc' } }
+      filters,
+      query: {
+        where: {
+          ...(filters.resource ? { resource: filters.resource } : {}),
+          ...(filters.status ? { status: filters.status } : {}),
+          ...(filters.action ? { action: filters.action } : {}),
+          ...(filters.createdById ? { createdById: filters.createdById } : {}),
+          ...(filters.keyword ? { OR: [{ title: contains(filters.keyword) }, { resource: contains(filters.keyword) }, { action: contains(filters.keyword) }] } : {}),
+          ...dateRange(filters)
+        },
+        orderBy: { createdAt: 'desc' },
+        include: { records: true }
+      }
     }));
   }
   if (req.method === 'POST' && url.pathname === '/api/approvals') {
     const body = await readJson(req);
-    const item = await prisma.approvalOrder.create({
-      data: {
-        id: createId(),
-        title: body.title || '高风险操作审批',
-        resource: body.resource || 'manual',
-        resourceId: body.resourceId || null,
-        action: body.action || 'approve_required',
-        payload: body.payload || {},
-        createdById: actor.id,
-        records: { create: { id: createId(), action: 'create', operatorId: actor.id, comment: body.comment || null } }
-      }
+    const item = await createApproval({
+      req,
+      actor,
+      title: body.title || '高风险操作审批',
+      resource: body.resource || 'manual',
+      resourceId: body.resourceId || null,
+      action: body.action || 'approve_required',
+      payload: body.payload || {},
+      comment: body.comment || null
     });
-    await writeOperationLog({ req, actor, action: 'create', resource: 'approval_order', resourceId: item.id, requestBody: body });
     return ok({ success: true, item }, 201);
   }
   const approvalActionMatch = url.pathname.match(/^\/api\/approvals\/([^/]+)\/(approve|reject|withdraw)$/);
   if (req.method === 'POST' && approvalActionMatch) {
     const body = await readJson(req);
     const statusMap = { approve: 'approved', reject: 'rejected', withdraw: 'withdrawn' };
+    const current = await prisma.approvalOrder.findUnique({ where: { id: approvalActionMatch[1] }, include: { records: true } });
+    if (!current) return fail('APPROVAL_NOT_FOUND', '审批单不存在。', 404);
+    if (current.status !== 'pending') return fail('APPROVAL_STATUS_INVALID', '审批单已处理，不能重复操作。', 409);
+    let executeResult = null;
+    if (approvalActionMatch[2] === 'approve') {
+      try {
+        executeResult = await executeApproval(current);
+      } catch (error) {
+        await prisma.approvalOrder.update({
+          where: { id: current.id },
+          data: {
+            records: { create: { id: createId(), action: 'execute_failed', operatorId: actor.id, comment: error.message } }
+          }
+        });
+        return fail('APPROVAL_EXECUTE_FAILED', error.message || '审批通过后的业务动作执行失败。', 409);
+      }
+    }
     const item = await prisma.approvalOrder.update({
-      where: { id: approvalActionMatch[1] },
+      where: { id: current.id },
       data: {
         status: statusMap[approvalActionMatch[2]],
+        payload: executeResult ? { ...(current.payload || {}), executeResult } : current.payload,
         records: { create: { id: createId(), action: approvalActionMatch[2], operatorId: actor.id, comment: body.comment || null } }
-      }
+      },
+      include: { records: true }
     });
     await writeOperationLog({ req, actor, action: approvalActionMatch[2], resource: 'approval_order', resourceId: item.id, requestBody: body });
     return ok({ success: true, item });
@@ -1084,6 +1531,7 @@ export async function handleGovernanceApi(req, url, readJson) {
     '/api/export-tasks',
     '/api/batch-jobs',
     '/api/approvals',
+    '/api/tasks/batch-',
     '/api/safety'
   ];
   if (!governancePaths.some((prefix) => url.pathname.startsWith(prefix))) return { handled: false };
@@ -1127,6 +1575,7 @@ function permissionFor(req, url) {
   if (url.pathname.startsWith('/api/operation-logs')) return 'operation_log.read';
   if (url.pathname.startsWith('/api/export-tasks')) return req.method === 'GET' ? 'export.read' : 'export.manage';
   if (url.pathname.startsWith('/api/batch-jobs')) return 'batch.read';
+  if (url.pathname.startsWith('/api/tasks/batch-')) return 'task.manage';
   if (url.pathname.startsWith('/api/approvals')) return req.method === 'GET' ? 'approval.read' : 'approval.manage';
   if (url.pathname.startsWith('/api/safety')) return 'manual_send.manage';
   return undefined;

@@ -66,7 +66,36 @@
 | 发送记录详情 | `/send-logs/:id` | 展示请求、响应、回执、短链和点击 |
 | 统计分析 | `/stats` | 趋势、维度、漏斗 |
 
-全栈 A 不直接负责登录页、用户管理、白名单、黑名单、退订、系统配置、操作日志、事件来源管理页面。需要跳转或展示相关结果时，通过全栈 B 提供的接口和组件使用。
+全栈 A 不直接负责登录页、用户管理、白名单、黑名单、退订、发送控制、操作日志、事件来源管理页面。需要跳转或展示相关结果时，通过全栈 B 提供的接口和组件使用。
+
+### 3.2.1 任务中心交互要求
+
+任务中心由全栈 A 负责实现，不作为全栈 B 的后续任务。该页面需要让用户第一眼看到“哪里有任务、每条任务是什么状态、不同状态能做什么”。
+
+页面操作：
+
+| 操作 | 说明 | 全栈归属 |
+| --- | --- | --- |
+| 执行到期任务 | 扫描并执行 `pending` 且已到计划时间的任务 | A |
+| 批量取消 | 对当前筛选结果中的 `pending` 任务生成批量取消动作 | A 发起，B 记录批次和审计 |
+| 批量重试 | 对当前筛选结果中的 `failed` 任务生成批量重试动作 | A 发起，B 记录批次和审计 |
+| 单条取消 | `pending` 任务行展示取消按钮 | A |
+| 单条重试 | `failed` 且未超过最大重试次数的任务行展示重试按钮 | A |
+| 查看原因 | `blocked/skipped/failed` 任务展示可读原因和详情入口 | A |
+
+状态与按钮：
+
+| 状态 | 行级按钮 |
+| --- | --- |
+| `pending` | 取消、详情 |
+| `sending` | 详情 |
+| `success` | 详情、发送记录 |
+| `failed` | 重试、详情 |
+| `blocked` | 查看原因、详情 |
+| `skipped` | 查看原因、详情 |
+| `cancelled` | 详情 |
+
+B 的边界是提供权限、批量任务记录、操作日志、白名单/黑名单/退订/频控等治理结果；A 负责任务列表、任务详情、状态解释、单条操作和执行链路。
 
 ### 3.3 后端接口边界
 
@@ -151,7 +180,7 @@ A 修改这些表结构前，需要检查是否影响 B 的统计、导出、操
 | 白名单管理 | 查询、添加、启停、导出 | 控制真实发送范围 |
 | 黑名单与退订 | 黑名单、退订记录 | 触达拦截 |
 | 发送频控 | 日频控、周频控、场景冷却、安静时段 | 防骚扰 |
-| 系统配置 | Provider、worker、短链、验证码、频控、事件来源 | 管理运行级配置 |
+| 发送控制 | Provider、worker、短链、验证码、频控、事件来源 | 管理短信发送的通道、开关和安全保护 |
 | 事件来源 | appId、secret、启停、重置密钥 | 管理业务系统接入 |
 | 事件接入日志 | 查询、详情 | 排查上报问题 |
 | 操作日志 | 查询、详情、导出 | 审计关键操作 |
@@ -169,14 +198,14 @@ A 修改这些表结构前，需要检查是否影响 B 的统计、导出、操
 | 注册申请页 | `/register/apply` | 用户提交账号申请和密码 |
 | 忘记密码页 | `/forgot-password` | 验证码校验并重置密码 |
 | 设置密码页 | `/set-password` | 管理员创建账号或重置密码后设置密码 |
-| 用户列表 | `/users` | 查询、新建、编辑、启停、解锁、重置密码 |
-| 用户详情 | `/users/:id` | 用户信息、角色、状态、登录记录 |
+| 用户列表 | `/users` | 查询、新建、编辑、启停、解锁、重置密码，并内联查看角色详情 |
+| 用户详情 | `/users/:id` | 用户信息、角色、权限说明、状态、登录记录 |
 | 注册申请审核 | `/users/register-requests` | 审核通过、驳回、分配角色 |
-| 角色详情 | `/roles` 或 `/roles/:id` | 展示管理员、运营、只读内置权限说明 |
+| 内置角色详情 | 用户管理内联弹窗或用户详情内联区域 | 展示管理员、运营、只读内置权限说明，不单独设置菜单 |
 | 白名单管理 | `/settings/whitelist` | 查询、添加、启停、导出 |
 | 黑名单管理 | `/blacklist` | 查询、添加、移除、导入 |
 | 退订管理 | `/unsubscribes` | 查询、新增、导入、详情 |
-| 系统配置 | `/settings` | Provider、worker、短链、验证码、频控 |
+| 发送控制 | `/settings` | Provider、worker、短链、验证码、频控 |
 | 事件来源管理 | `/settings/event-sources` | appId、secret、启停、重置密钥 |
 | 事件接入日志 | `/settings/event-source-logs` | 查询和详情 |
 | 操作日志 | `/operation-logs` | 查询、详情、导出 |
@@ -207,30 +236,37 @@ B 不直接负责模板、规则、任务、发送记录、统计的业务页面
 | `/api/auth/change-password` | POST | 登录后改密 |
 | `/api/auth/me` | GET | 当前用户和权限 |
 | `/api/users` | GET/POST | 用户列表和创建账号 |
-| `/api/users/{id}` | GET/PATCH | 用户详情和编辑 |
-| `/api/users/{id}/status` | PATCH | 启用、禁用、锁定、解锁 |
+| `/api/users/{id}` | GET | 用户详情 |
+| `/api/users/{id}/update` | POST | 编辑用户信息和角色 |
+| `/api/users/{id}/status` | POST | 启用、禁用、锁定、解锁 |
 | `/api/users/{id}/reset-password` | POST | 管理员重置密码 |
 | `/api/roles` | GET | 内置角色列表 |
 | `/api/roles/{id}` | GET | 角色详情 |
 | `/api/whitelist` | GET/POST | 查询和添加白名单 |
-| `/api/whitelist/{id}` | PATCH | 编辑白名单备注 |
-| `/api/whitelist/{id}/status` | PATCH | 启停白名单 |
+| `/api/whitelist/{id}` | GET | 白名单详情 |
+| `/api/whitelist/{id}/update` | POST | 编辑白名单备注 |
+| `/api/whitelist/{id}/status` | POST | 启停白名单 |
 | `/api/whitelist/export` | POST | 导出白名单 |
 | `/api/blacklist` | GET/POST | 查询和添加黑名单 |
+| `/api/blacklist/{id}` | GET | 黑名单详情 |
 | `/api/blacklist/import` | POST | 批量导入黑名单 |
 | `/api/blacklist/{id}/remove` | POST | 移除黑名单 |
 | `/api/unsubscribes` | GET/POST | 查询和新增退订 |
+| `/api/unsubscribes/{id}` | GET | 退订详情 |
 | `/api/unsubscribes/import` | POST | 批量导入退订 |
-| `/api/settings` | GET/PATCH | 查询和修改系统配置 |
+| `/api/settings` | GET | 查询系统配置 |
+| `/api/settings/update` | POST | 修改系统配置 |
 | `/api/event-sources` | GET/POST | 查询和创建事件来源 |
-| `/api/event-sources/{id}` | PATCH | 编辑事件来源 |
-| `/api/event-sources/{id}/status` | PATCH | 启停事件来源 |
+| `/api/event-sources/{id}` | GET | 事件来源详情 |
+| `/api/event-sources/{id}/update` | POST | 编辑事件来源 |
+| `/api/event-sources/{id}/status` | POST | 启停事件来源 |
 | `/api/event-sources/{id}/reset-secret` | POST | 重置密钥 |
 | `/api/event-source-logs` | GET | 查询事件接入日志 |
 | `/api/event-source-logs/{id}` | GET | 事件接入日志详情 |
 | `/api/operation-logs` | GET | 查询操作日志 |
 | `/api/operation-logs/{id}` | GET | 操作日志详情 |
 | `/api/export-tasks` | GET/POST | 查询和创建导出任务 |
+| `/api/export-tasks/{id}` | GET | 导出任务详情 |
 | `/api/export-tasks/{id}/download` | GET | 下载导出文件 |
 | `/api/batch-jobs` | GET | 查询批量任务 |
 | `/api/batch-jobs/{id}` | GET | 批量任务详情 |
@@ -369,7 +405,7 @@ V1.0 只支持固定角色，不做自定义角色和权限树配置。
 | 区域 | 规则 |
 | --- | --- |
 | A 主责页面 | B 不直接改模板、规则、任务、发送记录、统计页面，除非只接入权限组件且提前同步 |
-| B 主责页面 | A 不直接改登录、用户、权限、白名单、黑名单、系统配置、日志页面 |
+| B 主责页面 | A 不直接改登录、用户、权限、白名单、黑名单、发送控制、日志页面 |
 | A 主责接口 | B 不直接改模板、规则、任务、发送记录、统计接口业务逻辑 |
 | B 主责接口 | A 不直接改鉴权、用户、白名单、黑名单、频控、配置、日志接口业务逻辑 |
 | 共享 helper | 改动前必须同步，尤其是权限、手机号、安全校验、操作日志 |
@@ -421,7 +457,7 @@ V1.0 只支持固定角色，不做自定义角色和权限树配置。
 | 模板 CRUD | 登录/退出 |
 | 规则 CRUD | 用户管理 |
 | 事件流水 | 固定角色权限 |
-| 任务模型 | 系统配置基础 |
+| 任务模型 | 发送控制基础 |
 | mock Provider | 白名单基础 |
 
 ### 8.3 第 2 阶段：主链路跑通
@@ -497,7 +533,7 @@ V1.0 只支持固定角色，不做自定义角色和权限树配置。
 
 全栈 B 的边界：
 
-> 负责治理和安全链路。登录、用户、权限、白名单、黑名单、退订、频控、系统配置、日志、导出、审批都归 B。
+> 负责治理和安全链路。登录、用户、权限、白名单、黑名单、退订、频控、发送控制、日志、导出、审批都归 B。
 
 两人交汇点：
 

@@ -26,6 +26,7 @@ import {
 } from './modules/sms/sms.service.js';
 import { createTaskWorker } from './modules/sms/sms.worker.js';
 import {
+  getSmsProviderName,
   handleGovernanceApi,
   recordEventSourceLog,
   verifyEventSourceRequest
@@ -106,7 +107,7 @@ async function handleApi(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/health') {
     sendJson(res, 200, {
       status: 'ok',
-      provider: config.smsProvider,
+      provider: await getSmsProviderName(),
       whitelistCount: config.whitelist.length,
       taskWorker
     });

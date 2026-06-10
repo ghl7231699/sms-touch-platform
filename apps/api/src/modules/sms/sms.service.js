@@ -5,7 +5,7 @@ import { evaluateTaskCondition } from './sms.condition-evaluator.js';
 import { createSmsProvider } from './providers/index.js';
 import { mutateStore, readStore } from './sms.repository.js';
 import { SMS_STATUS, TASK_STATUS } from './sms.types.js';
-import { checkSendSafety } from '../governance/governance.service.js';
+import { checkSendSafety, getShortLinkSettings, getSmsProviderName } from '../governance/governance.service.js';
 
 const PHONE_PATTERN = /^1\d{10}$/;
 const EVENT_TYPES = ['user_register', 'membership_expired', 'campaign_start', 'order_completed'];
@@ -113,8 +113,9 @@ function createTaskPayload({ phone, template, rule, event, triggerType, taskType
 }
 
 async function persistSendLog({ phone, template, rule, event, triggerType, scene, status, result, templateParam, message }) {
+  const shortLinkSettings = await getShortLinkSettings();
   const shortCode = status === SMS_STATUS.SUCCESS ? createShortCode() : undefined;
-  const shortUrl = shortCode ? `${config.shortLinkBaseUrl}/s/${shortCode}` : undefined;
+  const shortUrl = shortCode ? `${shortLinkSettings.baseUrl || config.shortLinkBaseUrl}/s/${shortCode}` : undefined;
   const log = {
     id: createId(),
     provider: result?.provider || config.smsProvider,
@@ -148,7 +149,7 @@ async function persistSendLog({ phone, template, rule, event, triggerType, scene
         id: createId(),
         shortCode,
         shortUrl,
-        targetUrl: config.shortLinkDefaultTarget,
+        targetUrl: shortLinkSettings.targetUrl || config.shortLinkDefaultTarget,
         logId: log.id,
         userId: event?.userId || '',
         phoneMasked: log.phoneMasked,
@@ -166,10 +167,11 @@ async function sendWithProvider({ phone, template, rule, event, triggerType, tem
   const invalid = validatePhone(phone);
   if (invalid) return invalid;
 
+  const providerName = await getSmsProviderName();
   const safety = await checkSendSafety({
     phone,
     scene: template?.scene || rule?.scene || 'manual',
-    provider: config.smsProvider,
+    provider: providerName,
     triggerType
   });
 
@@ -187,7 +189,7 @@ async function sendWithProvider({ phone, template, rule, event, triggerType, tem
       templateParam,
       status: SMS_STATUS.BLOCKED,
       result: {
-        provider: config.smsProvider,
+        provider: providerName,
         code: blockedReason.code,
         message: blockedReason.message,
         raw: safety
@@ -197,7 +199,7 @@ async function sendWithProvider({ phone, template, rule, event, triggerType, tem
   }
 
   try {
-    const provider = createSmsProvider();
+    const provider = createSmsProvider(providerName);
     const result = await provider.sendVerifyCode({
       phone,
       templateCode: template?.providerTemplateId || config.aliyun.templateCode,
@@ -224,7 +226,7 @@ async function sendWithProvider({ phone, template, rule, event, triggerType, tem
       templateParam,
       status: SMS_STATUS.FAILED,
       result: {
-        provider: config.smsProvider,
+        provider: providerName,
         code: error.code || 'SMS_SEND_FAILED',
         message: error.message || 'SMS provider failed.'
       }

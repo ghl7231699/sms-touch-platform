@@ -1,4 +1,4 @@
-export type Status = 'enabled' | 'disabled' | 'pending' | 'sending' | 'success' | 'failed' | 'blocked' | 'skipped' | 'cancelled';
+export type Status = 'enabled' | 'disabled' | 'pending' | 'sending' | 'success' | 'failed' | 'blocked' | 'skipped' | 'cancelled' | 'partial_failed';
 
 export interface Template {
   id: string;
@@ -184,6 +184,7 @@ export interface ExportTaskItem {
   resource: string;
   status: string;
   fileName?: string;
+  criteria?: Record<string, unknown>;
   createdAt: string;
 }
 
@@ -195,6 +196,7 @@ export interface BatchJobItem {
   totalCount: number;
   successCount: number;
   failedCount: number;
+  items?: { id: string; target: string; status: string; message?: string }[];
   createdAt: string;
 }
 
@@ -202,8 +204,26 @@ export interface ApprovalItem {
   id: string;
   title: string;
   resource: string;
+  resourceId?: string;
   action: string;
   status: string;
+  payload?: {
+    scenario?: string;
+    reason?: string;
+    riskLevel?: string;
+    before?: unknown;
+    after?: unknown;
+    impact?: { title?: string; description?: string; count?: number };
+    summary?: {
+      scenario?: string;
+      reason?: string;
+      riskLevel?: string;
+      impact?: { title?: string; description?: string; count?: number };
+    };
+    execute?: { type?: string; [key: string]: unknown };
+    executeResult?: unknown;
+  };
+  records?: { id: string; action: string; comment?: string; operatorId?: string; createdAt: string }[];
   createdAt: string;
 }
 
@@ -216,7 +236,6 @@ export type View =
   | 'tasks'
   | 'logs'
   | 'users'
-  | 'roles'
   | 'whitelist'
   | 'blacklist'
   | 'unsubscribes'

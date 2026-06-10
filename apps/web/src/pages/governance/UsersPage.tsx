@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Users } from 'lucide-react';
+import { ShieldCheck, Users } from 'lucide-react';
 import { api } from '../../lib/api';
 import type { AdminUser, RoleItem } from '../../types';
 import { Modal } from '../../components/Modal';
@@ -11,7 +11,9 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
   const [roles, setRoles] = useState<RoleItem[]>([]);
   const [form, setForm] = useState({ email: '', name: '', roleCode: 'operator' });
   const [modalOpen, setModalOpen] = useState(false);
+  const [activeRole, setActiveRole] = useState<RoleItem | null>(null);
   const roleOptions = roles.map((role) => ({ value: role.code, label: role.name }));
+  const roleMap = new Map(roles.map((role) => [role.code, role]));
 
   async function load() {
     const [userData, roleData] = await Promise.all([
@@ -61,7 +63,24 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
               {users.map((user) => (
                 <tr key={user.id}>
                   <td><strong>{user.name}</strong><span>{user.email}</span></td>
-                  <td>{user.roles.map((role) => role.name).join(' / ')}</td>
+                  <td>
+                    <div className="inlineActions">
+                      {user.roles.map((role) => {
+                        const roleDetail = roleMap.get(role.code);
+                        return (
+                          <button
+                            className="tableButton compact"
+                            type="button"
+                            key={role.code}
+                            onClick={() => roleDetail && setActiveRole(roleDetail)}
+                            disabled={!roleDetail}
+                          >
+                            {role.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </td>
                   <td><StatusBadge status={user.status === 'active' ? 'enabled' : 'disabled'} /></td>
                   <td>{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : '-'}</td>
                   <td><button className="tableButton" onClick={() => changeStatus(user)}>{user.status === 'active' ? '禁用' : '启用'}</button></td>
@@ -83,6 +102,40 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
             <button className="primaryButton compact" type="submit"><Users size={16} />创建用户</button>
           </div>
         </form>
+      </Modal>
+      <Modal
+        open={Boolean(activeRole)}
+        title={activeRole?.name || '角色详情'}
+        subtitle={activeRole ? `${activeRole.code} · 内置固定角色` : undefined}
+        onClose={() => setActiveRole(null)}
+      >
+        {activeRole && (
+          <div className="formPanel">
+            <div className="detailCard">
+              <div>
+                <span>角色状态</span>
+                <StatusBadge status={activeRole.status === 'active' ? 'enabled' : 'disabled'} />
+              </div>
+              <div>
+                <span>角色说明</span>
+                <strong>{activeRole.description || '系统内置角色'}</strong>
+              </div>
+            </div>
+            <div className="fieldBlock">
+              <span>权限范围</span>
+              <div className="chips">
+                {activeRole.permissions.map((permission) => (
+                  <span key={permission}>{permission}</span>
+                ))}
+              </div>
+            </div>
+            <div className="modalActions">
+              <button className="secondaryButton compact" type="button" onClick={() => setActiveRole(null)}>
+                <ShieldCheck size={16} />关闭
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
     </section>
   );
