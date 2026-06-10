@@ -1,34 +1,52 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Download, FileUp, Search, ShieldCheck } from 'lucide-react';
+import { Download, FileUp, ShieldCheck } from 'lucide-react';
 import { api } from '../../lib/api';
 import { statusLabel } from '../../constants/labels';
 import type { PhoneGovernanceItem } from '../../types';
 import { Modal } from '../../components/Modal';
+import { QueryFilterBar, type QueryFilterValues } from '../../components/QueryFilterBar';
+import { defaultPagination, ListPagination, withPaginationParams, type PaginationState } from '../../components/ListPagination';
 import { SelectField } from '../../components/SelectField';
 import { StatusBadge } from '../../components/StatusBadge';
 import { AuthC } from '../../lib/auth';
+import { TableEmptyState } from '../../components/EmptyState';
 
 type PhoneListKind = 'whitelist' | 'blacklist' | 'unsubscribes';
 
 const emptyForm = { phone: '', scene: '', remark: '', reason: '' };
 const emptyFilters = { phone: '', scene: '', status: '', source: '', dateFrom: '', dateTo: '' };
 
-function queryString(filters: Record<string, string>) {
-  const params = new URLSearchParams({ pageSize: '80' });
-  Object.entries(filters).forEach(([key, value]) => {
-    if (value) params.set(key, value);
-  });
-  return params.toString();
+const emptyCopy: Record<PhoneListKind, { title: string; description: string }> = {
+  whitelist: { title: '暂无白名单记录', description: '当前没有真实发送白名单号码，真实服务商发送会受到保护限制。' },
+  blacklist: { title: '暂无黑名单记录', description: '当前没有被拦截的黑名单号码。' },
+  unsubscribes: { title: '暂无退订记录', description: '当前没有用户退订记录。' }
+};
+
+function formatTime(value?: string | null) {
+  return value ? new Date(value).toLocaleString() : '-';
+}
+
+function sourceLabel(source?: string) {
+  return {
+    manual: '人工录入',
+    import: '批量导入',
+    complaint: '投诉登记',
+    risk_control: '风控命中',
+    sms_reply: '短信回复',
+    provider_callback: '服务商回执'
+  }[source || 'manual'] || source || '人工录入';
 }
 
 export default function PhoneListPage({ kind, title, setNotice }: { kind: PhoneListKind; title: string; setNotice: (value: string) => void }) {
   const [items, setItems] = useState<PhoneGovernanceItem[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [filters, setFilters] = useState(emptyFilters);
+  const [pagination, setPagination] = useState<PaginationState>(defaultPagination);
   const [importText, setImportText] = useState('');
   const [modal, setModal] = useState<'create' | 'import' | null>(null);
   const [editing, setEditing] = useState<PhoneGovernanceItem | null>(null);
   const [selected, setSelected] = useState<PhoneGovernanceItem | null>(null);
+  const [statusTarget, setStatusTarget] = useState<PhoneGovernanceItem | null>(null);
   const endpoint = `/api/${kind}`;
   const canImport = kind === 'blacklist' || kind === 'unsubscribes';
   const canEdit = kind === 'whitelist';
@@ -39,9 +57,10 @@ export default function PhoneListPage({ kind, title, setNotice }: { kind: PhoneL
     return [{ value: '', label: '全部状态' }, { value: 'active', label: '生效中' }, { value: 'removed', label: '已移除' }];
   }, [kind]);
 
-  async function load(nextFilters = filters) {
-    const data = await api<{ items: PhoneGovernanceItem[] }>(`${endpoint}?${queryString(nextFilters)}`);
+  async function load(nextFilters = filters, nextPagination = pagination) {
+    const data = await api<{ items: PhoneGovernanceItem[]; total: number; page: number; pageSize: number }>(`${endpoint}?${withPaginationParams(nextFilters, nextPagination)}`);
     setItems(data.items);
+    setPagination({ page: data.page, pageSize: data.pageSize, total: data.total });
   }
 
   useEffect(() => {
@@ -84,17 +103,58 @@ export default function PhoneListPage({ kind, title, setNotice }: { kind: PhoneL
     setSelected(data.item);
   }
 
-  async function toggle(item: PhoneGovernanceItem) {
+  function governanceEffect(item: PhoneGovernanceItem) {
+    const active = ['enabled', 'active'].includes(item.status);
     if (kind === 'whitelist') {
-      await api(`/api/whitelist/${item.id}/status`, {
-        method: 'POST',
-        body: JSON.stringify({ status: item.status === 'enabled' ? 'disabled' : 'enabled' })
-      });
-    } else if (kind === 'blacklist') {
-      await api(`/api/blacklist/${item.id}/remove`, { method: 'POST' });
+      return active ? '真实短信发送前会放行该号码。' : '该号码不会参与真实发送白名单放行。';
     }
-    setNotice('状态已更新');
-    await load();
+    if (kind === 'blacklist') {
+      return active ? '发送前命中该号码会被拦截。' : '该号码当前不再参与黑名单拦截。';
+    }
+    return active ? '发送前命中该号码和场景会按退订拦截。' : '该退订记录当前不参与发送前拦截。';
+  }
+
+  function governanceDescription() {
+    if (kind === 'whitelist') return '白名单用于真实服务商发送保护，仅白名单号码允许触达真实短信服务。';
+    if (kind === 'blacklist') return '黑名单用于发送前强制拦截，适合投诉、风控、合规禁发等场景。';
+    return '退订记录用于尊重用户退订意愿，同一手机号可按不同业务场景分别退订。';
+  }
+
+  function openStatusFromDetail(item: PhoneGovernanceItem) {
+    setSelected(null);
+    setStatusTarget(item);
+  }
+
+  function openEditFromDetail(item: PhoneGovernanceItem) {
+    setSelected(null);
+    openEdit(item);
+  }
+
+  function statusActionText(item?: PhoneGovernanceItem | null) {
+    if (!item) return '更新状态';
+    if (kind === 'whitelist') return item.status === 'enabled' ? '停用' : '启用';
+    return item.status === 'active' ? '移除' : '恢复';
+  }
+
+  async function toggle(item: PhoneGovernanceItem) {
+    try {
+      if (kind === 'whitelist') {
+        await api(`/api/whitelist/${item.id}/status`, {
+          method: 'POST',
+          body: JSON.stringify({ status: item.status === 'enabled' ? 'disabled' : 'enabled' })
+        });
+      } else {
+        await api(`/api/${kind}/${item.id}/status`, {
+          method: 'POST',
+          body: JSON.stringify({ status: item.status === 'active' ? 'removed' : 'active' })
+        });
+      }
+      setNotice(`${title}记录已${statusActionText(item)}`);
+      setStatusTarget(null);
+      await load();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : '状态更新失败');
+    }
   }
 
   async function importPhones(event: React.FormEvent) {
@@ -116,9 +176,15 @@ export default function PhoneListPage({ kind, title, setNotice }: { kind: PhoneL
     setNotice(`白名单导出任务已生成：${result.item?.fileName || '等待生成'}`);
   }
 
-  function applyFilters(event: React.FormEvent) {
-    event.preventDefault();
-    load().catch((error) => setNotice(error instanceof Error ? error.message : '查询失败'));
+  function search(nextFilters: QueryFilterValues) {
+    const typedFilters = { ...emptyFilters, ...nextFilters };
+    const nextPagination = { ...pagination, page: 1 };
+    setFilters(typedFilters);
+    load(typedFilters, nextPagination).catch((error) => setNotice(error instanceof Error ? error.message : '查询失败'));
+  }
+
+  function changePage(page: number, pageSize: number) {
+    load(filters, { ...pagination, page, pageSize });
   }
 
   return (
@@ -146,15 +212,18 @@ export default function PhoneListPage({ kind, title, setNotice }: { kind: PhoneL
           </div>
         </div>
 
-        <form className="filterBar" onSubmit={applyFilters}>
-          <input value={filters.phone} onChange={(event) => setFilters({ ...filters, phone: event.target.value })} placeholder="手机号" />
-          <input value={filters.scene} onChange={(event) => setFilters({ ...filters, scene: event.target.value })} placeholder="场景" />
-          <SelectField value={filters.status} options={statusOptions} onChange={(status) => setFilters({ ...filters, status })} />
-          {kind !== 'whitelist' && <input value={filters.source} onChange={(event) => setFilters({ ...filters, source: event.target.value })} placeholder="来源" />}
-          <input type="date" value={filters.dateFrom} onChange={(event) => setFilters({ ...filters, dateFrom: event.target.value })} />
-          <input type="date" value={filters.dateTo} onChange={(event) => setFilters({ ...filters, dateTo: event.target.value })} />
-          <button className="primaryButton compact" type="submit"><Search size={16} />查询</button>
-        </form>
+        <QueryFilterBar
+          fields={[
+            { name: 'phone', label: '手机号', placeholder: '请输入手机号' },
+            { name: 'scene', label: '场景', placeholder: '请输入场景' },
+            { name: 'status', label: '状态', type: 'select', placeholder: '全部状态', options: statusOptions.filter((option) => option.value) },
+            ...(kind !== 'whitelist' ? [{ name: 'source', label: '来源', placeholder: '请输入来源' } as const] : []),
+            { name: 'createdAt', label: '创建日期', type: 'dateRange', fromName: 'dateFrom', toName: 'dateTo' }
+          ]}
+          values={filters}
+          onChange={(value) => setFilters({ ...emptyFilters, ...value })}
+          onSearch={search}
+        />
 
         <div className="dataTableWrap">
           <table className="dataTable">
@@ -180,21 +249,28 @@ export default function PhoneListPage({ kind, title, setNotice }: { kind: PhoneL
                       )}
                       {kind === 'whitelist' && (
                         <AuthC authKey="security:whitelist:status">
-                          <button className="tableButton" type="button" onClick={() => toggle(item)}>{item.status === 'enabled' ? '停用' : '启用'}</button>
+                          <button className="tableButton" type="button" onClick={() => setStatusTarget(item)}>{statusActionText(item)}</button>
                         </AuthC>
                       )}
                       {kind === 'blacklist' && (
                         <AuthC authKey="security:blacklist:remove">
-                          <button className="tableButton" type="button" onClick={() => toggle(item)}>移除</button>
+                          <button className="tableButton" type="button" onClick={() => setStatusTarget(item)}>{statusActionText(item)}</button>
+                        </AuthC>
+                      )}
+                      {kind === 'unsubscribes' && (
+                        <AuthC authKey="security:unsubscribe:status">
+                          <button className="tableButton" type="button" onClick={() => setStatusTarget(item)}>{statusActionText(item)}</button>
                         </AuthC>
                       )}
                     </div>
                   </td>
                 </tr>
               ))}
+              {!items.length && <TableEmptyState colSpan={7} title={emptyCopy[kind].title} description={emptyCopy[kind].description} />}
             </tbody>
           </table>
         </div>
+        <ListPagination pagination={pagination} onChange={changePage} />
       </section>
 
       <Modal open={modal === 'create'} title="新增记录" subtitle={kind === 'whitelist' ? '真实发送保护' : '发送前拦截'} onClose={() => setModal(null)} showClose={false}>
@@ -236,18 +312,77 @@ export default function PhoneListPage({ kind, title, setNotice }: { kind: PhoneL
         </form>
       </Modal>
 
-      <Modal open={Boolean(selected)} title="记录详情" subtitle={selected?.phoneMasked} onClose={() => setSelected(null)}>
+      <Modal open={Boolean(statusTarget)} title={`${statusActionText(statusTarget)}记录`} subtitle={statusTarget?.phoneMasked} onClose={() => setStatusTarget(null)} showClose={false}>
+        {statusTarget && (
+          <div className="formPanel">
+            <div className="detailCard">
+              <div><span>手机号</span><strong>{statusTarget.phoneMasked}</strong></div>
+              <div><span>场景</span><strong>{statusTarget.scene || '全部'}</strong></div>
+              <div><span>当前状态</span><StatusBadge status={['enabled', 'active'].includes(statusTarget.status) ? 'enabled' : 'disabled'} /></div>
+            </div>
+            <div className="fieldBlock">
+              <span>操作说明</span>
+              <strong>{kind === 'whitelist' ? '停用后该号码将不能通过真实发送白名单校验。' : '移除后该号码不再参与发送前拦截；恢复后会重新生效。'}</strong>
+            </div>
+            <div className="modalActions">
+              <button className="secondaryButton compact" type="button" onClick={() => setStatusTarget(null)}>取消</button>
+              <button className="primaryButton compact" type="button" onClick={() => toggle(statusTarget)}>{statusActionText(statusTarget)}</button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={Boolean(selected)} title={`${title}详情`} onClose={() => setSelected(null)}>
         {selected && (
           <div className="formPanel">
             <div className="detailCard">
               <div><span>手机号</span><strong>{selected.phoneMasked}</strong></div>
               <div><span>场景</span><strong>{selected.scene || '全部'}</strong></div>
               <div><span>状态</span><StatusBadge status={['enabled', 'active'].includes(selected.status) ? 'enabled' : 'disabled'} /></div>
-              <div><span>创建时间</span><strong>{new Date(selected.createdAt).toLocaleString()}</strong></div>
+              <div><span>状态说明</span><strong>{statusLabel(selected.status)}</strong></div>
             </div>
-            <div className="fieldBlock"><span>说明</span><strong>{selected.remark || selected.reason || '-'}</strong></div>
-            <div className="fieldBlock"><span>来源</span><strong>{selected.source || 'manual'}</strong></div>
-            <div className="fieldBlock"><span>原始状态</span><strong>{statusLabel(selected.status)}</strong></div>
+            <section className="approvalBlock">
+              <strong>治理效果</strong>
+              <p>{governanceEffect(selected)}</p>
+            </section>
+            <section className="approvalBlock">
+              <strong>业务说明</strong>
+              <p>{governanceDescription()}</p>
+            </section>
+            <div className="detailCard">
+              <div><span>{kind === 'blacklist' ? '拦截原因' : '备注'}</span><strong>{selected.reason || selected.remark || '-'}</strong></div>
+              <div><span>来源</span><strong>{sourceLabel(selected.source)}</strong></div>
+              <div><span>创建人</span><strong>{selected.createdById || '-'}</strong></div>
+              <div><span>记录 ID</span><strong>{selected.id}</strong></div>
+            </div>
+            <div className="detailCard">
+              <div><span>创建时间</span><strong>{formatTime(selected.createdAt)}</strong></div>
+              <div><span>更新时间</span><strong>{formatTime(selected.updatedAt)}</strong></div>
+              {kind === 'blacklist' && <div><span>移除时间</span><strong>{formatTime(selected.removedAt)}</strong></div>}
+            </div>
+            <div className="modalActions">
+              <button className="secondaryButton compact" type="button" onClick={() => setSelected(null)}>关闭</button>
+              {canEdit && (
+                <AuthC authKey="security:whitelist:edit">
+                  <button className="secondaryButton compact" type="button" onClick={() => openEditFromDetail(selected)}>编辑</button>
+                </AuthC>
+              )}
+              {kind === 'whitelist' && (
+                <AuthC authKey="security:whitelist:status">
+                  <button className="primaryButton compact" type="button" onClick={() => openStatusFromDetail(selected)}>{statusActionText(selected)}</button>
+                </AuthC>
+              )}
+              {kind === 'blacklist' && (
+                <AuthC authKey="security:blacklist:remove">
+                  <button className="primaryButton compact" type="button" onClick={() => openStatusFromDetail(selected)}>{statusActionText(selected)}</button>
+                </AuthC>
+              )}
+              {kind === 'unsubscribes' && (
+                <AuthC authKey="security:unsubscribe:status">
+                  <button className="primaryButton compact" type="button" onClick={() => openStatusFromDetail(selected)}>{statusActionText(selected)}</button>
+                </AuthC>
+              )}
+            </div>
           </div>
         )}
       </Modal>

@@ -6,6 +6,7 @@ import type { EventItem } from '../../types';
 import { Modal } from '../../components/Modal';
 import { SelectField } from '../../components/SelectField';
 import { AuthC } from '../../lib/auth';
+import { EmptyState } from '../../components/EmptyState';
 
 export default function Events({ events, onRefresh, setNotice }: { events: EventItem[]; onRefresh: () => Promise<void>; setNotice: (value: string) => void }) {
   const [phone, setPhone] = useState('18515385071');
@@ -39,6 +40,7 @@ export default function Events({ events, onRefresh, setNotice }: { events: Event
           </AuthC>
         </div>
         <div className="eventList">
+          {!events.length && <EmptyState title="暂无事件流水" description="业务系统接入或手动模拟事件后，这里会展示事件触发记录。" />}
           {events.map((item) => (
             <div className="eventItem" key={item.id}>
               <strong>{eventLabels[item.eventType] || item.eventType}</strong>

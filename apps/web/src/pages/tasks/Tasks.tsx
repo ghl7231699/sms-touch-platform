@@ -4,6 +4,7 @@ import type { SmsTask } from '../../types';
 import { eventLabels, sceneLabels } from '../../constants/labels';
 import { StatusBadge } from '../../components/StatusBadge';
 import { AuthC } from '../../lib/auth';
+import { TableEmptyState } from '../../components/EmptyState';
 
 function taskReason(task: SmsTask) {
   const codeMap: Record<string, string> = {
@@ -138,7 +139,7 @@ export default function Tasks({ tasks, onRefresh, setNotice }: { tasks: SmsTask[
                   <td>{taskReason(task)}</td>
                 </tr>
               ))}
-              {!sortedTasks.length && <tr><td colSpan={6}>暂无任务</td></tr>}
+              {!sortedTasks.length && <TableEmptyState colSpan={6} title="暂无任务明细" description="当前没有待发送、发送中、失败或已完成的短信任务。" />}
             </tbody>
           </table>
         </div>

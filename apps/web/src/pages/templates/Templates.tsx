@@ -7,6 +7,7 @@ import { Modal } from '../../components/Modal';
 import { SelectField } from '../../components/SelectField';
 import { StatusBadge } from '../../components/StatusBadge';
 import { AuthC } from '../../lib/auth';
+import { EmptyState } from '../../components/EmptyState';
 
 export default function Templates({ templates, onRefresh, setNotice }: { templates: Template[]; onRefresh: () => Promise<void>; setNotice: (value: string) => void }) {
   const [form, setForm] = useState({
@@ -49,6 +50,7 @@ export default function Templates({ templates, onRefresh, setNotice }: { templat
           </AuthC>
         </div>
         <div className="templateGrid">
+          {!templates.length && <EmptyState title="暂无短信模板" description="新建模板后，规则中心和手动发送才能选择对应短信内容。" />}
           {templates.map((template) => (
             <article className="templateCard" key={template.id}>
               <div className="templateTop">

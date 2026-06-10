@@ -196,7 +196,7 @@ export const menus: AppMenuItem[] = [
         path: '/security/blacklist',
         title: '黑名单',
         icon: <Ban size={18} />,
-        buttons: [button('页面查看', 'base'), button('新增记录', 'add'), button('批量导入', 'import'), button('移除记录', 'remove'), button('查看详情', 'detail')],
+        buttons: [button('页面查看', 'base'), button('新增记录', 'add'), button('批量导入', 'import'), button('移除/恢复记录', 'remove'), button('查看详情', 'detail')],
         component: ({ setNotice }) => <PhoneListPage kind="blacklist" title="黑名单管理" setNotice={setNotice} />
       },
       {
@@ -204,7 +204,7 @@ export const menus: AppMenuItem[] = [
         path: '/security/unsubscribes',
         title: '退订记录',
         icon: <Bell size={18} />,
-        buttons: [button('页面查看', 'base'), button('新增记录', 'add'), button('批量导入', 'import'), button('查看详情', 'detail')],
+        buttons: [button('页面查看', 'base'), button('新增记录', 'add'), button('批量导入', 'import'), button('移除/恢复记录', 'status'), button('查看详情', 'detail')],
         component: ({ setNotice }) => <PhoneListPage kind="unsubscribes" title="退订管理" setNotice={setNotice} />
       },
       {

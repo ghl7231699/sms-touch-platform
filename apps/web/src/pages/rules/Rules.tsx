@@ -7,6 +7,7 @@ import { Modal } from '../../components/Modal';
 import { SelectField } from '../../components/SelectField';
 import { StatusBadge } from '../../components/StatusBadge';
 import { AuthC } from '../../lib/auth';
+import { EmptyState } from '../../components/EmptyState';
 
 export default function Rules({ rules, templates, logs, onRefresh, setNotice }: { rules: Rule[]; templates: Template[]; logs: SendLog[]; onRefresh: () => Promise<void>; setNotice: (value: string) => void }) {
   const [form, setForm] = useState({
@@ -127,6 +128,7 @@ export default function Rules({ rules, templates, logs, onRefresh, setNotice }: 
           </AuthC>
         </div>
         <div className="automationRuleGrid">
+          {!rules.length && <EmptyState title="暂无自动化规则" description="新建规则后，业务事件才能自动生成短信触达任务。" />}
           {rules.map((rule) => {
             const template = templates.find((item) => item.id === rule.templateId);
             const ruleLogs = logs.filter((log) => log.ruleName === rule.name || log.ruleId === rule.id);

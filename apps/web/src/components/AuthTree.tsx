@@ -98,10 +98,14 @@ export function AuthTree({
   disabled?: boolean;
 }) {
   const treeData = useMemo(() => menus.map((item) => menuNode(item)).filter(Boolean) as AuthNode[], []);
-  const checked = useMemo(() => new Set(checkedKeys), [checkedKeys]);
+  const normalizedCheckedKeys = useMemo(() => {
+    if (!checkedKeys.includes('*')) return checkedKeys;
+    return treeData.flatMap(collectKeys);
+  }, [checkedKeys, treeData]);
+  const checked = useMemo(() => new Set(normalizedCheckedKeys), [normalizedCheckedKeys]);
 
   function handleToggle(node: AuthNode, nextChecked: boolean) {
-    const next = new Set(checkedKeys);
+    const next = new Set(normalizedCheckedKeys);
     for (const key of collectKeys(node)) {
       if (nextChecked) next.add(key);
       else next.delete(key);

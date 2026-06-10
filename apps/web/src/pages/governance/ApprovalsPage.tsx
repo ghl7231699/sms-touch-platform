@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Search } from 'lucide-react';
 import { api } from '../../lib/api';
 import { actionLabel, approvalStatusLabel, operationLabel, resourceLabel } from '../../constants/labels';
 import type { ApprovalItem } from '../../types';
 import { Modal } from '../../components/Modal';
-import { SelectField } from '../../components/SelectField';
+import { QueryFilterBar, type QueryFilterValues } from '../../components/QueryFilterBar';
+import { defaultPagination, ListPagination, withPaginationParams, type PaginationState } from '../../components/ListPagination';
 import { StatusBadge } from '../../components/StatusBadge';
 import { AuthC } from '../../lib/auth';
+import { TableEmptyState } from '../../components/EmptyState';
 
 const emptyFilters = { keyword: '', resource: '', action: '', status: '', dateFrom: '', dateTo: '' };
 
@@ -17,28 +18,26 @@ function approvalStatus(status: string) {
   return 'pending';
 }
 
-function queryString(filters: Record<string, string>) {
-  const params = new URLSearchParams({ pageSize: '80' });
-  Object.entries(filters).forEach(([key, value]) => {
-    if (value) params.set(key, value);
-  });
-  return params.toString();
-}
-
 function formatJson(value: unknown) {
   if (!value) return '-';
   return JSON.stringify(value, null, 2);
 }
 
+function formatTime(value?: string) {
+  return value ? new Date(value).toLocaleString() : '-';
+}
+
 export default function ApprovalsPage({ setNotice }: { setNotice: (value: string) => void }) {
   const [items, setItems] = useState<ApprovalItem[]>([]);
   const [filters, setFilters] = useState(emptyFilters);
+  const [pagination, setPagination] = useState<PaginationState>(defaultPagination);
   const [selected, setSelected] = useState<ApprovalItem | null>(null);
   const [comment, setComment] = useState('');
 
-  async function load(nextFilters = filters) {
-    const data = await api<{ items: ApprovalItem[] }>(`/api/approvals?${queryString(nextFilters)}`);
+  async function load(nextFilters = filters, nextPagination = pagination) {
+    const data = await api<{ items: ApprovalItem[]; total: number; page: number; pageSize: number }>(`/api/approvals?${withPaginationParams(nextFilters, nextPagination)}`);
     setItems(data.items);
+    setPagination({ page: data.page, pageSize: data.pageSize, total: data.total });
   }
 
   useEffect(() => {
@@ -61,9 +60,15 @@ export default function ApprovalsPage({ setNotice }: { setNotice: (value: string
     await load();
   }
 
-  function applyFilters(event: React.FormEvent) {
-    event.preventDefault();
-    load();
+  function search(nextFilters: QueryFilterValues) {
+    const typedFilters = { ...emptyFilters, ...nextFilters };
+    const nextPagination = { ...pagination, page: 1 };
+    setFilters(typedFilters);
+    load(typedFilters, nextPagination);
+  }
+
+  function changePage(page: number, pageSize: number) {
+    load(filters, { ...pagination, page, pageSize });
   }
 
   return (
@@ -75,25 +80,29 @@ export default function ApprovalsPage({ setNotice }: { setNotice: (value: string
         </div>
       </div>
 
-      <form className="filterBar" onSubmit={applyFilters}>
-        <input value={filters.keyword} onChange={(event) => setFilters({ ...filters, keyword: event.target.value })} placeholder="标题 / 资源 / 动作" />
-        <input value={filters.resource} onChange={(event) => setFilters({ ...filters, resource: event.target.value })} placeholder="资源类型" />
-        <input value={filters.action} onChange={(event) => setFilters({ ...filters, action: event.target.value })} placeholder="动作" />
-        <SelectField
-          value={filters.status}
-          options={[
-            { value: '', label: '全部状态' },
-            { value: 'pending', label: '待审批' },
-            { value: 'approved', label: '已通过' },
-            { value: 'rejected', label: '已驳回' },
-            { value: 'withdrawn', label: '已撤回' }
-          ]}
-          onChange={(status) => setFilters({ ...filters, status })}
-        />
-        <input type="date" value={filters.dateFrom} onChange={(event) => setFilters({ ...filters, dateFrom: event.target.value })} />
-        <input type="date" value={filters.dateTo} onChange={(event) => setFilters({ ...filters, dateTo: event.target.value })} />
-        <button className="primaryButton compact" type="submit"><Search size={16} />查询</button>
-      </form>
+      <QueryFilterBar
+        fields={[
+          { name: 'keyword', label: '关键词', placeholder: '标题 / 资源 / 动作' },
+          { name: 'resource', label: '资源类型', placeholder: '请输入资源类型' },
+          { name: 'action', label: '动作', placeholder: '请输入动作' },
+          {
+            name: 'status',
+            label: '状态',
+            type: 'select',
+            placeholder: '全部状态',
+            options: [
+              { value: 'pending', label: '待审批' },
+              { value: 'approved', label: '已通过' },
+              { value: 'rejected', label: '已驳回' },
+              { value: 'withdrawn', label: '已撤回' }
+            ]
+          },
+          { name: 'createdAt', label: '创建日期', type: 'dateRange', fromName: 'dateFrom', toName: 'dateTo' }
+        ]}
+        values={filters}
+        onChange={(value) => setFilters({ ...emptyFilters, ...value })}
+        onSearch={search}
+      />
 
       <div className="dataTableWrap">
         <table className="dataTable">
@@ -116,22 +125,34 @@ export default function ApprovalsPage({ setNotice }: { setNotice: (value: string
                 </tr>
               );
             })}
+            {!items.length && <TableEmptyState colSpan={6} title="暂无审批记录" description="高风险操作提交审批后，会在这里展示处理进度和结果。" />}
           </tbody>
         </table>
       </div>
+      <ListPagination pagination={pagination} onChange={changePage} />
 
-      <Modal open={Boolean(selected)} title="审批详情" subtitle={selected?.title} onClose={() => setSelected(null)}>
+      <Modal open={Boolean(selected)} title="审批详情" onClose={() => setSelected(null)} size="wide">
         {selected && (
           <div className="approvalDetail">
             <div className="approvalSummaryGrid">
+              <div><span>审批标题</span><strong>{selected.title}</strong></div>
               <div><span>审批场景</span><strong>{selected.payload?.summary?.scenario || selected.payload?.scenario || '-'}</strong></div>
               <div><span>风险等级</span><strong>{selected.payload?.summary?.riskLevel || selected.payload?.riskLevel || '-'}</strong></div>
-              <div><span>资源类型</span><strong>{resourceLabel(selected.resource)}</strong></div>
               <div><span>当前状态</span><StatusBadge status={approvalStatus(selected.status)} /></div>
+            </div>
+            <div className="detailCard">
+              <div><span>资源类型</span><strong>{resourceLabel(selected.resource)}</strong></div>
+              <div><span>操作动作</span><strong>{operationLabel(selected.resource, selected.action)}</strong></div>
+              <div><span>资源 ID</span><strong>{selected.resourceId || '-'}</strong></div>
+              <div><span>提交时间</span><strong>{formatTime(selected.createdAt)}</strong></div>
             </div>
             <section className="approvalBlock">
               <strong>申请原因</strong>
               <p>{selected.payload?.summary?.reason || selected.payload?.reason || '-'}</p>
+            </section>
+            <section className="approvalBlock">
+              <strong>风险说明</strong>
+              <p>{selected.status === 'pending' ? '该审批仍在等待处理，通过后会执行对应业务动作；驳回或撤回则不会执行。' : `该审批已${approvalStatusLabel(selected.status)}，不会再展示处理按钮。`}</p>
             </section>
             <section className="approvalBlock">
               <strong>影响范围</strong>
@@ -144,12 +165,12 @@ export default function ApprovalsPage({ setNotice }: { setNotice: (value: string
             <section className="approvalBlock">
               <strong>处理记录</strong>
               <div className="approvalRecords">
-                {(selected.records || []).map((record) => (
+                {(selected.records || []).length ? selected.records?.map((record) => (
                   <div key={record.id}>
-                    <span>{actionLabel(record.action)} · {new Date(record.createdAt).toLocaleString()}</span>
+                    <span>{actionLabel(record.action)} · {formatTime(record.createdAt)}</span>
                     <p>{record.comment || '-'}</p>
                   </div>
-                ))}
+                )) : <p>暂无处理记录</p>}
               </div>
             </section>
             {selected.status === 'pending' && (
@@ -168,7 +189,14 @@ export default function ApprovalsPage({ setNotice }: { setNotice: (value: string
                 </div>
               </div>
             )}
-            {selected.status !== 'pending' && <div className="fieldBlock"><span>审批结果</span><strong>{approvalStatusLabel(selected.status)}</strong></div>}
+            {selected.status !== 'pending' && (
+              <>
+                <div className="fieldBlock"><span>审批结果</span><strong>{approvalStatusLabel(selected.status)}</strong></div>
+                <div className="modalActions">
+                  <button className="primaryButton compact" type="button" onClick={() => setSelected(null)}>关闭</button>
+                </div>
+              </>
+            )}
           </div>
         )}
       </Modal>

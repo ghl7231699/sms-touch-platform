@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import { config } from '../../config/env.js';
 import { createId } from '../../utils/ids.js';
@@ -8,6 +10,7 @@ import { mutateStore, readStore } from '../sms/sms.repository.js';
 const prisma = new PrismaClient();
 const PHONE_PATTERN = /^1\d{10}$/;
 const SESSION_TTL_DAYS = 7;
+const EXPORT_DIR = path.resolve(process.cwd(), 'storage', 'exports');
 const now = () => new Date().toISOString();
 
 export const ROLE_DEFINITIONS = [
@@ -54,6 +57,7 @@ export const ROLE_DEFINITIONS = [
       'security:unsubscribe:base',
       'security:unsubscribe:add',
       'security:unsubscribe:import',
+      'security:unsubscribe:status',
       'security:unsubscribe:detail',
       'security:setting:base',
       'integration:eventSource:base',
@@ -91,6 +95,7 @@ export const ROLE_DEFINITIONS = [
       'security:blacklist:base',
       'security:blacklist:detail',
       'security:unsubscribe:base',
+      'security:unsubscribe:status',
       'security:unsubscribe:detail',
       'security:setting:base',
       'integration:eventSource:base',
@@ -320,6 +325,127 @@ function dateRange(filters = {}, field = 'createdAt') {
   return Object.keys(range).length ? { [field]: range } : {};
 }
 
+function exportWhere(criteria = {}) {
+  return {
+    ...(criteria.status ? { status: criteria.status } : {}),
+    ...(criteria.scene ? { scene: criteria.scene } : {}),
+    ...(criteria.resource ? { resource: criteria.resource } : {}),
+    ...(criteria.action ? { action: criteria.action } : {}),
+    ...(criteria.userName ? { userName: contains(criteria.userName) } : {}),
+    ...dateRange(criteria)
+  };
+}
+
+function maskExportRow(row = {}, exposeSensitive = false) {
+  if (exposeSensitive) return row;
+  const result = { ...row };
+  if (result.phone) result.phone = result.phoneMasked || maskPhone(result.phone);
+  return result;
+}
+
+function safeExportFileName(fileName) {
+  const normalized = String(fileName || `export_${Date.now()}.json`).replace(/[^a-zA-Z0-9_.-]/g, '_');
+  return normalized.endsWith('.json') ? normalized : `${normalized}.json`;
+}
+
+function exportFilePath(fileName) {
+  return path.join(EXPORT_DIR, safeExportFileName(fileName));
+}
+
+async function buildExportPayload(task) {
+  const criteria = task.criteria || {};
+  const exposeSensitive = criteria.sensitive === true || criteria.maskSensitive === false;
+  const take = Math.min(Math.max(Number(criteria.pageSize) || 500, 1), 2000);
+  let items = [];
+
+  if (task.resource === 'operation_log' || task.resource === 'operation_logs') {
+    items = await prisma.adminOperationLog.findMany({
+      where: exportWhere(criteria),
+      orderBy: { createdAt: 'desc' },
+      take
+    });
+  } else if (task.resource === 'send_log' || task.resource === 'sms_send_log') {
+    items = await prisma.smsSendLog.findMany({
+      where: {
+        ...(criteria.status ? { status: criteria.status } : {}),
+        ...(criteria.scene ? { scene: criteria.scene } : {}),
+        ...(criteria.triggerType ? { triggerType: criteria.triggerType } : {}),
+        ...dateRange(criteria)
+      },
+      orderBy: { createdAt: 'desc' },
+      take
+    });
+  } else if (task.resource === 'sms_whitelist') {
+    items = await prisma.smsWhitelist.findMany({
+      where: {
+        ...(criteria.status ? { status: criteria.status } : {}),
+        ...(criteria.scene ? { scene: criteria.scene } : {}),
+        ...dateRange(criteria)
+      },
+      orderBy: { createdAt: 'desc' },
+      take
+    });
+  } else if (task.resource === 'sms_blacklist') {
+    items = await prisma.smsBlacklist.findMany({
+      where: {
+        ...(criteria.status ? { status: criteria.status } : {}),
+        ...(criteria.scene ? { scene: criteria.scene } : {}),
+        ...(criteria.source ? { source: criteria.source } : {}),
+        ...dateRange(criteria)
+      },
+      orderBy: { createdAt: 'desc' },
+      take
+    });
+  } else if (task.resource === 'approval_order') {
+    items = await prisma.approvalOrder.findMany({
+      where: exportWhere(criteria),
+      orderBy: { createdAt: 'desc' },
+      take,
+      include: { records: true }
+    });
+  } else if (task.resource === 'event_source_log') {
+    items = await prisma.eventSourceLog.findMany({
+      where: {
+        ...(criteria.status ? { status: criteria.status } : {}),
+        ...(criteria.appId ? { appId: criteria.appId } : {}),
+        ...(criteria.eventType ? { eventType: criteria.eventType } : {}),
+        ...dateRange(criteria)
+      },
+      orderBy: { createdAt: 'desc' },
+      take
+    });
+  }
+
+  return {
+    fileName: safeExportFileName(task.fileName),
+    resource: task.resource,
+    criteria,
+    generatedAt: new Date().toISOString(),
+    count: items.length,
+    items: items.map((item) => maskExportRow(item, exposeSensitive))
+  };
+}
+
+async function materializeExportTask(task) {
+  const payload = await buildExportPayload(task);
+  const fileName = safeExportFileName(payload.fileName);
+  await mkdir(EXPORT_DIR, { recursive: true });
+  await writeFile(exportFilePath(fileName), JSON.stringify(payload, null, 2), 'utf8');
+  return { ...payload, fileName };
+}
+
+async function readOrMaterializeExportFile(task) {
+  const fileName = safeExportFileName(task.fileName);
+  try {
+    const buffer = await readFile(exportFilePath(fileName));
+    return { fileName, buffer };
+  } catch {
+    const payload = await materializeExportTask({ ...task, fileName });
+    const buffer = await readFile(exportFilePath(payload.fileName));
+    return { fileName: payload.fileName, buffer };
+  }
+}
+
 async function listWithCount(model, args, mapItem = (item) => item) {
   const { page, pageSize, skip } = parsePage(args.filters);
   const [items, total] = await Promise.all([
@@ -474,13 +600,14 @@ async function executeApproval(item) {
         name: execute.name || `${execute.resource || 'data'} 导出`,
         resource: execute.resource || 'operation_log',
         status: 'completed',
-        fileName: `${execute.resource || 'data'}_${Date.now()}.json`,
+        fileName: safeExportFileName(`${execute.resource || 'data'}_${Date.now()}.json`),
         criteria: execute.criteria || {},
         createdById: item.createdById,
         completedAt: new Date()
       }
     });
-    return { executed: true, type: execute.type, result: { exportTaskId: task.id } };
+    const file = await materializeExportTask(task);
+    return { executed: true, type: execute.type, result: { exportTaskId: task.id, fileName: file.fileName, count: file.count } };
   }
   throw new Error(`不支持的审批执行类型：${execute.type}`);
 }
@@ -858,8 +985,16 @@ async function routeAuth(req, url, readJson, actor) {
   if (req.method === 'POST' && url.pathname === '/api/auth/change-password') {
     const body = await readJson(req);
     const user = await prisma.adminUser.findUnique({ where: { id: actor.id } });
+    if (!body.oldPassword || !body.newPassword) return fail('PASSWORD_REQUIRED', '原密码和新密码必填。');
+    if (String(body.newPassword).length < 8) return fail('PASSWORD_TOO_SHORT', '新密码至少需要 8 位。');
     if (!verifyPassword(body.oldPassword, user.passwordHash)) return fail('OLD_PASSWORD_INVALID', '原密码不正确。', 400);
-    await prisma.adminUser.update({ where: { id: actor.id }, data: { passwordHash: hashPassword(body.newPassword) } });
+    await prisma.$transaction([
+      prisma.adminUser.update({ where: { id: actor.id }, data: { passwordHash: hashPassword(body.newPassword) } }),
+      prisma.authSession.updateMany({
+        where: { userId: actor.id, id: { not: actor.sessionId }, revokedAt: null },
+        data: { revokedAt: new Date() }
+      })
+    ]);
     await writeOperationLog({ req, actor, action: 'change_password', resource: 'auth', resourceId: actor.id });
     return ok({ success: true });
   }
@@ -905,11 +1040,38 @@ async function routeUsers(req, url, readJson, actor) {
 
   const statusMatch = url.pathname.match(/^\/api\/users\/([^/]+)\/status$/);
   if (req.method === 'POST' && statusMatch) {
-    const body = await readJson(req);
-    const user = await prisma.adminUser.update({
+    const target = await prisma.adminUser.findUnique({
       where: { id: statusMatch[1] },
-      data: { status: body.status || 'active' },
       include: { roles: { include: { role: true } } }
+    });
+    if (!target) return fail('USER_NOT_FOUND', '用户不存在。', 404);
+    const body = await readJson(req);
+    const nextStatus = body.status === 'disabled' || body.status === 'locked' ? body.status : 'active';
+    if (target.id === actor.id && nextStatus !== 'active') return fail('CANNOT_DISABLE_SELF', '不能禁用当前登录账号。', 409);
+    const isAdmin = target.roles.some((item) => item.role.code === 'admin');
+    if (isAdmin && nextStatus !== 'active') {
+      const remainingAdminCount = await prisma.adminUser.count({
+        where: {
+          id: { not: target.id },
+          status: 'active',
+          roles: { some: { role: { code: 'admin' } } }
+        }
+      });
+      if (remainingAdminCount === 0) return fail('LAST_ADMIN_REQUIRED', '至少需要保留一个可用的系统管理员。', 409);
+    }
+    const user = await prisma.$transaction(async (tx) => {
+      const updated = await tx.adminUser.update({
+        where: { id: target.id },
+        data: { status: nextStatus },
+        include: { roles: { include: { role: true } } }
+      });
+      if (nextStatus !== 'active') {
+        await tx.authSession.updateMany({
+          where: { userId: target.id, revokedAt: null },
+          data: { revokedAt: new Date() }
+        });
+      }
+      return updated;
     });
     await writeOperationLog({ req, actor, action: 'change_status', resource: 'admin_user', resourceId: user.id, requestBody: body });
     return ok({ success: true, item: safeUser(user) });
@@ -990,9 +1152,45 @@ async function routeUsers(req, url, readJson, actor) {
 
   const userMatch = url.pathname.match(/^\/api\/users\/([^/]+)$/);
   if (req.method === 'GET' && userMatch) {
-    const user = await prisma.adminUser.findUnique({ where: { id: userMatch[1] }, include: { roles: { include: { role: true } } } });
+    const user = await prisma.adminUser.findUnique({
+      where: { id: userMatch[1] },
+      include: {
+        roles: { include: { role: true } },
+        sessions: {
+          orderBy: { createdAt: 'desc' },
+          take: 5
+        },
+        operationLogs: {
+          orderBy: { createdAt: 'desc' },
+          take: 8
+        }
+      }
+    });
     if (!user) return fail('USER_NOT_FOUND', '用户不存在。', 404);
-    return ok({ item: safeUser(user) });
+    return ok({
+      item: {
+        ...safeUser(user),
+        recentSessions: user.sessions.map((session) => ({
+          id: session.id,
+          ip: session.ip,
+          userAgent: session.userAgent,
+          createdAt: session.createdAt,
+          lastSeenAt: session.lastSeenAt,
+          expiresAt: session.expiresAt,
+          revokedAt: session.revokedAt,
+          status: session.revokedAt ? 'revoked' : session.expiresAt < new Date() ? 'expired' : 'active'
+        })),
+        recentOperationLogs: user.operationLogs.map((log) => ({
+          id: log.id,
+          resource: log.resource,
+          action: log.action,
+          result: log.result,
+          path: log.path,
+          ip: log.ip,
+          createdAt: log.createdAt
+        }))
+      }
+    });
   }
 
   return null;
@@ -1004,7 +1202,11 @@ async function routeRegisterRequests(req, url, readJson, actor) {
     return ok(await listWithCount(prisma.authRegisterRequest, {
       filters,
       query: {
-        where: filters.status ? { status: filters.status } : {},
+        where: {
+          ...(filters.status ? { status: filters.status } : {}),
+          ...(filters.keyword ? { OR: [{ email: contains(filters.keyword) }, { name: contains(filters.keyword) }, { phone: contains(filters.keyword) }] } : {}),
+          ...dateRange(filters)
+        },
         orderBy: { createdAt: 'desc' }
       }
     }));
@@ -1144,6 +1346,23 @@ async function routePhoneList(req, url, readJson, actor) {
     return ok({ success: true, item: updated });
   }
 
+  const phoneListStatusMatch = url.pathname.match(/^\/api\/(blacklist|unsubscribes)\/([^/]+)\/status$/);
+  if (req.method === 'POST' && phoneListStatusMatch) {
+    const body = await readJson(req);
+    const isBlacklist = phoneListStatusMatch[1] === 'blacklist';
+    const model = isBlacklist ? prisma.smsBlacklist : prisma.smsUnsubscribe;
+    const resource = isBlacklist ? 'sms_blacklist' : 'sms_unsubscribe';
+    const nextStatus = body.status === 'active' ? 'active' : 'removed';
+    const updated = await model.update({
+      where: { id: phoneListStatusMatch[2] },
+      data: isBlacklist
+        ? { status: nextStatus, removedAt: nextStatus === 'removed' ? new Date() : null }
+        : { status: nextStatus }
+    });
+    await writeOperationLog({ req, actor, action: 'change_status', resource, resourceId: updated.id, requestBody: body });
+    return ok({ success: true, item: updated });
+  }
+
   const whitelistUpdateMatch = url.pathname.match(/^\/api\/whitelist\/([^/]+)\/update$/);
   if (req.method === 'POST' && whitelistUpdateMatch) {
     const body = await readJson(req);
@@ -1210,12 +1429,13 @@ async function routePhoneList(req, url, readJson, actor) {
         name: '白名单导出',
         resource: 'sms_whitelist',
         status: 'completed',
-        fileName: `sms_whitelist_${Date.now()}.json`,
+        fileName: safeExportFileName(`sms_whitelist_${Date.now()}.json`),
         criteria: Object.fromEntries(url.searchParams.entries()),
         createdById: actor.id,
         completedAt: new Date()
       }
     });
+    await materializeExportTask(task);
     await writeOperationLog({ req, actor, action: 'export', resource: 'sms_whitelist', resourceId: task.id });
     return ok({ success: true, item: task }, 201);
   }
@@ -1498,12 +1718,13 @@ async function routeAuxiliary(req, url, readJson, actor) {
         name: body.name || `${body.resource || 'data'} 导出`,
         resource: body.resource || 'operation_log',
         status: 'completed',
-        fileName: `${body.resource || 'data'}_${Date.now()}.json`,
+        fileName: safeExportFileName(`${body.resource || 'data'}_${Date.now()}.json`),
         criteria: body.criteria || {},
         createdById: actor.id,
         completedAt: new Date()
       }
     });
+    await materializeExportTask(task);
     await writeOperationLog({ req, actor, action: 'create', resource: 'export_task', resourceId: task.id, requestBody: body });
     return ok({ success: true, item: task }, 201);
   }
@@ -1511,7 +1732,17 @@ async function routeAuxiliary(req, url, readJson, actor) {
   if (req.method === 'GET' && downloadMatch) {
     const task = await prisma.exportTask.findUnique({ where: { id: downloadMatch[1] } });
     if (!task) return fail('EXPORT_TASK_NOT_FOUND', '导出任务不存在。', 404);
-    return ok({ fileName: task.fileName, resource: task.resource, criteria: task.criteria || {}, generatedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() });
+    if (task.status !== 'completed') return fail('EXPORT_TASK_NOT_READY', '导出任务尚未完成，不能下载。', 409);
+    const file = await readOrMaterializeExportFile(task);
+    await writeOperationLog({ req, actor, action: 'download', resource: 'export_task', resourceId: task.id, requestBody: { resource: task.resource, fileName: file.fileName } });
+    return {
+      statusCode: 200,
+      file: {
+        buffer: file.buffer,
+        fileName: file.fileName,
+        contentType: 'application/json; charset=utf-8'
+      }
+    };
   }
   const exportTaskMatch = url.pathname.match(/^\/api\/export-tasks\/([^/]+)$/);
   if (req.method === 'GET' && exportTaskMatch) {
@@ -1685,10 +1916,12 @@ function permissionFor(req, url) {
   if (url.pathname.match(/^\/api\/whitelist\/[^/]+$/)) return 'security:whitelist:detail';
   if (url.pathname === '/api/blacklist') return req.method === 'GET' ? 'security:blacklist:base' : 'security:blacklist:add';
   if (url.pathname === '/api/blacklist/import') return 'security:blacklist:import';
+  if (url.pathname.match(/^\/api\/blacklist\/[^/]+\/status$/)) return 'security:blacklist:remove';
   if (url.pathname.match(/^\/api\/blacklist\/[^/]+\/remove$/)) return 'security:blacklist:remove';
   if (url.pathname.match(/^\/api\/blacklist\/[^/]+$/)) return 'security:blacklist:detail';
   if (url.pathname === '/api/unsubscribes') return req.method === 'GET' ? 'security:unsubscribe:base' : 'security:unsubscribe:add';
   if (url.pathname === '/api/unsubscribes/import') return 'security:unsubscribe:import';
+  if (url.pathname.match(/^\/api\/unsubscribes\/[^/]+\/status$/)) return 'security:unsubscribe:status';
   if (url.pathname.match(/^\/api\/unsubscribes\/[^/]+$/)) return 'security:unsubscribe:detail';
   if (url.pathname === '/api/settings') return 'security:setting:base';
   if (url.pathname === '/api/settings/update') return 'security:setting:save';

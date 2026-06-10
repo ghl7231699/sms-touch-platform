@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { ChevronDown, LogOut, Menu } from 'lucide-react';
+import { Menu as AntMenu } from 'antd';
+import { LogOut, Menu as MenuIcon } from 'lucide-react';
 import { api } from './lib/api';
 import {
   getAccessData,
@@ -23,6 +24,7 @@ import { menus, pageTitles, type PageContext } from './constants/menus';
 import LoginPage from './pages/Login';
 import SetPasswordPage from './pages/Login/SetPasswordPage';
 import ForbiddenPage from './pages/governance/ForbiddenPage';
+import { Modal } from './components/Modal';
 
 function routeElement(item: ResolvedMenuItem, context: PageContext, firstAccessiblePath: string, navigate: (path: string) => void) {
   if (item.authDisabled || requireAuth(item.fullKey)) {
@@ -58,9 +60,11 @@ export default function App() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
   const [notice, setNotice] = useState('就绪');
-  const [, setLoading] = useState(false);
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [loadingCount, setLoadingCount] = useState(0);
+  const [forbidden, setForbidden] = useState<{ message: string; code?: string; path?: string } | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
   const location = useLocation();
   const navigate = useNavigate();
   const resolvedMenus = useMemo(() => resolveMenus(menus), []);
@@ -68,6 +72,21 @@ export default function App() {
   const accessibleRoutes = useMemo(() => flattenMenus(filteredMenus), [filteredMenus]);
   const firstAccessiblePath = useMemo(() => getFirstAccessiblePath(resolvedMenus), [resolvedMenus, currentUser]);
   const currentTitle = pageTitles[location.pathname] || '短信触达平台';
+  const selectedPath = accessibleRoutes.find((item) => item.path === location.pathname)?.path || firstAccessiblePath;
+  const selectedGroup = filteredMenus.find((group) => (group.children?.length ? group.children : [group]).some((item) => item.path === selectedPath));
+  const selectedMenu = (selectedGroup?.children?.length ? selectedGroup.children : selectedGroup ? [selectedGroup] : []).find((item) => item.path === selectedPath);
+  const menuItems = useMemo(() => filteredMenus.map((group) => ({
+    key: group.children?.length ? group.path : group.path,
+    icon: group.icon,
+    label: group.title,
+    children: group.children?.length
+      ? group.children.map((item) => ({
+        key: item.path,
+        icon: item.icon,
+        label: item.title
+      }))
+      : undefined
+  })), [filteredMenus]);
 
   async function loadMe() {
     const token = getAuthToken();
@@ -110,8 +129,33 @@ export default function App() {
     }
   }
 
+  async function changePassword(event: React.FormEvent) {
+    event.preventDefault();
+    if (passwordForm.newPassword.length < 8) {
+      setNotice('新密码至少需要 8 位');
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setNotice('两次输入的新密码不一致');
+      return;
+    }
+    try {
+      await api('/api/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({
+          oldPassword: passwordForm.oldPassword,
+          newPassword: passwordForm.newPassword
+        })
+      });
+      setNotice('密码已修改');
+      setPasswordForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
+      setPasswordOpen(false);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : '密码修改失败');
+    }
+  }
+
   async function refresh() {
-    setLoading(true);
     try {
       const [healthData, statsData, tplData, ruleData, logData, eventData, taskData] = await Promise.all([
         api<Health>('/health'),
@@ -131,8 +175,6 @@ export default function App() {
       setTasks(taskData.items);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : '刷新失败');
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -143,6 +185,40 @@ export default function App() {
   useEffect(() => {
     if (currentUser) refresh();
   }, [currentUser]);
+
+  useEffect(() => {
+    if (!notice || notice === '就绪') return undefined;
+    const timer = window.setTimeout(() => setNotice('就绪'), 3200);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
+  useEffect(() => {
+    function handleLoadingStart() {
+      setLoadingCount((value) => value + 1);
+    }
+
+    function handleLoadingEnd() {
+      setLoadingCount((value) => Math.max(0, value - 1));
+    }
+
+    function handleForbidden(event: Event) {
+      const detail = (event as CustomEvent<{ message?: string; code?: string; path?: string }>).detail || {};
+      setForbidden({
+        message: detail.message || '当前账号没有执行该操作的权限。',
+        code: detail.code,
+        path: detail.path
+      });
+    }
+
+    window.addEventListener('app:loading-start', handleLoadingStart);
+    window.addEventListener('app:loading-end', handleLoadingEnd);
+    window.addEventListener('app:forbidden', handleForbidden);
+    return () => {
+      window.removeEventListener('app:loading-start', handleLoadingStart);
+      window.removeEventListener('app:loading-end', handleLoadingEnd);
+      window.removeEventListener('app:forbidden', handleForbidden);
+    };
+  }, []);
 
   const pageContext: PageContext = {
     templates,
@@ -157,7 +233,15 @@ export default function App() {
   };
 
   if (!authChecked) {
-    return <div className="authShell"><div className="authCard"><strong>正在校验登录态</strong></div></div>;
+    return (
+      <div className="authShell">
+        <div className="pageLoadingCard">
+          <div className="loadingSpinner" />
+          <strong>正在校验登录态</strong>
+          <span>请稍候，系统正在确认当前账号状态。</span>
+        </div>
+      </div>
+    );
   }
 
   if (!currentUser) {
@@ -170,29 +254,9 @@ export default function App() {
   }
 
   const isKnownRoute = accessibleRoutes.some((item) => item.path === location.pathname);
-  const selectedPath = accessibleRoutes.find((item) => item.path === location.pathname)?.path || firstAccessiblePath;
-  const selectedGroup = filteredMenus.find((group) => (group.children?.length ? group.children : [group]).some((item) => item.path === selectedPath));
-  const selectedMenu = (selectedGroup?.children?.length ? selectedGroup.children : selectedGroup ? [selectedGroup] : []).find((item) => item.path === selectedPath);
-
-  function isGroupExpanded(group: ResolvedMenuItem) {
-    return expandedGroups[group.key] ?? selectedGroup?.key === group.key;
-  }
-
-  function toggleGroup(group: ResolvedMenuItem) {
-    setExpandedGroups((value) => ({ ...value, [group.key]: !isGroupExpanded(group) }));
-  }
-
-  function handleGroupClick(group: ResolvedMenuItem) {
-    if (sidebarCollapsed) {
-      const target = (group.children?.length ? group.children[0] : group)?.path;
-      if (target) navigate(target);
-      return;
-    }
-    toggleGroup(group);
-  }
-
   return (
     <div className={`shell${sidebarCollapsed ? ' sidebarCollapsed' : ''}`}>
+      {loadingCount > 0 && <div className="globalLoadingBar"><span /></div>}
       <aside className="sidebar">
         <div className="brand">
           <div className="brandMark">SMS</div>
@@ -202,41 +266,15 @@ export default function App() {
           </div>
         </div>
 
-        <nav>
-          {filteredMenus.map((group) => (
-            <div className="navSection" key={group.key}>
-              <button
-                className={`navSectionButton${selectedGroup?.key === group.key ? ' active' : ''}`}
-                type="button"
-                onClick={() => handleGroupClick(group)}
-                aria-expanded={isGroupExpanded(group)}
-                title={group.title}
-              >
-                <span className="navSectionLabel">
-                  {group.icon}
-                  <span className="navSectionLabelText">{group.title}</span>
-                </span>
-                <ChevronDown className="navChevron" size={20} />
-              </button>
-              {!sidebarCollapsed && isGroupExpanded(group) && (
-                <div className="navSubMenu">
-                  {(group.children?.length ? group.children : [group]).map((item) => (
-                    <button
-                      className={`navSubItem${selectedPath === item.path ? ' active' : ''}`}
-                      key={item.path}
-                      type="button"
-                      onClick={() => navigate(item.path)}
-                      title={item.title}
-                    >
-                      {item.icon}
-                      <span>{item.title}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </nav>
+        <AntMenu
+          className="sideMenu"
+          defaultOpenKeys={selectedGroup ? [selectedGroup.path] : []}
+          inlineCollapsed={sidebarCollapsed}
+          items={menuItems}
+          mode="inline"
+          selectedKeys={[selectedPath]}
+          onClick={({ key }) => navigate(String(key))}
+        />
       </aside>
 
       <main className="content">
@@ -249,7 +287,7 @@ export default function App() {
               aria-label={sidebarCollapsed ? '展开菜单栏' : '收起菜单栏'}
               title={sidebarCollapsed ? '展开菜单栏' : '收起菜单栏'}
             >
-              <Menu size={22} />
+              <MenuIcon size={22} />
             </button>
           </div>
           <div className="headerRight">
@@ -257,6 +295,7 @@ export default function App() {
               欢迎回来，{currentUser.name} · 今天是 {formatChineseToday()} · 祝你工作顺利！
             </span>
             <div className="headerActions">
+              <button className="topTextButton" type="button" onClick={() => setPasswordOpen(true)}>修改密码</button>
               <div className="userMeta">
                 <strong>{currentUser.name}</strong>
                 <span>{currentUser.email}</span>
@@ -279,12 +318,42 @@ export default function App() {
           <Route path="/" element={<Navigate to={firstAccessiblePath} replace />} />
           <Route path="/login" element={<Navigate to={firstAccessiblePath} replace />} />
           <Route path="/set-password" element={<SetPasswordPage />} />
+          <Route path="/403" element={<ForbiddenPage onBack={() => navigate(firstAccessiblePath)} />} />
           {renderRoutes(resolvedMenus, pageContext, firstAccessiblePath, navigate)}
           <Route
             path="*"
             element={isKnownRoute ? <Navigate to={firstAccessiblePath} replace /> : <ForbiddenPage onBack={() => navigate(firstAccessiblePath)} />}
           />
         </Routes>
+        {notice !== '就绪' && <div className="noticeToast">{notice}</div>}
+        <Modal open={Boolean(forbidden)} title="权限不足" onClose={() => setForbidden(null)} showClose={false}>
+          {forbidden && (
+            <div className="formPanel">
+              <ForbiddenPage
+                title="403"
+                message={forbidden.message}
+                detail={forbidden.path ? `请求地址：${forbidden.path}${forbidden.code ? ` · 错误码：${forbidden.code}` : ''}` : '请联系管理员检查角色权限配置。'}
+                actionText="我知道了"
+                hideAction
+                onBack={() => setForbidden(null)}
+              />
+              <div className="modalActions">
+                <button className="primaryButton compact" type="button" onClick={() => setForbidden(null)}>关闭</button>
+              </div>
+            </div>
+          )}
+        </Modal>
+        <Modal open={passwordOpen} title="修改密码" subtitle={currentUser.email} onClose={() => setPasswordOpen(false)} showClose={false}>
+          <form className="formPanel" onSubmit={changePassword}>
+            <label>原密码<input type="password" value={passwordForm.oldPassword} onChange={(event) => setPasswordForm({ ...passwordForm, oldPassword: event.target.value })} required /></label>
+            <label>新密码<input type="password" value={passwordForm.newPassword} onChange={(event) => setPasswordForm({ ...passwordForm, newPassword: event.target.value })} required /></label>
+            <label>确认新密码<input type="password" value={passwordForm.confirmPassword} onChange={(event) => setPasswordForm({ ...passwordForm, confirmPassword: event.target.value })} required /></label>
+            <div className="modalActions">
+              <button className="secondaryButton compact" type="button" onClick={() => setPasswordOpen(false)}>取消</button>
+              <button className="primaryButton compact" type="submit">保存</button>
+            </div>
+          </form>
+        </Modal>
       </main>
     </div>
   );

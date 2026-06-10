@@ -1,35 +1,37 @@
 import React, { useEffect, useState } from 'react';
-import { KeyRound, Search } from 'lucide-react';
+import { KeyRound } from 'lucide-react';
 import { api } from '../../lib/api';
+import { statusLabel } from '../../constants/labels';
 import type { EventSourceItem } from '../../types';
 import { Modal } from '../../components/Modal';
+import { QueryFilterBar, type QueryFilterValues } from '../../components/QueryFilterBar';
+import { defaultPagination, ListPagination, withPaginationParams, type PaginationState } from '../../components/ListPagination';
 import { SelectField } from '../../components/SelectField';
 import { StatusBadge } from '../../components/StatusBadge';
 import { AuthC } from '../../lib/auth';
+import { TableEmptyState } from '../../components/EmptyState';
 
 const emptyForm = { name: '', appId: '', remark: '' };
 const emptyFilters = { keyword: '', appId: '', status: '', dateFrom: '', dateTo: '' };
 
-function queryString(filters: Record<string, string>) {
-  const params = new URLSearchParams({ pageSize: '80' });
-  Object.entries(filters).forEach(([key, value]) => {
-    if (value) params.set(key, value);
-  });
-  return params.toString();
+function formatTime(value?: string) {
+  return value ? new Date(value).toLocaleString() : '-';
 }
 
 export default function EventSourcesPage({ setNotice }: { setNotice: (value: string) => void }) {
   const [items, setItems] = useState<EventSourceItem[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [filters, setFilters] = useState(emptyFilters);
+  const [pagination, setPagination] = useState<PaginationState>(defaultPagination);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<EventSourceItem | null>(null);
   const [selected, setSelected] = useState<EventSourceItem | null>(null);
   const [secret, setSecret] = useState('');
 
-  async function load(nextFilters = filters) {
-    const data = await api<{ items: EventSourceItem[] }>(`/api/event-sources?${queryString(nextFilters)}`);
+  async function load(nextFilters = filters, nextPagination = pagination) {
+    const data = await api<{ items: EventSourceItem[]; total: number; page: number; pageSize: number }>(`/api/event-sources?${withPaginationParams(nextFilters, nextPagination)}`);
     setItems(data.items);
+    setPagination({ page: data.page, pageSize: data.pageSize, total: data.total });
   }
 
   useEffect(() => {
@@ -76,6 +78,21 @@ export default function EventSourcesPage({ setNotice }: { setNotice: (value: str
     await load();
   }
 
+  function openEditFromDetail(item: EventSourceItem) {
+    setSelected(null);
+    openEdit(item);
+  }
+
+  async function toggleFromDetail(item: EventSourceItem) {
+    await toggle(item);
+    setSelected(null);
+  }
+
+  async function resetSecretFromDetail(item: EventSourceItem) {
+    await resetSecret(item);
+    setSelected(null);
+  }
+
   async function resetSecret(item: EventSourceItem) {
     const result = await api<{ secret: string }>(`/api/event-sources/${item.id}/reset-secret`, { method: 'POST' });
     setSecret(result.secret);
@@ -88,9 +105,15 @@ export default function EventSourcesPage({ setNotice }: { setNotice: (value: str
     setSelected(data.item);
   }
 
-  function applyFilters(event: React.FormEvent) {
-    event.preventDefault();
-    load().catch((error) => setNotice(error instanceof Error ? error.message : '查询失败'));
+  function search(nextFilters: QueryFilterValues) {
+    const typedFilters = { ...emptyFilters, ...nextFilters };
+    const nextPagination = { ...pagination, page: 1 };
+    setFilters(typedFilters);
+    load(typedFilters, nextPagination).catch((error) => setNotice(error instanceof Error ? error.message : '查询失败'));
+  }
+
+  function changePage(page: number, pageSize: number) {
+    load(filters, { ...pagination, page, pageSize });
   }
 
   return (
@@ -106,18 +129,23 @@ export default function EventSourcesPage({ setNotice }: { setNotice: (value: str
           </AuthC>
         </div>
 
-        <form className="filterBar" onSubmit={applyFilters}>
-          <input value={filters.keyword} onChange={(event) => setFilters({ ...filters, keyword: event.target.value })} placeholder="名称 / AppId" />
-          <input value={filters.appId} onChange={(event) => setFilters({ ...filters, appId: event.target.value })} placeholder="AppId" />
-          <SelectField
-            value={filters.status}
-            options={[{ value: '', label: '全部状态' }, { value: 'enabled', label: '启用' }, { value: 'disabled', label: '停用' }]}
-            onChange={(status) => setFilters({ ...filters, status })}
-          />
-          <input type="date" value={filters.dateFrom} onChange={(event) => setFilters({ ...filters, dateFrom: event.target.value })} />
-          <input type="date" value={filters.dateTo} onChange={(event) => setFilters({ ...filters, dateTo: event.target.value })} />
-          <button className="primaryButton compact" type="submit"><Search size={16} />查询</button>
-        </form>
+        <QueryFilterBar
+          fields={[
+            { name: 'keyword', label: '名称 / AppId', placeholder: '请输入名称或 AppId' },
+            { name: 'appId', label: 'AppId', placeholder: '请输入 AppId' },
+            {
+              name: 'status',
+              label: '状态',
+              type: 'select',
+              placeholder: '全部状态',
+              options: [{ value: 'enabled', label: '启用' }, { value: 'disabled', label: '停用' }]
+            },
+            { name: 'createdAt', label: '创建日期', type: 'dateRange', fromName: 'dateFrom', toName: 'dateTo' }
+          ]}
+          values={filters}
+          onChange={(value) => setFilters({ ...emptyFilters, ...value })}
+          onSearch={search}
+        />
 
         <div className="dataTableWrap">
           <table className="dataTable">
@@ -148,9 +176,11 @@ export default function EventSourcesPage({ setNotice }: { setNotice: (value: str
                   </td>
                 </tr>
               ))}
+              {!items.length && <TableEmptyState colSpan={6} title="暂无事件来源" description="新建来源后，业务系统才能通过 AppId 和密钥接入事件。" />}
             </tbody>
           </table>
         </div>
+        <ListPagination pagination={pagination} onChange={changePage} />
       </section>
 
       <Modal open={modalOpen} title="新建来源" subtitle="用于事件鉴权" onClose={() => setModalOpen(false)} showClose={false}>
@@ -177,7 +207,7 @@ export default function EventSourcesPage({ setNotice }: { setNotice: (value: str
         </form>
       </Modal>
 
-      <Modal open={Boolean(selected)} title="来源详情" subtitle={selected?.appId} onClose={() => setSelected(null)}>
+      <Modal open={Boolean(selected)} title="来源详情" onClose={() => setSelected(null)}>
         {selected && (
           <div className="formPanel">
             <div className="detailCard">
@@ -186,8 +216,32 @@ export default function EventSourcesPage({ setNotice }: { setNotice: (value: str
               <div><span>密钥预览</span><strong>{selected.secretPreview}</strong></div>
               <div><span>状态</span><StatusBadge status={selected.status === 'enabled' ? 'enabled' : 'disabled'} /></div>
             </div>
-            <div className="fieldBlock"><span>备注</span><strong>{selected.remark || '-'}</strong></div>
-            <div className="fieldBlock"><span>创建时间</span><strong>{new Date(selected.createdAt).toLocaleString()}</strong></div>
+            <section className="approvalBlock">
+              <strong>接入状态</strong>
+              <p>{selected.status === 'enabled' ? '该来源可以正常推送业务事件，系统会按 AppId 和 Secret 完成鉴权。' : '该来源已停用，业务事件会被拒绝接入。'}</p>
+            </section>
+            <section className="approvalBlock">
+              <strong>鉴权说明</strong>
+              <p>业务系统调用事件接入接口时需要携带 AppId 和签名密钥；密钥只在创建或重置后明文展示一次。</p>
+            </section>
+            <div className="detailCard">
+              <div><span>状态说明</span><strong>{statusLabel(selected.status)}</strong></div>
+              <div><span>备注</span><strong>{selected.remark || '-'}</strong></div>
+              <div><span>创建时间</span><strong>{formatTime(selected.createdAt)}</strong></div>
+              <div><span>来源 ID</span><strong>{selected.id}</strong></div>
+            </div>
+            <div className="modalActions">
+              <button className="secondaryButton compact" type="button" onClick={() => setSelected(null)}>关闭</button>
+              <AuthC authKey="integration:eventSource:edit">
+                <button className="secondaryButton compact" type="button" onClick={() => openEditFromDetail(selected)}>编辑</button>
+              </AuthC>
+              <AuthC authKey="integration:eventSource:status">
+                <button className="secondaryButton compact" type="button" onClick={() => toggleFromDetail(selected)}>{selected.status === 'enabled' ? '停用' : '启用'}</button>
+              </AuthC>
+              <AuthC authKey="integration:eventSource:resetSecret">
+                <button className="primaryButton compact" type="button" onClick={() => resetSecretFromDetail(selected)}>重置密钥</button>
+              </AuthC>
+            </div>
           </div>
         )}
       </Modal>

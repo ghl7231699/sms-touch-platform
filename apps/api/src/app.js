@@ -116,6 +116,15 @@ async function handleApi(req, res, url) {
 
   const governanceResult = await handleGovernanceApi(req, url, readJson);
   if (governanceResult.handled) {
+    if (governanceResult.file) {
+      res.writeHead(governanceResult.statusCode, {
+        'Content-Type': governanceResult.file.contentType || 'application/octet-stream',
+        'Content-Disposition': `attachment; filename="${encodeURIComponent(governanceResult.file.fileName)}"`,
+        'Cache-Control': 'no-store'
+      });
+      res.end(governanceResult.file.buffer);
+      return;
+    }
     sendJson(res, governanceResult.statusCode, governanceResult.body);
     return;
   }

@@ -134,6 +134,28 @@ export interface AdminUser extends AuthUser {
   createdAt: string;
 }
 
+export interface AdminUserDetail extends AdminUser {
+  recentSessions?: {
+    id: string;
+    ip?: string;
+    userAgent?: string;
+    status: string;
+    createdAt: string;
+    lastSeenAt: string;
+    expiresAt: string;
+    revokedAt?: string;
+  }[];
+  recentOperationLogs?: {
+    id: string;
+    resource: string;
+    action: string;
+    result: string;
+    path?: string;
+    ip?: string;
+    createdAt: string;
+  }[];
+}
+
 export interface RegisterRequestItem {
   id: string;
   email: string;
@@ -160,13 +182,17 @@ export interface RoleItem {
 
 export interface PhoneGovernanceItem {
   id: string;
+  phone?: string;
   phoneMasked: string;
   scene?: string;
   remark?: string;
   reason?: string;
   source?: string;
   status: string;
+  createdById?: string;
+  removedAt?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface EventSourceItem {

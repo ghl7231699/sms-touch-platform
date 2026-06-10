@@ -23,7 +23,13 @@ export function statusLabel(status: string) {
     partial_failed: '部分失败',
     blocked: '拦截',
     skipped: '已跳过',
-    cancelled: '已取消'
+    cancelled: '已取消',
+    active: '生效中',
+    removed: '已移除',
+    approved: '已通过',
+    rejected: '已驳回',
+    withdrawn: '已撤回',
+    locked: '锁定'
   }[status] || status;
 }
 
@@ -52,6 +58,11 @@ export function resourceLabel(resource?: string) {
     event_source: '事件来源',
     sms_task: '短信任务',
     export_task: '导出任务',
+    operation_log: '操作日志',
+    operation_logs: '操作日志',
+    send_log: '发送记录',
+    sms_send_log: '发送记录',
+    event_source_log: '接入日志',
     approval_order: '审批单',
     sms_rule: '自动化规则',
     sms_template: '短信模板'
@@ -63,6 +74,9 @@ export function actionLabel(action?: string) {
     create: '创建',
     update: '更新',
     change_status: '变更状态',
+    update_permissions: '更新权限',
+    delete: '删除',
+    download: '下载',
     reset_password: '重置密码',
     change_password: '修改密码',
     approve: '通过',
@@ -108,6 +122,7 @@ export function operationLabel(resource?: string, action?: string) {
     'auth:change_password': '修改登录密码',
     'admin_user:create': '创建后台用户',
     'admin_user:update': '更新后台用户',
+    'admin_user:delete': '删除后台用户',
     'admin_user:change_status': '变更用户状态',
     'admin_user:reset_password': '重置用户密码',
     'auth_register_request:approve': '通过注册申请',
@@ -118,7 +133,9 @@ export function operationLabel(resource?: string, action?: string) {
     'sms_whitelist:export': '导出白名单',
     'sms_blacklist:create': '新增黑名单',
     'sms_blacklist:remove': '移除黑名单',
+    'sms_blacklist:change_status': '变更黑名单状态',
     'sms_unsubscribe:create': '新增退订记录',
+    'sms_unsubscribe:change_status': '变更退订状态',
     'blacklist_import:import': '批量导入黑名单',
     'unsubscribe_import:import': '批量导入退订',
     'system_setting:update': '更新发送控制',
@@ -129,6 +146,7 @@ export function operationLabel(resource?: string, action?: string) {
     'sms_task:batch_cancel': '批量取消短信任务',
     'sms_task:batch_retry': '批量重试短信任务',
     'export_task:create': '创建导出任务',
+    'export_task:download': '下载导出文件',
     'approval_order:create': '创建审批单',
     'approval_order:approve': '通过审批单',
     'approval_order:reject': '驳回审批单',

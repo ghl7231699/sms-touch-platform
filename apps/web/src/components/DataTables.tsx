@@ -1,6 +1,7 @@
 import { api } from '../lib/api';
 import { eventLabels, sceneLabels } from '../constants/labels';
 import type { SendLog, SmsTask } from '../types';
+import { TableEmptyState } from './EmptyState';
 import { StatusBadge } from './StatusBadge';
 
 export function TaskTable({ tasks, showDetail = false }: { tasks: SmsTask[]; showDetail?: boolean }) {
@@ -39,6 +40,7 @@ export function TaskTable({ tasks, showDetail = false }: { tasks: SmsTask[]; sho
               )}
             </tr>
           ))}
+          {!tasks.length && <TableEmptyState colSpan={showDetail ? 8 : 7} title="暂无短信任务" description="当前还没有待发送、发送中或已完成的短信任务。" />}
         </tbody>
       </table>
     </div>
@@ -100,9 +102,9 @@ export function LogTable({ logs, showActions = false }: { logs: SendLog[]; showA
               )}
             </tr>
           ))}
+          {!logs.length && <TableEmptyState colSpan={showActions ? 10 : 9} title="暂无发送记录" description="当前筛选条件下没有短信发送记录。" />}
         </tbody>
       </table>
     </div>
   );
 }
-

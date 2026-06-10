@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { FileText, Search } from 'lucide-react';
-import { api } from '../../lib/api';
+import { FileText } from 'lucide-react';
+import { api, downloadApi } from '../../lib/api';
 import { resourceLabel } from '../../constants/labels';
 import type { ExportTaskItem } from '../../types';
+import { defaultPagination, ListPagination, withPaginationParams, type PaginationState } from '../../components/ListPagination';
 import { Modal } from '../../components/Modal';
+import { QueryFilterBar, type QueryFilterValues } from '../../components/QueryFilterBar';
 import { SelectField } from '../../components/SelectField';
 import { StatusBadge } from '../../components/StatusBadge';
 import { AuthC } from '../../lib/auth';
+import { TableEmptyState } from '../../components/EmptyState';
 
 const resourceOptions = [
   { value: 'operation_log', label: '操作日志' },
@@ -18,29 +21,27 @@ const resourceOptions = [
 
 const emptyFilters = { keyword: '', resource: '', status: '', dateFrom: '', dateTo: '' };
 
-function queryString(filters: Record<string, string>) {
-  const params = new URLSearchParams({ pageSize: '80' });
-  Object.entries(filters).forEach(([key, value]) => {
-    if (value) params.set(key, value);
-  });
-  return params.toString();
-}
-
 function formatJson(value: unknown) {
   if (!value) return '-';
   return JSON.stringify(value, null, 2);
 }
 
+function formatTime(value?: string) {
+  return value ? new Date(value).toLocaleString() : '-';
+}
+
 export default function ExportTasksPage({ setNotice }: { setNotice: (value: string) => void }) {
   const [items, setItems] = useState<ExportTaskItem[]>([]);
   const [filters, setFilters] = useState(emptyFilters);
+  const [pagination, setPagination] = useState<PaginationState>(defaultPagination);
   const [modalOpen, setModalOpen] = useState(false);
   const [selected, setSelected] = useState<ExportTaskItem | null>(null);
   const [form, setForm] = useState({ resource: 'operation_log', name: '操作日志导出', sensitive: false, reason: '' });
 
-  async function load(nextFilters = filters) {
-    const data = await api<{ items: ExportTaskItem[] }>(`/api/export-tasks?${queryString(nextFilters)}`);
+  async function load(nextFilters = filters, nextPagination = pagination) {
+    const data = await api<{ items: ExportTaskItem[]; total: number; page: number; pageSize: number }>(`/api/export-tasks?${withPaginationParams(nextFilters, nextPagination)}`);
     setItems(data.items);
+    setPagination({ page: data.page, pageSize: data.pageSize, total: data.total });
   }
 
   useEffect(() => {
@@ -65,8 +66,17 @@ export default function ExportTasksPage({ setNotice }: { setNotice: (value: stri
   }
 
   async function download(item: ExportTaskItem) {
-    const result = await api<{ fileName?: string; expiresAt?: string }>(`/api/export-tasks/${item.id}/download`);
-    setNotice(`${result.fileName || item.fileName || '导出文件'} 可下载，有效期至 ${result.expiresAt ? new Date(result.expiresAt).toLocaleString() : '7 天后'}`);
+    const result = await downloadApi(`/api/export-tasks/${item.id}/download`);
+    const fileName = result.fileName || item.fileName || `export_${item.id}.json`;
+    const url = URL.createObjectURL(result.blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setNotice(`${fileName} 已开始下载`);
   }
 
   async function openDetail(item: ExportTaskItem) {
@@ -74,9 +84,15 @@ export default function ExportTasksPage({ setNotice }: { setNotice: (value: stri
     setSelected(data.item);
   }
 
-  function applyFilters(event: React.FormEvent) {
-    event.preventDefault();
-    load();
+  function search(nextFilters: QueryFilterValues) {
+    const typedFilters = { ...emptyFilters, ...nextFilters };
+    const nextPagination = { ...pagination, page: 1 };
+    setFilters(typedFilters);
+    load(typedFilters, nextPagination);
+  }
+
+  function changePage(page: number, pageSize: number) {
+    load(filters, { ...pagination, page, pageSize });
   }
 
   return (
@@ -91,14 +107,27 @@ export default function ExportTasksPage({ setNotice }: { setNotice: (value: stri
         </AuthC>
       </div>
 
-      <form className="filterBar" onSubmit={applyFilters}>
-        <input value={filters.keyword} onChange={(event) => setFilters({ ...filters, keyword: event.target.value })} placeholder="任务名 / 文件名" />
-        <SelectField value={filters.resource} options={[{ value: '', label: '全部资源' }, ...resourceOptions]} onChange={(resource) => setFilters({ ...filters, resource })} />
-        <SelectField value={filters.status} options={[{ value: '', label: '全部状态' }, { value: 'completed', label: '已完成' }, { value: 'pending', label: '处理中' }, { value: 'failed', label: '失败' }]} onChange={(status) => setFilters({ ...filters, status })} />
-        <input type="date" value={filters.dateFrom} onChange={(event) => setFilters({ ...filters, dateFrom: event.target.value })} />
-        <input type="date" value={filters.dateTo} onChange={(event) => setFilters({ ...filters, dateTo: event.target.value })} />
-        <button className="primaryButton compact" type="submit"><Search size={16} />查询</button>
-      </form>
+      <QueryFilterBar
+        fields={[
+          { name: 'keyword', label: '任务名 / 文件名', placeholder: '请输入任务名或文件名' },
+          { name: 'resource', label: '资源', type: 'select', placeholder: '全部资源', options: resourceOptions },
+          {
+            name: 'status',
+            label: '状态',
+            type: 'select',
+            placeholder: '全部状态',
+            options: [
+              { value: 'completed', label: '已完成' },
+              { value: 'pending', label: '处理中' },
+              { value: 'failed', label: '失败' }
+            ]
+          },
+          { name: 'createdAt', label: '创建日期', type: 'dateRange', fromName: 'dateFrom', toName: 'dateTo' }
+        ]}
+        values={filters}
+        onChange={(value) => setFilters({ ...emptyFilters, ...value })}
+        onSearch={search}
+      />
 
       <div className="dataTableWrap">
         <table className="dataTable">
@@ -123,9 +152,11 @@ export default function ExportTasksPage({ setNotice }: { setNotice: (value: stri
                 </td>
               </tr>
             ))}
+            {!items.length && <TableEmptyState colSpan={6} title="暂无导出任务" description="创建导出任务后，这里会展示导出文件、状态和下载入口。" />}
           </tbody>
         </table>
       </div>
+      <ListPagination pagination={pagination} onChange={changePage} />
 
       <Modal open={modalOpen} title="新建导出任务" subtitle="导出条件会进入审计" onClose={() => setModalOpen(false)} showClose={false}>
         <form className="formPanel" onSubmit={create}>
@@ -140,19 +171,37 @@ export default function ExportTasksPage({ setNotice }: { setNotice: (value: stri
         </form>
       </Modal>
 
-      <Modal open={Boolean(selected)} title="导出任务详情" subtitle={selected?.name} onClose={() => setSelected(null)}>
+      <Modal open={Boolean(selected)} title="导出任务详情" onClose={() => setSelected(null)}>
         {selected && (
           <div className="formPanel">
             <div className="detailCard">
+              <div><span>任务名称</span><strong>{selected.name}</strong></div>
               <div><span>资源</span><strong>{resourceLabel(selected.resource)}</strong></div>
               <div><span>文件</span><strong>{selected.fileName || '-'}</strong></div>
               <div><span>状态</span><StatusBadge status={selected.status === 'completed' ? 'success' : selected.status} /></div>
-              <div><span>创建时间</span><strong>{new Date(selected.createdAt).toLocaleString()}</strong></div>
+              <div><span>创建时间</span><strong>{formatTime(selected.createdAt)}</strong></div>
+              <div><span>任务 ID</span><strong>{selected.id}</strong></div>
+            </div>
+            <section className="approvalBlock">
+              <strong>导出策略</strong>
+              <p>{selected.criteria?.maskSensitive === false ? '本次导出包含明文敏感字段，需要审批通过后才能生成文件。' : '本次导出默认脱敏敏感字段，可直接下载生成文件。'}</p>
+            </section>
+            <div className="detailCard">
+              <div><span>敏感字段</span><strong>{selected.criteria?.maskSensitive === false ? '明文导出' : '脱敏导出'}</strong></div>
+              <div><span>可下载</span><strong>{selected.status === 'completed' && selected.fileName ? '是' : '否'}</strong></div>
+              <div><span>文件名</span><strong>{selected.fileName || '等待生成'}</strong></div>
+              <div><span>资源标识</span><strong>{selected.resource}</strong></div>
             </div>
             <section className="approvalBlock">
               <strong>导出条件</strong>
               <pre>{formatJson(selected.criteria)}</pre>
             </section>
+            <div className="modalActions">
+              <button className="secondaryButton compact" type="button" onClick={() => setSelected(null)}>关闭</button>
+              <AuthC authKey="audit:exportTask:download">
+                <button className="primaryButton compact" type="button" onClick={() => download(selected)} disabled={selected.status !== 'completed'}>下载</button>
+              </AuthC>
+            </div>
           </div>
         )}
       </Modal>
