@@ -13,7 +13,7 @@ import { TableEmptyState } from '../../components/EmptyState';
 
 type PhoneListKind = 'whitelist' | 'blacklist' | 'unsubscribes';
 
-const emptyForm = { phone: '', scene: '', remark: '', reason: '' };
+const emptyForm = { phone: '', scene: '', remark: '', reason: '', source: 'manual' };
 const emptyFilters = { phone: '', scene: '', status: '', source: '', dateFrom: '', dateTo: '' };
 
 const emptyCopy: Record<PhoneListKind, { title: string; description: string }> = {
@@ -49,8 +49,18 @@ export default function PhoneListPage({ kind, title, setNotice }: { kind: PhoneL
   const [statusTarget, setStatusTarget] = useState<PhoneGovernanceItem | null>(null);
   const endpoint = `/api/${kind}`;
   const canImport = kind === 'blacklist' || kind === 'unsubscribes';
-  const canEdit = kind === 'whitelist';
+  const canEdit = true;
   const authPrefix = kind === 'whitelist' ? 'security:whitelist' : kind === 'blacklist' ? 'security:blacklist' : 'security:unsubscribe';
+  const parsedImportPhones = useMemo(() => {
+    const raw = importText.split(/\s|,|，|;|；/).map((item) => item.trim()).filter(Boolean);
+    const unique = [...new Set(raw)];
+    return {
+      raw,
+      valid: unique.filter((phone) => /^1\d{10}$/.test(phone)),
+      invalid: unique.filter((phone) => !/^1\d{10}$/.test(phone)),
+      duplicatedCount: raw.length - unique.length
+    };
+  }, [importText]);
 
   const statusOptions = useMemo(() => {
     if (kind === 'whitelist') return [{ value: '', label: '全部状态' }, { value: 'enabled', label: '启用' }, { value: 'disabled', label: '停用' }];
@@ -82,25 +92,35 @@ export default function PhoneListPage({ kind, title, setNotice }: { kind: PhoneL
 
   function openEdit(item: PhoneGovernanceItem) {
     setEditing(item);
-    setForm({ phone: '', scene: item.scene || '', remark: item.remark || '', reason: item.reason || '' });
+    setForm({ phone: '', scene: item.scene || '', remark: item.remark || '', reason: item.reason || '', source: item.source || 'manual' });
   }
 
-  async function updateWhitelist(event: React.FormEvent) {
+  async function updateRecord(event: React.FormEvent) {
     event.preventDefault();
     if (!editing) return;
-    await api(`/api/whitelist/${editing.id}/update`, {
+    const payload = kind === 'whitelist'
+      ? { scene: form.scene, remark: form.remark }
+      : kind === 'blacklist'
+        ? { scene: form.scene, reason: form.reason, source: form.source }
+        : { scene: form.scene, remark: form.remark, source: form.source };
+    await api(`/api/${kind}/${editing.id}/update`, {
       method: 'POST',
-      body: JSON.stringify({ scene: form.scene, remark: form.remark })
+      body: JSON.stringify(payload)
     });
-    setNotice('白名单备注已更新');
+    setNotice(`${title}记录已更新`);
     setEditing(null);
     setForm(emptyForm);
     await load();
   }
 
   async function openDetail(item: PhoneGovernanceItem) {
-    const data = await api<{ item: PhoneGovernanceItem }>(`${endpoint}/${item.id}`);
-    setSelected(data.item);
+    setSelected(item);
+    try {
+      const data = await api<{ item: PhoneGovernanceItem }>(`${endpoint}/${item.id}`);
+      setSelected(data.item);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : `${title}详情加载失败`);
+    }
   }
 
   function governanceEffect(item: PhoneGovernanceItem) {
@@ -159,12 +179,19 @@ export default function PhoneListPage({ kind, title, setNotice }: { kind: PhoneL
 
   async function importPhones(event: React.FormEvent) {
     event.preventDefault();
-    const phones = importText.split(/\s|,|，|;|；/).map((item) => item.trim()).filter(Boolean);
-    await api(`/api/${kind}/import`, {
+    if (!parsedImportPhones.valid.length) {
+      setNotice('没有可导入的有效手机号');
+      return;
+    }
+    if (parsedImportPhones.invalid.length) {
+      setNotice(`存在 ${parsedImportPhones.invalid.length} 个格式错误号码，请修正后再导入`);
+      return;
+    }
+    const result = await api<{ jobId?: string; imported?: number }>(`/api/${kind}/import`, {
       method: 'POST',
-      body: JSON.stringify({ phones, scene: form.scene, remark: form.remark, reason: form.reason })
+      body: JSON.stringify({ phones: parsedImportPhones.valid, scene: form.scene, remark: form.remark, reason: form.reason, source: form.source })
     });
-    setNotice(`已提交导入，共 ${phones.length} 个号码`);
+    setNotice(`已提交导入 ${result.imported ?? parsedImportPhones.valid.length} 个号码${result.jobId ? `，批次 ${result.jobId.slice(0, 8)}` : ''}`);
     setImportText('');
     setForm(emptyForm);
     setModal(null);
@@ -243,7 +270,7 @@ export default function PhoneListPage({ kind, title, setNotice }: { kind: PhoneL
                         <button className="tableButton" type="button" onClick={() => openDetail(item)}>详情</button>
                       </AuthC>
                       {canEdit && (
-                        <AuthC authKey="security:whitelist:edit">
+                        <AuthC authKey={`${authPrefix}:edit`}>
                           <button className="tableButton" type="button" onClick={() => openEdit(item)}>编辑</button>
                         </AuthC>
                       )}
@@ -275,11 +302,25 @@ export default function PhoneListPage({ kind, title, setNotice }: { kind: PhoneL
 
       <Modal open={modal === 'create'} title="新增记录" subtitle={kind === 'whitelist' ? '真实发送保护' : '发送前拦截'} onClose={() => setModal(null)} showClose={false}>
         <form className="formPanel" onSubmit={submit}>
-          <label>手机号<input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} required /></label>
-          <label>场景<input value={form.scene} onChange={(event) => setForm({ ...form, scene: event.target.value })} placeholder="留空表示全部场景" /></label>
-          {kind === 'blacklist'
-            ? <label>原因<input value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} /></label>
-            : <label>备注<input value={form.remark} onChange={(event) => setForm({ ...form, remark: event.target.value })} /></label>}
+            <label>手机号<input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} required /></label>
+            <label>场景<input value={form.scene} onChange={(event) => setForm({ ...form, scene: event.target.value })} placeholder="留空表示全部场景" /></label>
+            {kind !== 'whitelist' && (
+              <label>来源
+                <SelectField
+                  value={form.source}
+                  options={[
+                    { value: 'manual', label: '人工录入' },
+                    { value: 'complaint', label: '投诉登记' },
+                    { value: 'risk_control', label: '风控命中' },
+                    { value: 'provider_callback', label: '服务商回执' }
+                  ]}
+                  onChange={(source) => setForm({ ...form, source })}
+                />
+              </label>
+            )}
+            {kind === 'blacklist'
+              ? <label>原因<input value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} /></label>
+              : <label>备注<input value={form.remark} onChange={(event) => setForm({ ...form, remark: event.target.value })} /></label>}
           <div className="modalActions">
             <button className="secondaryButton compact" type="button" onClick={() => setModal(null)}>取消</button>
             <button className="primaryButton compact" type="submit">保存</button>
@@ -291,6 +332,12 @@ export default function PhoneListPage({ kind, title, setNotice }: { kind: PhoneL
         <form className="formPanel" onSubmit={importPhones}>
           <label>号码列表<textarea value={importText} onChange={(event) => setImportText(event.target.value)} required /></label>
           <label>场景<input value={form.scene} onChange={(event) => setForm({ ...form, scene: event.target.value })} placeholder="留空表示全部场景" /></label>
+          {importText && (
+            <div className="fieldBlock">
+              <span>导入预检查</span>
+              <strong>有效 {parsedImportPhones.valid.length} 个，错误 {parsedImportPhones.invalid.length} 个，重复 {parsedImportPhones.duplicatedCount} 个</strong>
+            </div>
+          )}
           {kind === 'blacklist'
             ? <label>导入原因<input value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} /></label>
             : <label>备注<input value={form.remark} onChange={(event) => setForm({ ...form, remark: event.target.value })} /></label>}
@@ -301,10 +348,27 @@ export default function PhoneListPage({ kind, title, setNotice }: { kind: PhoneL
         </form>
       </Modal>
 
-      <Modal open={Boolean(editing)} title="编辑白名单" subtitle={editing?.phoneMasked} onClose={() => setEditing(null)} showClose={false}>
-        <form className="formPanel" onSubmit={updateWhitelist}>
+      <Modal open={Boolean(editing)} title={`编辑${kind === 'whitelist' ? '白名单' : kind === 'blacklist' ? '黑名单' : '退订记录'}`} subtitle={editing?.phoneMasked} onClose={() => setEditing(null)} showClose={false}>
+        <form className="formPanel" onSubmit={updateRecord}>
           <label>场景<input value={form.scene} onChange={(event) => setForm({ ...form, scene: event.target.value })} /></label>
-          <label>备注<input value={form.remark} onChange={(event) => setForm({ ...form, remark: event.target.value })} /></label>
+          {kind !== 'whitelist' && (
+            <label>来源
+              <SelectField
+                value={form.source}
+                options={[
+                  { value: 'manual', label: '人工录入' },
+                  { value: 'complaint', label: '投诉登记' },
+                  { value: 'risk_control', label: '风控命中' },
+                  { value: 'provider_callback', label: '服务商回执' },
+                  { value: 'import', label: '批量导入' }
+                ]}
+                onChange={(source) => setForm({ ...form, source })}
+              />
+            </label>
+          )}
+          {kind === 'blacklist'
+            ? <label>原因<input value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} /></label>
+            : <label>备注<input value={form.remark} onChange={(event) => setForm({ ...form, remark: event.target.value })} /></label>}
           <div className="modalActions">
             <button className="secondaryButton compact" type="button" onClick={() => setEditing(null)}>取消</button>
             <button className="primaryButton compact" type="submit">保存</button>
@@ -363,7 +427,7 @@ export default function PhoneListPage({ kind, title, setNotice }: { kind: PhoneL
             <div className="modalActions">
               <button className="secondaryButton compact" type="button" onClick={() => setSelected(null)}>关闭</button>
               {canEdit && (
-                <AuthC authKey="security:whitelist:edit">
+                <AuthC authKey={`${authPrefix}:edit`}>
                   <button className="secondaryButton compact" type="button" onClick={() => openEditFromDetail(selected)}>编辑</button>
                 </AuthC>
               )}

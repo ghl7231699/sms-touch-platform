@@ -114,7 +114,7 @@ async function handleApi(req, res, url) {
     return;
   }
 
-  const governanceResult = await handleGovernanceApi(req, url, readJson);
+  const governanceResult = await handleGovernanceApi(req, url, readJson, { taskWorker, runDueTasks });
   if (governanceResult.handled) {
     if (governanceResult.file) {
       res.writeHead(governanceResult.statusCode, {

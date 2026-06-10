@@ -33,6 +33,7 @@ export default function ApprovalsPage({ setNotice }: { setNotice: (value: string
   const [pagination, setPagination] = useState<PaginationState>(defaultPagination);
   const [selected, setSelected] = useState<ApprovalItem | null>(null);
   const [comment, setComment] = useState('');
+  const [actionConfirm, setActionConfirm] = useState<{ item: ApprovalItem; action: 'approve' | 'reject' | 'withdraw' } | null>(null);
 
   async function load(nextFilters = filters, nextPagination = pagination) {
     const data = await api<{ items: ApprovalItem[]; total: number; page: number; pageSize: number }>(`/api/approvals?${withPaginationParams(nextFilters, nextPagination)}`);
@@ -56,8 +57,18 @@ export default function ApprovalsPage({ setNotice }: { setNotice: (value: string
     });
     setNotice(action === 'approve' ? '审批已通过，对应业务动作已执行' : action === 'reject' ? '审批已驳回' : '审批已撤回');
     setSelected(result.item);
+    setActionConfirm(null);
     setComment('');
     await load();
+  }
+
+  function executeResultSummary(value: unknown) {
+    if (!value || typeof value !== 'object') return '-';
+    const result = value as { type?: string; executed?: boolean; result?: Record<string, unknown>; message?: string };
+    if (result.result?.exportTaskId) return `导出任务 ${String(result.result.exportTaskId).slice(0, 8)} 已生成`;
+    if (result.result?.appliedKeys) return `已应用配置：${(result.result.appliedKeys as string[]).join('、')}`;
+    if (result.result?.ruleId) return `规则 ${String(result.result.ruleId).slice(0, 8)} 状态已更新`;
+    return result.message || result.type || JSON.stringify(value);
   }
 
   function search(nextFilters: QueryFilterValues) {
@@ -162,6 +173,12 @@ export default function ApprovalsPage({ setNotice }: { setNotice: (value: string
               <strong>变更内容</strong>
               <pre>{formatJson({ before: selected.payload?.before, after: selected.payload?.after, execute: selected.payload?.execute, executeResult: selected.payload?.executeResult })}</pre>
             </section>
+            {Boolean(selected.payload?.executeResult) && (
+              <section className="approvalBlock">
+                <strong>执行结果</strong>
+                <p>{executeResultSummary(selected.payload?.executeResult)}</p>
+              </section>
+            )}
             <section className="approvalBlock">
               <strong>处理记录</strong>
               <div className="approvalRecords">
@@ -175,16 +192,15 @@ export default function ApprovalsPage({ setNotice }: { setNotice: (value: string
             </section>
             {selected.status === 'pending' && (
               <div className="formPanel">
-                <label>审批意见<input value={comment} onChange={(event) => setComment(event.target.value)} placeholder="填写通过、驳回或撤回理由" /></label>
                 <div className="modalActions">
                   <AuthC authKey="audit:approval:withdraw">
-                    <button className="secondaryButton compact" type="button" onClick={() => act(selected, 'withdraw')}>撤回</button>
+                    <button className="secondaryButton compact" type="button" onClick={() => setActionConfirm({ item: selected, action: 'withdraw' })}>撤回</button>
                   </AuthC>
                   <AuthC authKey="audit:approval:reject">
-                    <button className="secondaryButton compact" type="button" onClick={() => act(selected, 'reject')}>驳回</button>
+                    <button className="secondaryButton compact" type="button" onClick={() => setActionConfirm({ item: selected, action: 'reject' })}>驳回</button>
                   </AuthC>
                   <AuthC authKey="audit:approval:approve">
-                    <button className="primaryButton compact" type="button" onClick={() => act(selected, 'approve')}>通过</button>
+                    <button className="primaryButton compact" type="button" onClick={() => setActionConfirm({ item: selected, action: 'approve' })}>通过</button>
                   </AuthC>
                 </div>
               </div>
@@ -197,6 +213,24 @@ export default function ApprovalsPage({ setNotice }: { setNotice: (value: string
                 </div>
               </>
             )}
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={Boolean(actionConfirm)} title="确认审批操作" subtitle={actionConfirm?.item.title} onClose={() => setActionConfirm(null)} showClose={false}>
+        {actionConfirm && (
+          <div className="formPanel">
+            <div className="detailCard">
+              <div><span>操作</span><strong>{actionLabel(actionConfirm.action)}</strong></div>
+              <div><span>审批状态</span><StatusBadge status={approvalStatus(actionConfirm.item.status)} /></div>
+              <div><span>资源</span><strong>{resourceLabel(actionConfirm.item.resource)}</strong></div>
+              <div><span>影响对象</span><strong>{actionConfirm.item.payload?.summary?.impact?.title || actionConfirm.item.resourceId || '-'}</strong></div>
+            </div>
+            <label>审批意见<input value={comment} onChange={(event) => setComment(event.target.value)} placeholder="填写处理理由" /></label>
+            <div className="modalActions">
+              <button className="secondaryButton compact" type="button" onClick={() => setActionConfirm(null)}>取消</button>
+              <button className="primaryButton compact" type="button" onClick={() => act(actionConfirm.item, actionConfirm.action)}>确认{actionLabel(actionConfirm.action)}</button>
+            </div>
           </div>
         )}
       </Modal>

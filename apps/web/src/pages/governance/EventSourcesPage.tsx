@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { KeyRound } from 'lucide-react';
 import { api } from '../../lib/api';
 import { statusLabel } from '../../constants/labels';
-import type { EventSourceItem } from '../../types';
+import type { AuditItem, EventSourceItem, EventSourceStats } from '../../types';
 import { Modal } from '../../components/Modal';
 import { QueryFilterBar, type QueryFilterValues } from '../../components/QueryFilterBar';
 import { defaultPagination, ListPagination, withPaginationParams, type PaginationState } from '../../components/ListPagination';
@@ -26,6 +26,9 @@ export default function EventSourcesPage({ setNotice }: { setNotice: (value: str
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<EventSourceItem | null>(null);
   const [selected, setSelected] = useState<EventSourceItem | null>(null);
+  const [selectedStats, setSelectedStats] = useState<EventSourceStats | null>(null);
+  const [selectedLogs, setSelectedLogs] = useState<AuditItem[]>([]);
+  const [resetTarget, setResetTarget] = useState<EventSourceItem | null>(null);
   const [secret, setSecret] = useState('');
 
   async function load(nextFilters = filters, nextPagination = pagination) {
@@ -40,6 +43,10 @@ export default function EventSourcesPage({ setNotice }: { setNotice: (value: str
 
   async function create(event: React.FormEvent) {
     event.preventDefault();
+    if (form.appId && !/^[a-zA-Z0-9_-]{3,64}$/.test(form.appId)) {
+      setNotice('AppId 只能包含字母、数字、下划线和中划线，长度 3-64 位');
+      return;
+    }
     const result = await api<{ secret: string }>('/api/event-sources', {
       method: 'POST',
       body: JSON.stringify(form)
@@ -89,20 +96,27 @@ export default function EventSourcesPage({ setNotice }: { setNotice: (value: str
   }
 
   async function resetSecretFromDetail(item: EventSourceItem) {
-    await resetSecret(item);
     setSelected(null);
+    setResetTarget(item);
   }
 
   async function resetSecret(item: EventSourceItem) {
     const result = await api<{ secret: string }>(`/api/event-sources/${item.id}/reset-secret`, { method: 'POST' });
     setSecret(result.secret);
     setNotice(`${item.name} 密钥已重置，请保存一次性密钥`);
+    setResetTarget(null);
     await load();
   }
 
   async function openDetail(item: EventSourceItem) {
-    const data = await api<{ item: EventSourceItem }>(`/api/event-sources/${item.id}`);
+    const [data, statsData, logsData] = await Promise.all([
+      api<{ item: EventSourceItem }>(`/api/event-sources/${item.id}`),
+      api<{ stats: EventSourceStats }>(`/api/event-sources/${item.id}/stats`),
+      api<{ items: AuditItem[] }>(`/api/event-sources/${item.id}/logs?pageSize=5`)
+    ]);
     setSelected(data.item);
+    setSelectedStats(statsData.stats);
+    setSelectedLogs(logsData.items || []);
   }
 
   function search(nextFilters: QueryFilterValues) {
@@ -170,7 +184,7 @@ export default function EventSourcesPage({ setNotice }: { setNotice: (value: str
                         <button className="tableButton" type="button" onClick={() => toggle(item)}>{item.status === 'enabled' ? '停用' : '启用'}</button>
                       </AuthC>
                       <AuthC authKey="integration:eventSource:resetSecret">
-                        <button className="tableButton" type="button" onClick={() => resetSecret(item)}>重置密钥</button>
+                        <button className="tableButton" type="button" onClick={() => setResetTarget(item)}>重置密钥</button>
                       </AuthC>
                     </div>
                   </td>
@@ -225,6 +239,28 @@ export default function EventSourcesPage({ setNotice }: { setNotice: (value: str
               <p>业务系统调用事件接入接口时需要携带 AppId 和签名密钥；密钥只在创建或重置后明文展示一次。</p>
             </section>
             <div className="detailCard">
+              <div><span>接入总量</span><strong>{selectedStats?.total ?? 0}</strong></div>
+              <div><span>成功</span><strong>{selectedStats?.success ?? 0}</strong></div>
+              <div><span>失败</span><strong>{selectedStats?.failed ?? 0}</strong></div>
+              <div><span>近 24 小时</span><strong>{selectedStats?.last24hTotal ?? 0}</strong></div>
+              <div><span>失败率</span><strong>{selectedStats ? `${Math.round(selectedStats.failureRate * 100)}%` : '0%'}</strong></div>
+              <div><span>最近调用</span><strong>{formatTime(selectedStats?.latestLog?.createdAt)}</strong></div>
+            </div>
+            <section className="approvalBlock">
+              <strong>最近接入日志</strong>
+              <div className="miniTimeline">
+                {selectedLogs.length ? selectedLogs.map((log) => (
+                  <div className="miniTimelineItem" key={log.id}>
+                    <div>
+                      <strong>{log.eventType || '-'}</strong>
+                      <span>{formatTime(log.createdAt)} · {log.code || '-'}</span>
+                    </div>
+                    <StatusBadge status={log.status === 'success' ? 'success' : 'failed'} />
+                  </div>
+                )) : <span className="mutedText">暂无接入日志</span>}
+              </div>
+            </section>
+            <div className="detailCard">
               <div><span>状态说明</span><strong>{statusLabel(selected.status)}</strong></div>
               <div><span>备注</span><strong>{selected.remark || '-'}</strong></div>
               <div><span>创建时间</span><strong>{formatTime(selected.createdAt)}</strong></div>
@@ -253,6 +289,24 @@ export default function EventSourcesPage({ setNotice }: { setNotice: (value: str
             <button className="primaryButton compact" type="button" onClick={() => setSecret('')}>我已保存</button>
           </div>
         </div>
+      </Modal>
+
+      <Modal open={Boolean(resetTarget)} title="重置密钥" subtitle={resetTarget?.appId} onClose={() => setResetTarget(null)} showClose={false}>
+        {resetTarget && (
+          <div className="formPanel">
+            <div className="readonlyBox">
+              <KeyRound size={18} />
+              <div>
+                <strong>确认重置 {resetTarget.name} 的密钥？</strong>
+                <span>旧密钥会立即失效，业务系统必须更新为新密钥后才能继续上报事件。</span>
+              </div>
+            </div>
+            <div className="modalActions">
+              <button className="secondaryButton compact" type="button" onClick={() => setResetTarget(null)}>取消</button>
+              <button className="primaryButton compact" type="button" onClick={() => resetSecret(resetTarget)}>重置</button>
+            </div>
+          </div>
+        )}
       </Modal>
     </section>
   );

@@ -16,6 +16,7 @@ const resourceOptions = [
   { value: 'send_log', label: '发送记录' },
   { value: 'sms_whitelist', label: '白名单' },
   { value: 'sms_blacklist', label: '黑名单' },
+  { value: 'event_source_log', label: '接入日志' },
   { value: 'approval_order', label: '审批记录' }
 ];
 
@@ -28,6 +29,10 @@ function formatJson(value: unknown) {
 
 function formatTime(value?: string) {
   return value ? new Date(value).toLocaleString() : '-';
+}
+
+function cleanFilters(values: Record<string, string>) {
+  return Object.fromEntries(Object.entries(values).filter(([, value]) => Boolean(value)));
 }
 
 export default function ExportTasksPage({ setNotice }: { setNotice: (value: string) => void }) {
@@ -57,7 +62,7 @@ export default function ExportTasksPage({ setNotice }: { setNotice: (value: stri
         name: form.name,
         sensitive: form.sensitive,
         reason: form.reason,
-        criteria: { createdFrom: 'export_tasks_page', maskSensitive: !form.sensitive }
+        criteria: { ...cleanFilters(filters), createdFrom: 'export_tasks_page', maskSensitive: !form.sensitive }
       })
     });
     setModalOpen(false);
@@ -162,6 +167,10 @@ export default function ExportTasksPage({ setNotice }: { setNotice: (value: stri
         <form className="formPanel" onSubmit={create}>
           <label>导出名称<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /></label>
           <label>导出资源<SelectField value={form.resource} options={resourceOptions} onChange={(resource) => setForm({ ...form, resource })} /></label>
+          <div className="fieldBlock">
+            <span>导出条件</span>
+            <strong>{Object.keys(cleanFilters(filters)).length ? '使用当前列表筛选条件创建导出' : '当前没有筛选条件，将按资源默认范围导出'}</strong>
+          </div>
           <label className="checkRow"><input type="checkbox" checked={form.sensitive} onChange={(event) => setForm({ ...form, sensitive: event.target.checked })} />包含明文手机号/敏感字段</label>
           {form.sensitive && <label>申请原因<input value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} placeholder="说明明文导出的业务用途" required /></label>}
           <div className="modalActions">
