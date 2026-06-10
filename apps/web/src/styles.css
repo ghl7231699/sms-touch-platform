@@ -1,23 +1,23 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #f6f8fb;
+  --bg: #F7F9FD;
   --surface: #ffffff;
   --surface-2: #f8fafc;
-  --text: #101828;
-  --muted: #667085;
-  --line: #e6ebf1;
-  --blue: #2563eb;
-  --blue-soft: #eff6ff;
-  --green: #16a34a;
+  --text: #262626;
+  --muted: #86909c;
+  --line: #e5e6eb;
+  --blue: #165DFF;
+  --blue-soft: #eef4ff;
+  --green: #34c858;
   --green-soft: #ecfdf3;
-  --red: #dc2626;
+  --red: #F53F3F;
   --red-soft: #fef2f2;
-  --amber: #d97706;
+  --amber: #ff9500;
   --amber-soft: #fffbeb;
   --nav: #ffffff;
   --nav-soft: #eef4ff;
-  --shadow: 0 10px 28px rgba(16, 24, 40, .06);
+  --shadow: 0 1px 2px rgba(15, 23, 42, .04);
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -26,9 +26,7 @@
 body {
   margin: 0;
   color: var(--text);
-  background:
-    radial-gradient(circle at top left, rgba(37, 99, 235, .08), transparent 36%),
-    var(--bg);
+  background: var(--bg);
   overflow: hidden;
 }
 
@@ -37,10 +35,10 @@ button, input, select {
 }
 
 textarea {
-  min-height: 132px;
+  min-height: 120px;
   resize: vertical;
-  border: 1px solid #d8e0ea;
-  border-radius: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
   padding: 11px 12px;
   color: var(--text);
   background: #fff;
@@ -50,17 +48,17 @@ textarea {
 .shell {
   height: 100vh;
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: 248px minmax(0, 1fr);
   overflow: hidden;
 }
 
 .sidebar {
   background: var(--nav);
   color: var(--text);
-  padding: 24px 18px;
+  padding: 16px 12px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
   height: 100vh;
   overflow: auto;
   border-right: 1px solid var(--line);
@@ -70,7 +68,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 48px;
+  min-height: 42px;
 }
 
 .brand.large {
@@ -78,15 +76,15 @@ textarea {
 }
 
 .brandMark {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
   display: grid;
   place-items: center;
   background: var(--blue);
   color: #fff;
   font-weight: 800;
-  box-shadow: 0 12px 24px rgba(37, 99, 235, .22);
+  box-shadow: none;
 }
 
 .brand strong,
@@ -117,20 +115,20 @@ nav {
   color: #98a2b3;
   font-size: 12px;
   font-weight: 700;
-  padding: 12px 12px 4px;
+  padding: 10px 10px 3px;
 }
 
 .navButton {
   width: 100%;
-  height: 44px;
+  height: 38px;
   border: 0;
-  border-radius: 12px;
+  border-radius: 8px;
   color: #475467;
   background: transparent;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 12px;
+  padding: 0 10px;
   cursor: pointer;
 }
 
@@ -142,8 +140,8 @@ nav {
 .guard {
   margin-top: auto;
   border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 16px;
+  border-radius: 10px;
+  padding: 12px;
   display: flex;
   gap: 10px;
   align-items: center;
@@ -151,18 +149,20 @@ nav {
 }
 
 .content {
-  padding: 32px;
+  padding: 0 16px 16px;
   min-width: 0;
   height: 100vh;
   overflow: auto;
 }
 
 .pageHeader {
+  min-height: 78px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
+  padding: 0 8px;
 }
 
 .headerActions {
@@ -177,35 +177,40 @@ h1, h2, p {
 }
 
 h1 {
-  font-size: 32px;
+  font-size: 22px;
+  line-height: 30px;
+  font-weight: 600;
   letter-spacing: 0;
 }
 
 h2 {
-  font-size: 24px;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
 }
 
 p, .pageHeader p {
   color: var(--muted);
-  margin-top: 6px;
+  margin-top: 4px;
+  font-size: 13px;
 }
 
 .stack {
   display: grid;
-  gap: 24px;
+  gap: 16px;
 }
 
 .metricGrid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 24px;
+  gap: 16px;
 }
 
 .metric {
-  border: 0;
-  border-radius: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
   background: var(--surface);
-  padding: 24px;
+  padding: 16px;
   display: grid;
   gap: 8px;
   box-shadow: var(--shadow);
@@ -224,7 +229,7 @@ p, .pageHeader p {
 }
 
 .metric strong {
-  font-size: 30px;
+  font-size: 24px;
 }
 
 .metric.blue div { background: var(--blue-soft); color: var(--blue); }
@@ -235,7 +240,7 @@ p, .pageHeader p {
 .twoCol, .workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(340px, 440px);
-  gap: 24px;
+  gap: 16px;
 }
 
 .workspace.wide {
@@ -245,16 +250,17 @@ p, .pageHeader p {
 .controlGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
+  gap: 16px;
 }
 
 .settingsHero {
   display: flex;
   justify-content: space-between;
-  gap: 24px;
+  gap: 16px;
   align-items: center;
-  padding: 24px;
-  border-radius: 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
   background: var(--surface);
   box-shadow: var(--shadow);
 }
@@ -270,22 +276,23 @@ p, .pageHeader p {
 }
 
 .settingsHero h2 {
-  margin-top: 6px;
+  margin-top: 4px;
 }
 
 .settingsStatus {
-  width: 260px;
-  min-height: 120px;
+  width: 230px;
+  min-height: 76px;
   display: grid;
   align-content: center;
-  gap: 10px;
-  padding: 18px;
-  border-radius: 14px;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
   background: var(--surface-2);
 }
 
 .settingsStatus strong {
-  font-size: 20px;
+  font-size: 16px;
 }
 
 .formGrid {
@@ -299,9 +306,9 @@ p, .pageHeader p {
 
 .readonlyBox {
   display: flex;
-  gap: 12px;
-  padding: 14px;
-  border-radius: 12px;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 8px;
   background: var(--blue-soft);
   color: var(--blue);
 }
@@ -322,23 +329,23 @@ p, .pageHeader p {
 
 .riskList {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .riskList article {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: flex-start;
-  padding: 14px;
-  border-radius: 12px;
+  padding: 12px;
+  border-radius: 8px;
   background: var(--surface-2);
 }
 
 .panel {
   background: var(--surface);
-  border: 0;
-  border-radius: 16px;
-  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
   box-shadow: var(--shadow);
 }
 
@@ -347,8 +354,10 @@ p, .pageHeader p {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f1f5f9;
 }
 
 .panelTitle span:not([data-ui="status-badge"]) {
@@ -358,13 +367,13 @@ p, .pageHeader p {
 
 .ruleList, .eventList {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .ruleItem, .eventItem {
-  border: 0;
-  border-radius: 14px;
-  padding: 16px;
+  border: 1px solid #f1f5f9;
+  border-radius: 8px;
+  padding: 12px;
   display: flex;
   justify-content: space-between;
   gap: 12px;
@@ -389,7 +398,7 @@ td span:not([data-ui="status-badge"]) {
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 12px;
+  padding: 10px 12px;
   display: flex;
   justify-content: space-between;
 }
@@ -397,13 +406,13 @@ td span:not([data-ui="status-badge"]) {
 .templateGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 24px;
+  gap: 16px;
 }
 
 .templateCard {
-  border: 0;
-  border-radius: 16px;
-  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
   background: var(--surface);
   box-shadow: var(--shadow);
 }
@@ -413,8 +422,8 @@ td span:not([data-ui="status-badge"]) {
   flex-direction: column;
   align-items: flex-start;
   justify-content: flex-start;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .templateTop strong,
@@ -432,7 +441,7 @@ td span:not([data-ui="status-badge"]) {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin: 12px 0;
+  margin: 8px 0;
 }
 
 .chips span {
@@ -457,22 +466,28 @@ td span:not([data-ui="status-badge"]) {
 }
 
 .filterBar {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(120px, 1fr));
-  gap: 10px;
-  margin: 16px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
   align-items: center;
+}
+
+.filterBar input,
+.filterBar .selectField {
+  width: 180px;
+  flex: 0 0 auto;
 }
 
 .filterBar .primaryButton,
 .filterBar .secondaryButton {
-  min-height: 42px;
+  min-height: 34px;
 }
 
 .segmentButton {
-  height: 34px;
+  height: 32px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 8px;
   background: #fff;
   color: var(--muted);
   padding: 0 12px;
@@ -494,7 +509,10 @@ td span:not([data-ui="status-badge"]) {
   width: 100%;
   min-width: 1120px;
   border-collapse: separate;
-  border-spacing: 0 8px;
+  border-spacing: 0;
+  border: 1px solid #f1f5f9;
+  border-radius: 10px;
+  overflow: hidden;
 }
 
 a {
@@ -503,8 +521,8 @@ a {
 }
 
 th, td {
-  padding: 16px 14px;
-  border-bottom: 0;
+  padding: 12px 14px;
+  border-bottom: 1px solid #f1f5f9;
   text-align: left;
   vertical-align: middle;
   font-size: 13px;
@@ -513,19 +531,19 @@ th, td {
 th {
   color: var(--muted);
   font-weight: 600;
-  background: transparent;
+  background: #fafbfc;
 }
 
 td {
-  background: var(--surface-2);
+  background: #fff;
 }
 
 tbody tr td:first-child {
-  border-radius: 12px 0 0 12px;
+  border-radius: 0;
 }
 
 tbody tr td:last-child {
-  border-radius: 0 12px 12px 0;
+  border-radius: 0;
 }
 
 .statusBadge {
@@ -534,12 +552,12 @@ tbody tr td:last-child {
   min-width: 0;
   width: fit-content;
   max-width: max-content;
-  height: 28px;
+  height: 24px;
   justify-content: center;
   justify-self: start;
   align-self: center;
   flex: 0 0 auto;
-  padding: 5px 10px;
+  padding: 4px 9px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 700;
@@ -610,8 +628,8 @@ td > [data-ui="status-badge"] {
 }
 
 .iconButton, .primaryButton, .secondaryButton, .tableButton {
-  height: 38px;
-  border-radius: 12px;
+  height: 34px;
+  border-radius: 8px;
   border: 1px solid var(--line);
   background: #fff;
   color: var(--text);
@@ -643,13 +661,18 @@ td > [data-ui="status-badge"] {
 }
 
 .tableButton {
-  height: 32px;
+  height: auto;
+  border: 0;
+  background: transparent;
+  color: var(--blue);
+  padding: 0;
+  border-radius: 0;
 }
 
 .tableButton.compact {
   width: auto;
   min-width: 0;
-  padding: 0 10px;
+  padding: 0;
 }
 
 .formPanel {
@@ -660,8 +683,8 @@ td > [data-ui="status-badge"] {
 .detailCard {
   display: grid;
   gap: 12px;
-  padding: 16px;
-  border-radius: 12px;
+  padding: 12px;
+  border-radius: 8px;
   background: var(--surface-2);
 }
 
@@ -699,8 +722,10 @@ td > [data-ui="status-badge"] {
 .modalActions {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
-  padding-top: 8px;
+  gap: 10px;
+  margin-top: 6px;
+  padding-top: 16px;
+  border-top: 1px solid #f1f5f9;
 }
 
 .modalOverlay {
@@ -710,27 +735,29 @@ td > [data-ui="status-badge"] {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(16, 35, 49, .42);
+  background: rgba(15, 23, 42, .35);
 }
 
 .modalPanel {
   width: min(560px, 100%);
   max-height: calc(100vh - 48px);
   overflow: auto;
-  border: 0;
-  border-radius: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
   background: var(--surface);
-  box-shadow: 0 24px 80px rgba(16, 35, 49, .24);
-  padding: 24px;
+  box-shadow: 0 18px 50px rgba(15, 23, 42, .18);
+  padding: 20px;
 }
 
 .modalHeader {
-  min-height: 38px;
+  min-height: 34px;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f1f5f9;
 }
 
 .modalHeader span {
@@ -742,15 +769,15 @@ td > [data-ui="status-badge"] {
 
 label {
   display: grid;
-  gap: 7px;
+  gap: 6px;
   color: var(--muted);
   font-size: 13px;
 }
 
 input, select {
-  height: 40px;
+  height: 36px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 0 12px;
   background: #fff;
   color: var(--text);
@@ -764,9 +791,9 @@ input, select {
 .selectTrigger {
   position: relative;
   width: 100%;
-  height: 40px;
+  height: 36px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 8px;
   background: #fff;
   color: var(--text);
   cursor: pointer;
@@ -779,7 +806,7 @@ input, select {
 .selectTrigger:hover,
 .selectTrigger[aria-expanded="true"] {
   border-color: #bfccdc;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, .08);
+  box-shadow: 0 0 0 2px rgba(22, 93, 255, .08);
 }
 
 .selectTrigger span {
@@ -811,16 +838,16 @@ input, select {
   overflow: auto;
   padding: 6px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 8px;
   background: #fff;
-  box-shadow: 0 18px 42px rgba(16, 24, 40, .14);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, .12);
 }
 
 .selectOption {
   width: 100%;
-  min-height: 36px;
+  min-height: 34px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 6px;
   background: transparent;
   color: #344054;
   cursor: pointer;
@@ -851,8 +878,8 @@ input, select {
 }
 
 input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   padding: 0;
 }
 
@@ -869,43 +896,32 @@ input[type="checkbox"] {
   display: grid;
   place-items: center;
   padding: 24px;
-  background:
-    radial-gradient(circle at 18% 18%, rgba(37, 99, 235, .15), transparent 30%),
-    radial-gradient(circle at 82% 8%, rgba(22, 163, 74, .10), transparent 28%),
-    #f7f9fc;
+  background: var(--bg);
 }
 
 .authLayout {
-  width: min(980px, 100%);
-  min-height: 560px;
+  width: min(880px, 100%);
+  min-height: 480px;
   display: grid;
-  grid-template-columns: 1.08fr 420px;
+  grid-template-columns: 1fr 390px;
   overflow: hidden;
-  border-radius: 24px;
-  background: rgba(255, 255, 255, .82);
-  box-shadow: 0 28px 90px rgba(16, 24, 40, .14);
-  backdrop-filter: blur(14px);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, .08);
 }
 
 .authIntro {
   position: relative;
   display: grid;
   align-content: space-between;
-  padding: 48px;
-  background:
-    linear-gradient(145deg, rgba(37, 99, 235, .10), rgba(255,255,255,.84)),
-    var(--surface);
+  padding: 40px;
+  background: #fbfcff;
+  border-right: 1px solid #f1f5f9;
 }
 
 .authIntro::after {
-  content: "";
-  position: absolute;
-  right: -90px;
-  bottom: -90px;
-  width: 280px;
-  height: 280px;
-  border-radius: 50%;
-  background: rgba(37, 99, 235, .10);
+  content: none;
 }
 
 .authIntroCopy {
@@ -915,14 +931,14 @@ input[type="checkbox"] {
 }
 
 .authIntroCopy h1 {
-  font-size: 42px;
-  line-height: 1.12;
-  margin-bottom: 16px;
+  font-size: 30px;
+  line-height: 1.2;
+  margin-bottom: 12px;
 }
 
 .authIntroCopy p {
-  font-size: 15px;
-  line-height: 1.8;
+  font-size: 14px;
+  line-height: 1.7;
 }
 
 .authProof {
@@ -934,9 +950,10 @@ input[type="checkbox"] {
 }
 
 .authProof span {
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: rgba(255,255,255,.82);
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
   color: #344054;
   font-size: 12px;
   font-weight: 700;
@@ -946,8 +963,8 @@ input[type="checkbox"] {
   width: 100%;
   display: grid;
   align-content: center;
-  gap: 18px;
-  padding: 48px;
+  gap: 16px;
+  padding: 40px;
   border: 0;
   border-radius: 0;
   background: rgba(255,255,255,.96);
@@ -961,14 +978,14 @@ input[type="checkbox"] {
 }
 
 .authFormHeader h2 {
-  margin-top: 8px;
-  font-size: 28px;
+  margin-top: 6px;
+  font-size: 22px;
 }
 
 .authSubmit {
   width: 100%;
   justify-content: center;
-  height: 44px;
+  height: 38px;
 }
 
 .authLinks {
@@ -996,22 +1013,23 @@ input[type="checkbox"] {
 .heroKpiSection {
   display: grid;
   grid-template-columns: 1.35fr 1fr 1fr;
-  gap: 24px;
+  gap: 16px;
 }
 
 .heroMetric {
-  min-height: 188px;
+  min-height: 128px;
   display: grid;
   align-content: space-between;
-  gap: 12px;
-  padding: 28px;
-  border-radius: 16px;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
   background: var(--surface);
   box-shadow: var(--shadow);
 }
 
 .heroMetric.primary {
-  background: linear-gradient(135deg, #ffffff 0%, #eff6ff 100%);
+  background: var(--surface);
 }
 
 .heroMetric span:not([data-ui="status-badge"]),
@@ -1022,15 +1040,15 @@ input[type="checkbox"] {
 }
 
 .heroMetric strong {
-  font-size: 48px;
+  font-size: 30px;
   line-height: 1;
 }
 
 .metricIcon,
 .secondaryMetric div {
-  width: 42px;
-  height: 42px;
-  border-radius: 14px;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
   display: grid;
   place-items: center;
   color: var(--blue);
@@ -1044,21 +1062,22 @@ input[type="checkbox"] {
 .ruleHero {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 24px;
+  gap: 16px;
 }
 
 .secondaryMetric {
-  min-height: 116px;
+  min-height: 88px;
   display: grid;
-  gap: 10px;
-  padding: 20px;
-  border-radius: 16px;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
   background: var(--surface);
   box-shadow: var(--shadow);
 }
 
 .secondaryMetric strong {
-  font-size: 26px;
+  font-size: 22px;
 }
 
 .secondaryMetric.green div { color: var(--green); background: var(--green-soft); }
@@ -1068,7 +1087,7 @@ input[type="checkbox"] {
 .marketingGrid {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(340px, .85fr);
-  gap: 24px;
+  gap: 16px;
 }
 
 .scenarioCards,
@@ -1084,9 +1103,9 @@ input[type="checkbox"] {
 .activityItem,
 .taskCard {
   display: grid;
-  gap: 12px;
-  padding: 16px;
-  border-radius: 14px;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 8px;
   background: var(--surface-2);
 }
 
@@ -1147,14 +1166,14 @@ input[type="checkbox"] {
 .automationRuleGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 24px;
+  gap: 16px;
 }
 
 .automationRuleCard {
   display: grid;
-  gap: 18px;
-  padding: 22px;
-  border-radius: 16px;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 10px;
   background: var(--surface-2);
 }
 
@@ -1189,11 +1208,11 @@ input[type="checkbox"] {
 }
 
 .automationFlow span {
-  min-height: 38px;
+  min-height: 34px;
   display: grid;
   place-items: center;
   padding: 8px;
-  border-radius: 12px;
+  border-radius: 8px;
   background: #fff;
   color: var(--text);
   font-size: 12px;
@@ -1213,8 +1232,8 @@ input[type="checkbox"] {
 }
 
 .ruleMetaGrid div {
-  padding: 12px;
-  border-radius: 12px;
+  padding: 10px;
+  border-radius: 8px;
   background: #fff;
 }
 
@@ -1226,7 +1245,7 @@ input[type="checkbox"] {
 .taskBoard {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 24px;
+  gap: 16px;
 }
 
 .taskIntroPanel {
@@ -1242,12 +1261,12 @@ input[type="checkbox"] {
 }
 
 .taskMetricGrid.compact .secondaryMetric {
-  min-height: 92px;
-  padding: 16px;
+  min-height: 82px;
+  padding: 14px;
 }
 
 .taskMetricGrid.compact .secondaryMetric strong {
-  font-size: 24px;
+  font-size: 22px;
 }
 
 .taskQueueSummary {
@@ -1274,11 +1293,11 @@ input[type="checkbox"] {
   justify-content: space-between;
   gap: 12px;
   align-items: flex-end;
-  padding-top: 4px;
+  padding-top: 0;
 }
 
 .taskSectionTitle h2 {
-  font-size: 20px;
+  font-size: 16px;
 }
 
 .taskSectionTitle span {
@@ -1287,12 +1306,12 @@ input[type="checkbox"] {
 }
 
 .taskExplainGrid article {
-  min-height: 118px;
+  min-height: 104px;
   display: grid;
   align-content: start;
   gap: 8px;
-  padding: 16px;
-  border-radius: 14px;
+  padding: 12px;
+  border-radius: 8px;
   background: var(--surface-2);
   color: var(--text);
 }
@@ -1323,7 +1342,7 @@ input[type="checkbox"] {
 
 .taskLane {
   display: grid;
-  gap: 14px;
+  gap: 10px;
   min-height: 260px;
 }
 
