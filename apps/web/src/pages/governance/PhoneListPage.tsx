@@ -90,9 +90,20 @@ export default function PhoneListPage({ kind, title, setNotice }: { kind: PhoneL
     await load();
   }
 
-  function openEdit(item: PhoneGovernanceItem) {
-    setEditing(item);
-    setForm({ phone: '', scene: item.scene || '', remark: item.remark || '', reason: item.reason || '', source: item.source || 'manual' });
+  async function fetchRecord(item: PhoneGovernanceItem) {
+    const data = await api<{ item: PhoneGovernanceItem }>(`${endpoint}/${item.id}`);
+    return data.item;
+  }
+
+  async function openEdit(item: PhoneGovernanceItem) {
+    try {
+      const detail = await fetchRecord(item);
+      setEditing(detail);
+      setForm({ phone: '', scene: detail.scene || '', remark: detail.remark || '', reason: detail.reason || '', source: detail.source || 'manual' });
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : `${title}记录不存在`);
+      await load();
+    }
   }
 
   async function updateRecord(event: React.FormEvent) {
@@ -114,12 +125,12 @@ export default function PhoneListPage({ kind, title, setNotice }: { kind: PhoneL
   }
 
   async function openDetail(item: PhoneGovernanceItem) {
-    setSelected(item);
     try {
-      const data = await api<{ item: PhoneGovernanceItem }>(`${endpoint}/${item.id}`);
-      setSelected(data.item);
+      const detail = await fetchRecord(item);
+      setSelected(detail);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : `${title}详情加载失败`);
+      await load();
     }
   }
 
@@ -147,7 +158,7 @@ export default function PhoneListPage({ kind, title, setNotice }: { kind: PhoneL
 
   function openEditFromDetail(item: PhoneGovernanceItem) {
     setSelected(null);
-    openEdit(item);
+    void openEdit(item);
   }
 
   function statusActionText(item?: PhoneGovernanceItem | null) {
@@ -271,7 +282,7 @@ export default function PhoneListPage({ kind, title, setNotice }: { kind: PhoneL
                       </AuthC>
                       {canEdit && (
                         <AuthC authKey={`${authPrefix}:edit`}>
-                          <button className="tableButton" type="button" onClick={() => openEdit(item)}>编辑</button>
+                          <button className="tableButton" type="button" onClick={() => void openEdit(item)}>编辑</button>
                         </AuthC>
                       )}
                       {kind === 'whitelist' && (

@@ -87,6 +87,11 @@ export default function App() {
       }))
       : undefined
   })), [filteredMenus]);
+  const noticeType = useMemo(() => {
+    if (/失败|错误|不存在|无权限|异常|不正确|不可|未找到|404|403|500/.test(notice)) return 'error';
+    if (/审批|待|确认|风险|警告|注意/.test(notice)) return 'warning';
+    return 'success';
+  }, [notice]);
 
   async function loadMe() {
     const token = getAuthToken();
@@ -188,9 +193,9 @@ export default function App() {
 
   useEffect(() => {
     if (!notice || notice === '就绪') return undefined;
-    const timer = window.setTimeout(() => setNotice('就绪'), 3200);
+    const timer = window.setTimeout(() => setNotice('就绪'), noticeType === 'error' ? 5600 : 3600);
     return () => window.clearTimeout(timer);
-  }, [notice]);
+  }, [notice, noticeType]);
 
   useEffect(() => {
     function handleLoadingStart() {
@@ -325,7 +330,12 @@ export default function App() {
             element={isKnownRoute ? <Navigate to={firstAccessiblePath} replace /> : <ForbiddenPage onBack={() => navigate(firstAccessiblePath)} />}
           />
         </Routes>
-        {notice !== '就绪' && <div className="noticeToast">{notice}</div>}
+        {notice !== '就绪' && (
+          <div className={`noticeToast ${noticeType}`} role="status" aria-live="polite">
+            <strong>{noticeType === 'error' ? '操作失败' : noticeType === 'warning' ? '需要注意' : '操作成功'}</strong>
+            <span>{notice}</span>
+          </div>
+        )}
         <Modal open={Boolean(forbidden)} title="权限不足" onClose={() => setForbidden(null)} showClose={false}>
           {forbidden && (
             <div className="formPanel">
