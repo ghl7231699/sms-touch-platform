@@ -6,6 +6,9 @@ import { config } from './config/env.js';
 import {
   createRule,
   createTemplate,
+  cancelTask,
+  copyRule,
+  estimateRuleImpact,
   getDashboard,
   getStats,
   listClickLogs,
@@ -21,7 +24,11 @@ import {
   recordShortLinkClick,
   runDueTasks,
   sendTestCode,
+  retryTask,
+  testRule,
+  updateRule,
   updateRuleStatus,
+  updateTemplate,
   updateTemplateStatus
 } from './modules/sms/sms.service.js';
 import { createTaskWorker } from './modules/sms/sms.worker.js';
@@ -156,6 +163,13 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  const templateUpdateMatch = url.pathname.match(/^\/api\/(?:sms\/)?templates\/([^/]+)\/update$/);
+  if (req.method === 'POST' && templateUpdateMatch) {
+    const result = await updateTemplate(templateUpdateMatch[1], await readJson(req));
+    sendJson(res, result.statusCode, result.body);
+    return;
+  }
+
   const templateStatusMatch = url.pathname.match(/^\/api\/(?:sms\/)?templates\/([^/]+)\/status$/);
   if (req.method === 'POST' && templateStatusMatch) {
     const result = await updateTemplateStatus(templateStatusMatch[1], (await readJson(req)).status);
@@ -170,6 +184,34 @@ async function handleApi(req, res, url) {
 
   if (req.method === 'POST' && (url.pathname === '/api/rules' || url.pathname === '/api/sms/rules')) {
     const result = await createRule(await readJson(req));
+    sendJson(res, result.statusCode, result.body);
+    return;
+  }
+
+  const ruleUpdateMatch = url.pathname.match(/^\/api\/(?:sms\/)?rules\/([^/]+)\/update$/);
+  if (req.method === 'POST' && ruleUpdateMatch) {
+    const result = await updateRule(ruleUpdateMatch[1], await readJson(req));
+    sendJson(res, result.statusCode, result.body);
+    return;
+  }
+
+  const ruleCopyMatch = url.pathname.match(/^\/api\/(?:sms\/)?rules\/([^/]+)\/copy$/);
+  if (req.method === 'POST' && ruleCopyMatch) {
+    const result = await copyRule(ruleCopyMatch[1]);
+    sendJson(res, result.statusCode, result.body);
+    return;
+  }
+
+  const ruleTestMatch = url.pathname.match(/^\/api\/(?:sms\/)?rules\/([^/]+)\/test$/);
+  if (req.method === 'POST' && ruleTestMatch) {
+    const result = await testRule(ruleTestMatch[1], await readJson(req));
+    sendJson(res, result.statusCode, result.body);
+    return;
+  }
+
+  const ruleEstimateMatch = url.pathname.match(/^\/api\/(?:sms\/)?rules\/([^/]+)\/estimate$/);
+  if (req.method === 'GET' && ruleEstimateMatch) {
+    const result = await estimateRuleImpact(ruleEstimateMatch[1]);
     sendJson(res, result.statusCode, result.body);
     return;
   }
@@ -232,6 +274,20 @@ async function handleApi(req, res, url) {
 
   if (req.method === 'POST' && (url.pathname === '/api/tasks/run-due' || url.pathname === '/api/sms/tasks/run-due')) {
     const result = await runDueTasks(await readJson(req));
+    sendJson(res, result.statusCode, result.body);
+    return;
+  }
+
+  const taskCancelMatch = url.pathname.match(/^\/api\/(?:sms\/)?tasks\/([^/]+)\/cancel$/);
+  if (req.method === 'POST' && taskCancelMatch) {
+    const result = await cancelTask(taskCancelMatch[1]);
+    sendJson(res, result.statusCode, result.body);
+    return;
+  }
+
+  const taskRetryMatch = url.pathname.match(/^\/api\/(?:sms\/)?tasks\/([^/]+)\/retry$/);
+  if (req.method === 'POST' && taskRetryMatch) {
+    const result = await retryTask(taskRetryMatch[1]);
     sendJson(res, result.statusCode, result.body);
     return;
   }

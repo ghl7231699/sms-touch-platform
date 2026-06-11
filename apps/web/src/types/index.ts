@@ -34,10 +34,13 @@ export interface SendLog {
   triggerType: string;
   scene: string;
   phoneMasked: string;
+  templateId?: string;
   templateName?: string;
   templateCode: string;
+  templateParam?: Record<string, unknown>;
   ruleId?: string;
   ruleName?: string;
+  eventId?: string;
   eventType?: string;
   status: Status;
   code: string;
@@ -47,6 +50,7 @@ export interface SendLog {
   clickCount?: number;
   bizId?: string;
   requestId?: string;
+  rawResponse?: unknown;
   createdAt: string;
 }
 
@@ -56,6 +60,8 @@ export interface EventItem {
   eventType: string;
   userId: string;
   phone: string;
+  payload?: Record<string, unknown>;
+  occurredAt?: string;
   createdAt: string;
 }
 
@@ -66,9 +72,12 @@ export interface SmsTask {
   triggerType: string;
   scene: string;
   phoneMasked: string;
+  templateId?: string;
   templateName?: string;
   templateCode: string;
+  ruleId?: string;
   ruleName?: string;
+  eventId?: string;
   eventType?: string;
   scheduledAt: string;
   sentAt?: string;

@@ -1,10 +1,13 @@
-import { AlertTriangle, CheckCircle2, Clock3, RotateCcw, Send, XCircle } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { AlertTriangle, CheckCircle2, Clock3, Eye, RotateCcw, Send, XCircle } from 'lucide-react';
 import { api } from '../../lib/api';
-import type { SmsTask } from '../../types';
-import { eventLabels, sceneLabels } from '../../constants/labels';
+import type { EventItem, Rule, SendLog, SmsTask, Template } from '../../types';
+import { eventLabels, sceneLabels, statusLabel } from '../../constants/labels';
 import { StatusBadge } from '../../components/StatusBadge';
 import { AuthC } from '../../lib/auth';
+import { Modal } from '../../components/Modal';
 import { TableEmptyState } from '../../components/EmptyState';
+import { QueryFilterBar, type QueryFilterValues } from '../../components/QueryFilterBar';
 
 function taskReason(task: SmsTask) {
   const codeMap: Record<string, string> = {
@@ -18,7 +21,7 @@ function taskReason(task: SmsTask) {
     'Condition immediate_task_verify is treated as pass-through.': '即时任务校验通过，已继续发送。',
     'Event payload indicates user has no active membership.': '事件显示用户未开通会员，符合触达条件。',
     'User has already purchased or owns an active membership.': '用户已购买或仍有有效会员，任务跳过。',
-    '服务商超时，可批量重试。': '服务商超时，可批量重试。',
+    '服务商超时，可批量重试。': '服务商超时，可重试。',
     '号码命中黑名单。': '号码命中黑名单。'
   };
   return codeMap[task.lastErrorCode || ''] || reasonMap[task.conditionReason || ''] || task.lastErrorMessage || task.conditionReason || '-';
@@ -28,7 +31,48 @@ function timeLabel(value?: string) {
   return value ? new Date(value).toLocaleString() : '-';
 }
 
-export default function Tasks({ tasks, onRefresh, setNotice }: { tasks: SmsTask[]; onRefresh: () => Promise<void>; setNotice: (value: string) => void }) {
+function jumpTo(path: string, params: Record<string, string>) {
+  const query = new URLSearchParams(params);
+  window.history.pushState({}, '', `${path}?${query.toString()}`);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}
+
+const statusTabs = [
+  { value: 'all', label: '全部' },
+  { value: 'pending', label: '待发送' },
+  { value: 'failed', label: '失败' },
+  { value: 'blocked', label: '拦截' },
+  { value: 'skipped', label: '跳过' },
+  { value: 'success', label: '成功' },
+  { value: 'cancelled', label: '已取消' }
+];
+
+export default function Tasks({
+  tasks,
+  events,
+  rules,
+  templates,
+  logs,
+  onRefresh,
+  setNotice
+}: {
+  tasks: SmsTask[];
+  events: EventItem[];
+  rules: Rule[];
+  templates: Template[];
+  logs: SendLog[];
+  onRefresh: () => Promise<void>;
+  setNotice: (value: string) => void;
+}) {
+  const urlParams = new URLSearchParams(window.location.search);
+  const [statusTab, setStatusTab] = useState(urlParams.get('status') || 'all');
+  const [filters, setFilters] = useState<QueryFilterValues>({
+    keyword: urlParams.get('eventId') || urlParams.get('ruleId') || '',
+    scene: '',
+    triggerType: ''
+  });
+  const [detail, setDetail] = useState<SmsTask | null>(null);
+
   async function runDue() {
     const result = await api<{ processed: number }>('/api/tasks/run-due', {
       method: 'POST',
@@ -44,12 +88,14 @@ export default function Tasks({ tasks, onRefresh, setNotice }: { tasks: SmsTask[
       setNotice('当前没有可取消的待执行任务');
       return;
     }
-    const result = await api<{ job: { successCount: number; failedCount: number } }>('/api/tasks/batch-cancel', {
+    if (!window.confirm(`确认取消 ${pending.length} 条待发送任务？`)) return;
+    const result = await api<{ job: { id: string; successCount: number; failedCount: number } }>('/api/tasks/batch-cancel', {
       method: 'POST',
       body: JSON.stringify({ taskIds: pending })
     });
     setNotice(`批量取消完成：成功 ${result.job.successCount}，失败 ${result.job.failedCount}`);
     await onRefresh();
+    jumpTo('/audit/batch-jobs', { jobId: result.job.id });
   }
 
   async function batchRetry() {
@@ -58,11 +104,27 @@ export default function Tasks({ tasks, onRefresh, setNotice }: { tasks: SmsTask[
       setNotice('当前没有可重试的失败任务');
       return;
     }
-    const result = await api<{ job: { successCount: number; failedCount: number } }>('/api/tasks/batch-retry', {
+    if (!window.confirm(`确认重试 ${failed.length} 条失败任务？`)) return;
+    const result = await api<{ job: { id: string; successCount: number; failedCount: number } }>('/api/tasks/batch-retry', {
       method: 'POST',
       body: JSON.stringify({ taskIds: failed })
     });
     setNotice(`批量重试已入队：成功 ${result.job.successCount}，失败 ${result.job.failedCount}`);
+    await onRefresh();
+    jumpTo('/audit/batch-jobs', { jobId: result.job.id });
+  }
+
+  async function cancelOne(task: SmsTask) {
+    if (!window.confirm(`确认取消任务 ${task.id}？`)) return;
+    const result = await api<{ item: SmsTask }>(`/api/tasks/${task.id}/cancel`, { method: 'POST' });
+    setNotice(`任务已${statusLabel(result.item.status)}`);
+    await onRefresh();
+  }
+
+  async function retryOne(task: SmsTask) {
+    if (!window.confirm(`确认重试任务 ${task.id}？`)) return;
+    const result = await api<{ success: boolean; status: string; code?: string }>(`/api/tasks/${task.id}/retry`, { method: 'POST' });
+    setNotice(`重试结果：${statusLabel(result.status)}${result.code ? ` · ${result.code}` : ''}`);
     await onRefresh();
   }
 
@@ -72,7 +134,41 @@ export default function Tasks({ tasks, onRefresh, setNotice }: { tasks: SmsTask[
   const blockedCount = tasks.filter((task) => task.status === 'blocked').length;
   const doneCount = tasks.filter((task) => ['success', 'skipped', 'cancelled'].includes(task.status)).length;
   const sendingCount = tasks.filter((task) => task.status === 'sending').length;
-  const sortedTasks = [...tasks].sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
+
+  const sceneOptions = useMemo(() => {
+    const scenes = Array.from(new Set(tasks.map((task) => task.scene).filter(Boolean)));
+    return scenes.map((scene) => ({ value: scene, label: sceneLabels[scene] || scene }));
+  }, [tasks]);
+
+  const filteredTasks = useMemo(() => tasks
+    .filter((task) => statusTab === 'all' || task.status === statusTab)
+    .filter((task) => !filters.scene || task.scene === filters.scene)
+    .filter((task) => !filters.triggerType || task.triggerType === filters.triggerType)
+    .filter((task) => {
+      const key = filters.keyword.trim().toLowerCase();
+      if (!key) return true;
+      return [task.id, task.ruleId, task.ruleName, task.eventId, task.templateName, task.templateCode, task.phoneMasked]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(key));
+    })
+    .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()), [tasks, statusTab, filters]);
+
+  function search(nextFilters: QueryFilterValues) {
+    setFilters({ keyword: '', scene: '', triggerType: '', ...nextFilters });
+  }
+
+  const detailEvent = events.find((event) => event.eventId === detail?.eventId);
+  const detailRule = rules.find((rule) => rule.id === detail?.ruleId);
+  const detailTemplate = templates.find((template) => template.id === detail?.templateId);
+  const detailLog = logs.find((log) => log.id === detail?.logId || log.eventId === detail?.eventId);
+
+  function rowActions(task: SmsTask) {
+    if (task.status === 'pending') return <button className="tableButton danger compact" type="button" onClick={() => cancelOne(task)}><XCircle size={15} />取消</button>;
+    if (task.status === 'failed') return <button className="tableButton compact" type="button" onClick={() => retryOne(task)}><RotateCcw size={15} />重试</button>;
+    if (task.status === 'success') return <button className="tableButton compact" type="button" onClick={() => jumpTo('/data/send-logs', { logId: task.logId || '' })}>发送记录</button>;
+    if (['blocked', 'skipped'].includes(task.status)) return <button className="tableButton compact" type="button" onClick={() => setDetail(task)}>查看原因</button>;
+    return null;
+  }
 
   return (
     <section className="stack">
@@ -110,17 +206,33 @@ export default function Tasks({ tasks, onRefresh, setNotice }: { tasks: SmsTask[
           <span>已完成 {doneCount} 条</span>
         </div>
 
+        <div className="statusTabs">
+          {statusTabs.map((tab) => (
+            <button className={statusTab === tab.value ? 'active' : ''} type="button" key={tab.value} onClick={() => setStatusTab(tab.value)}>{tab.label}</button>
+          ))}
+        </div>
+        <QueryFilterBar
+          fields={[
+            { name: 'keyword', label: '任务筛选', placeholder: '任务/事件/规则/模板/手机号', span: 8 },
+            { name: 'scene', label: '场景', type: 'select', placeholder: '全部场景', options: sceneOptions },
+            { name: 'triggerType', label: '触发方式', type: 'select', placeholder: '全部方式', options: [{ value: 'auto', label: '自动触发' }, { value: 'manual', label: '手动发送' }] }
+          ]}
+          values={filters}
+          onChange={(value) => setFilters({ keyword: '', scene: '', triggerType: '', ...value })}
+          onSearch={search}
+        />
+
         <div className="taskSectionTitle">
           <div>
             <h2>任务明细</h2>
-            <span>这里就是当前所有短信任务的位置，按计划发送时间排序。</span>
+            <span>按计划发送时间排序，支持查看详情和行级处理。</span>
           </div>
         </div>
         <div className="dataTableWrap">
           <table className="dataTable taskTable">
-            <thead><tr><th>任务</th><th>来源</th><th>计划/发送时间</th><th>状态</th><th>次数</th><th>处理说明</th></tr></thead>
+            <thead><tr><th>任务</th><th>来源</th><th>计划/发送时间</th><th>状态</th><th>次数</th><th>处理说明</th><th>操作</th></tr></thead>
             <tbody>
-              {sortedTasks.map((task) => (
+              {filteredTasks.map((task) => (
                 <tr key={task.id}>
                   <td>
                     <strong>{task.templateName || task.templateCode}</strong>
@@ -137,20 +249,43 @@ export default function Tasks({ tasks, onRefresh, setNotice }: { tasks: SmsTask[
                   <td><StatusBadge status={task.status} /></td>
                   <td>{task.attemptCount}/{task.maxAttempts}</td>
                   <td>{taskReason(task)}</td>
+                  <td>
+                    <div className="tableActions">
+                      <button className="tableButton compact" type="button" onClick={() => setDetail(task)}><Eye size={15} />详情</button>
+                      {rowActions(task)}
+                    </div>
+                  </td>
                 </tr>
               ))}
-              {!sortedTasks.length && <TableEmptyState colSpan={6} title="暂无任务明细" description="当前没有待发送、发送中、失败或已完成的短信任务。" />}
+              {!filteredTasks.length && <TableEmptyState colSpan={7} title="暂无任务明细" description="当前筛选条件下没有短信任务。" />}
             </tbody>
           </table>
         </div>
       </section>
 
-      <section className="taskExplainGrid">
-        <article><Clock3 size={18} /><strong>待发送任务</strong><span>事件已命中规则，但还没到计划发送时间。</span></article>
-        <article><Send size={18} /><strong>到期执行</strong><span>执行到期任务会走条件校验、白名单、黑名单、频控和服务商发送。</span></article>
-        <article><RotateCcw size={18} /><strong>失败重试</strong><span>服务商异常或可恢复失败任务，可批量重新入队。</span></article>
-        <article><XCircle size={18} /><strong>取消任务</strong><span>未发送的 pending 任务可取消，取消后 worker 不会再执行。</span></article>
-      </section>
+      <Modal open={Boolean(detail)} title="任务详情" subtitle={detail?.id} onClose={() => setDetail(null)} size="wide">
+        <div className="stack">
+          <div className="ruleMetaGrid">
+            <div><span>状态</span><strong>{detail ? statusLabel(detail.status) : '-'}</strong></div>
+            <div><span>场景</span><strong>{detail ? sceneLabels[detail.scene] || detail.scene : '-'}</strong></div>
+            <div><span>计划时间</span><strong>{timeLabel(detail?.scheduledAt)}</strong></div>
+            <div><span>发送时间</span><strong>{timeLabel(detail?.sentAt)}</strong></div>
+          </div>
+          <div className="detailCard">
+            <div><span>处理说明</span><strong>{detail ? taskReason(detail) : '-'}</strong></div>
+            <div><span>关联事件</span><strong>{detailEvent ? `${eventLabels[detailEvent.eventType] || detailEvent.eventType} · ${detailEvent.eventId}` : detail?.eventId || '无'}</strong></div>
+            <div><span>关联规则</span><strong>{detailRule ? detailRule.name : detail?.ruleName || '无'}</strong></div>
+            <div><span>关联模板</span><strong>{detailTemplate ? `${detailTemplate.name} · ${detailTemplate.providerTemplateId}` : detail?.templateName || detail?.templateCode || '-'}</strong></div>
+            <div><span>关联发送记录</span><strong>{detailLog ? `${statusLabel(detailLog.status)} · ${detailLog.requestId || detailLog.id}` : detail?.logId || '暂无'}</strong></div>
+          </div>
+          <div className="modalActions">
+            {detail?.eventId && <button className="secondaryButton compact" type="button" onClick={() => jumpTo('/touch/events', { eventId: detail.eventId || '' })}>查看关联事件</button>}
+            {detail?.ruleId && <button className="secondaryButton compact" type="button" onClick={() => jumpTo('/touch/rules', { ruleId: detail.ruleId || '' })}>查看关联规则</button>}
+            {detail?.templateId && <button className="secondaryButton compact" type="button" onClick={() => jumpTo('/touch/templates', { templateId: detail.templateId || '' })}>查看关联模板</button>}
+            {detail?.logId && <button className="secondaryButton compact" type="button" onClick={() => jumpTo('/data/send-logs', { logId: detail.logId || '' })}>查看发送记录</button>}
+          </div>
+        </div>
+      </Modal>
     </section>
   );
 }

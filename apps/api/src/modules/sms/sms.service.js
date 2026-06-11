@@ -23,7 +23,7 @@ function fail(code, message, statusCode = 400, extra = {}) {
 }
 
 function safeLog(log) {
-  const { phone, templateParam, rawResponse, ...safe } = log;
+  const { phone, templateParam, ...safe } = log;
   return safe;
 }
 
@@ -270,6 +270,22 @@ export async function createTemplate(input) {
   return ok({ success: true, item: template }, 201);
 }
 
+export async function updateTemplate(id, input) {
+  if (!input.name) return fail('TEMPLATE_NAME_REQUIRED', 'Template name is required.');
+  if (!input.scene) return fail('TEMPLATE_SCENE_REQUIRED', 'Template scene is required.');
+  return mutateStore((store) => {
+    const item = store.templates.find((template) => template.id === id);
+    if (!item) return fail('TEMPLATE_NOT_FOUND', 'Template not found.', 404);
+    item.name = input.name;
+    item.scene = input.scene;
+    item.providerTemplateId = input.providerTemplateId || config.aliyun.templateCode;
+    item.content = input.content || item.content;
+    item.variables = Array.isArray(input.variables) ? input.variables : item.variables;
+    item.updatedAt = now();
+    return ok({ success: true, item });
+  });
+}
+
 export async function updateTemplateStatus(id, status) {
   return mutateStore((store) => {
     const item = store.templates.find((template) => template.id === id);
@@ -311,6 +327,47 @@ export async function createRule(input) {
   return ok({ success: true, item: rule }, 201);
 }
 
+export async function updateRule(id, input) {
+  if (!input.name) return fail('RULE_NAME_REQUIRED', 'Rule name is required.');
+  if (!EVENT_TYPES.includes(input.eventType)) return fail('EVENT_TYPE_INVALID', 'Event type is invalid.');
+  const store = await readStore();
+  const template = store.templates.find((item) => item.id === input.templateId);
+  if (!template) return fail('TEMPLATE_NOT_FOUND', 'Template not found.', 404);
+  return mutateStore((current) => {
+    const item = current.rules.find((rule) => rule.id === id);
+    if (!item) return fail('RULE_NOT_FOUND', 'Rule not found.', 404);
+    item.name = input.name;
+    item.code = input.code || item.code;
+    item.scene = input.scene || template.scene;
+    item.eventType = input.eventType;
+    item.delayValue = Number(input.delayValue) || 0;
+    item.delayUnit = input.delayUnit || 'hour';
+    item.conditionType = input.conditionType || 'none';
+    item.conditionConfig = input.conditionConfig || { type: input.conditionType || 'none' };
+    item.templateId = input.templateId;
+    item.updatedAt = now();
+    return ok({ success: true, item });
+  });
+}
+
+export async function copyRule(id) {
+  const store = await readStore();
+  const source = store.rules.find((rule) => rule.id === id);
+  if (!source) return fail('RULE_NOT_FOUND', 'Rule not found.', 404);
+  const createdAt = now();
+  const rule = {
+    ...source,
+    id: createId(),
+    name: `${source.name} 副本`,
+    code: `${source.code}_copy_${Date.now()}`,
+    status: 'disabled',
+    createdAt,
+    updatedAt: createdAt
+  };
+  await mutateStore((current) => current.rules.unshift(rule));
+  return ok({ success: true, item: rule }, 201);
+}
+
 export async function updateRuleStatus(id, status) {
   return mutateStore((store) => {
     const item = store.rules.find((rule) => rule.id === id);
@@ -318,6 +375,64 @@ export async function updateRuleStatus(id, status) {
     item.status = status === 'disabled' ? 'disabled' : 'enabled';
     item.updatedAt = now();
     return ok({ success: true, item });
+  });
+}
+
+export async function testRule(id, input = {}) {
+  const store = await readStore();
+  const rule = store.rules.find((item) => item.id === id);
+  if (!rule) return fail('RULE_NOT_FOUND', 'Rule not found.', 404);
+  const template = store.templates.find((item) => item.id === rule.templateId);
+  const eventType = input.eventType || rule.eventType;
+  const matched = rule.status === 'enabled' && rule.eventType === eventType;
+  const payload = input.payload || {};
+  const event = {
+    eventId: input.eventId || `test_${Date.now()}`,
+    eventType,
+    userId: input.userId || payload.userId || 'test-user',
+    phone: input.phone || payload.phone || '',
+    payload,
+    occurredAt: input.occurredAt || now()
+  };
+  const scheduledAt = resolveScheduledAt(rule, event.occurredAt);
+  const estimatedTask = matched && template ? {
+    ruleId: rule.id,
+    ruleName: rule.name,
+    templateId: template.id,
+    templateName: template.name,
+    eventId: event.eventId,
+    eventType,
+    scheduledAt,
+    conditionType: rule.conditionType,
+    conditionConfig: rule.conditionConfig
+  } : null;
+  return ok({
+    success: true,
+    matched,
+    event,
+    matchedRuleCount: matched ? 1 : 0,
+    queuedTaskCount: estimatedTask ? 1 : 0,
+    estimatedTask,
+    reason: matched ? '规则可匹配该测试事件。' : '规则未启用或事件类型不匹配。'
+  });
+}
+
+export async function estimateRuleImpact(id) {
+  const store = await readStore();
+  const rule = store.rules.find((item) => item.id === id);
+  if (!rule) return fail('RULE_NOT_FOUND', 'Rule not found.', 404);
+  const matchedEvents = store.events.filter((event) => event.eventType === rule.eventType);
+  const tasks = store.tasks.filter((task) => task.ruleId === rule.id);
+  const logs = store.logs.filter((log) => log.ruleId === rule.id || log.ruleName === rule.name);
+  return ok({
+    success: true,
+    ruleId: rule.id,
+    matchedEventCount: matchedEvents.length,
+    generatedTaskCount: tasks.length,
+    sendLogCount: logs.length,
+    successCount: logs.filter((log) => log.status === SMS_STATUS.SUCCESS).length,
+    blockedCount: logs.filter((log) => log.status === SMS_STATUS.BLOCKED).length,
+    clickCount: logs.reduce((sum, log) => sum + Number(log.clickCount || 0), 0)
   });
 }
 
@@ -331,6 +446,33 @@ export async function listTasks(filters = {}) {
   if (filters.eventType) tasks = tasks.filter((task) => task.eventType === filters.eventType);
   const total = tasks.length;
   return { items: tasks.slice((page - 1) * pageSize, page * pageSize).map(safeTask), total, page, pageSize };
+}
+
+export async function cancelTask(id) {
+  return mutateStore((store) => {
+    const task = store.tasks.find((item) => item.id === id);
+    if (!task) return fail('TASK_NOT_FOUND', 'Task not found.', 404);
+    if (task.status !== TASK_STATUS.PENDING) return fail('TASK_NOT_CANCELABLE', 'Only pending task can be cancelled.', 409);
+    task.status = TASK_STATUS.CANCELLED;
+    task.updatedAt = now();
+    return ok({ success: true, item: safeTask(task) });
+  });
+}
+
+export async function retryTask(id) {
+  const reset = await mutateStore((store) => {
+    const task = store.tasks.find((item) => item.id === id);
+    if (!task) return fail('TASK_NOT_FOUND', 'Task not found.', 404);
+    if (task.status !== TASK_STATUS.FAILED) return fail('TASK_NOT_RETRYABLE', 'Only failed task can be retried.', 409);
+    task.status = TASK_STATUS.PENDING;
+    task.scheduledAt = now();
+    task.lastErrorCode = undefined;
+    task.lastErrorMessage = undefined;
+    task.updatedAt = now();
+    return ok({ success: true, item: safeTask(task) });
+  });
+  if (reset.statusCode >= 400) return reset;
+  return executeTask(id);
 }
 
 async function enqueueTask(input) {

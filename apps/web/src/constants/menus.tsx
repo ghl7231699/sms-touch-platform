@@ -96,7 +96,7 @@ export const menus: AppMenuItem[] = [
         path: '/touch/templates',
         title: '模板中心',
         icon: <FileText size={18} />,
-        buttons: [button('页面查看', 'base'), button('新建模板', 'add'), button('启停模板', 'status')],
+        buttons: [button('页面查看', 'base'), button('新建模板', 'add'), button('编辑模板', 'edit'), button('测试发送', 'test'), button('启停模板', 'status')],
         component: ({ templates, onRefresh, setNotice }) => <Templates templates={templates} onRefresh={onRefresh} setNotice={setNotice} />
       },
       {
@@ -104,8 +104,8 @@ export const menus: AppMenuItem[] = [
         path: '/touch/rules',
         title: '规则中心',
         icon: <ListChecks size={18} />,
-        buttons: [button('页面查看', 'base'), button('新建规则', 'add'), button('启用规则', 'enable'), button('停用规则', 'disable')],
-        component: ({ rules, templates, logs, onRefresh, setNotice }) => <Rules rules={rules} templates={templates} logs={logs} onRefresh={onRefresh} setNotice={setNotice} />
+        buttons: [button('页面查看', 'base'), button('新建规则', 'add'), button('编辑规则', 'edit'), button('测试规则', 'test'), button('复制规则', 'copy'), button('启用规则', 'enable'), button('停用规则', 'disable')],
+        component: ({ rules, templates, logs, tasks, onRefresh, setNotice }) => <Rules rules={rules} templates={templates} logs={logs} tasks={tasks} onRefresh={onRefresh} setNotice={setNotice} />
       },
       {
         key: 'manual',
@@ -113,7 +113,7 @@ export const menus: AppMenuItem[] = [
         title: '手动发送',
         icon: <Send size={18} />,
         buttons: [button('页面查看', 'base'), button('发送短信', 'send')],
-        component: ({ templates, onRefresh, setNotice }) => <ManualSend templates={templates} onRefresh={onRefresh} setNotice={setNotice} />
+        component: ({ templates, logs, onRefresh, setNotice }) => <ManualSend templates={templates} logs={logs} onRefresh={onRefresh} setNotice={setNotice} />
       },
       {
         key: 'task',
@@ -121,7 +121,7 @@ export const menus: AppMenuItem[] = [
         title: '任务中心',
         icon: <Clock3 size={18} />,
         buttons: [button('页面查看', 'base'), button('批量取消', 'batchCancel'), button('批量重试', 'batchRetry'), button('执行到期任务', 'runDue')],
-        component: ({ tasks, onRefresh, setNotice }) => <Tasks tasks={tasks} onRefresh={onRefresh} setNotice={setNotice} />
+        component: ({ tasks, events, rules, templates, logs, onRefresh, setNotice }) => <Tasks tasks={tasks} events={events} rules={rules} templates={templates} logs={logs} onRefresh={onRefresh} setNotice={setNotice} />
       },
       {
         key: 'event',
@@ -129,7 +129,7 @@ export const menus: AppMenuItem[] = [
         title: '事件触发',
         icon: <Zap size={18} />,
         buttons: [button('页面查看', 'base'), button('模拟事件', 'simulate')],
-        component: ({ events, onRefresh, setNotice }) => <Events events={events} onRefresh={onRefresh} setNotice={setNotice} />
+        component: ({ events, tasks, rules, onRefresh, setNotice }) => <Events events={events} tasks={tasks} rules={rules} onRefresh={onRefresh} setNotice={setNotice} />
       }
     ]
   },
@@ -145,7 +145,7 @@ export const menus: AppMenuItem[] = [
         title: '发送记录',
         icon: <Activity size={18} />,
         buttons: [button('页面查看', 'base'), button('查看详情', 'detail')],
-        component: ({ logs }) => <Logs logs={logs} />
+        component: ({ logs, tasks, events, rules, templates, onRefresh, setNotice }) => <Logs logs={logs} tasks={tasks} events={events} rules={rules} templates={templates} onRefresh={onRefresh} setNotice={setNotice} />
       }
     ]
   },

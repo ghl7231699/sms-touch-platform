@@ -807,13 +807,142 @@ td span:not([data-ui="status-badge"]) {
   justify-content: space-between;
 }
 
-.templateGrid {
+.templateHero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.templateHero h1 {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.templateHero p {
+  max-width: 760px;
+  margin: 10px 0 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.templateSummaryGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
 }
 
+.templateSummaryCard {
+  display: grid;
+  gap: 8px;
+  min-height: 116px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.templateSummaryCard div {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--blue);
+  background: var(--blue-soft);
+}
+
+.templateSummaryCard.green div {
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.templateSummaryCard.amber div {
+  color: var(--amber);
+  background: var(--amber-soft);
+}
+
+.templateSummaryCard span,
+.templateSummaryCard p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.templateSummaryCard strong {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.templateSummaryCard p {
+  margin: 0;
+}
+
+.templateWorkspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 16px;
+}
+
+.templateLibraryPanel,
+.templateScenePanel {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+}
+
+.templateGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.templateFilterBar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  align-items: end;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.templateFilterBar label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.templateFilterBar input {
+  min-width: 0;
+  height: 38px;
+}
+
+.templateFilterBar label:has(svg) {
+  position: relative;
+}
+
+.templateFilterBar label > svg {
+  position: absolute;
+  left: 10px;
+  bottom: 11px;
+  color: var(--muted);
+}
+
+.templateFilterBar label > svg + input {
+  padding-left: 32px;
+}
+
 .templateCard {
+  display: grid;
+  gap: 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 16px;
@@ -823,11 +952,9 @@ td span:not([data-ui="status-badge"]) {
 
 .templateTop {
   display: flex;
-  flex-direction: column;
   align-items: flex-start;
-  justify-content: flex-start;
-  gap: 8px;
-  margin-bottom: 10px;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .templateTop strong,
@@ -839,6 +966,162 @@ td span:not([data-ui="status-badge"]) {
   color: var(--muted);
   font-size: 12px;
   margin-top: 4px;
+}
+
+.templateContent {
+  min-height: 48px;
+  margin: 0;
+  color: #4e5969;
+  line-height: 1.7;
+}
+
+.templatePreviewBox {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.templatePreviewBox span,
+.templateModalPreview span,
+.templateDetail article span,
+.templateDetailHeader span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.templatePreviewBox strong,
+.templateModalPreview strong {
+  font-weight: 600;
+  line-height: 1.7;
+}
+
+.templateActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.templateSceneList {
+  display: grid;
+  gap: 12px;
+}
+
+.templateSceneList article {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.templateSceneList strong,
+.templateSceneList span {
+  display: block;
+}
+
+.templateSceneList span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.templateGuidance {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--blue-soft);
+}
+
+.templateGuidance svg {
+  flex: 0 0 auto;
+  color: var(--blue);
+}
+
+.templateGuidance strong,
+.templateGuidance span {
+  display: block;
+}
+
+.templateGuidance span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.templateModalPreview {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 8px;
+  background: var(--blue-soft);
+}
+
+.templateModalPreview > div {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.templateModalPreview p {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.7;
+}
+
+.templateDetail {
+  display: grid;
+  gap: 16px;
+}
+
+.templateDetailHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.templateDetailHeader strong,
+.templateDetailHeader p {
+  display: block;
+}
+
+.templateDetailHeader strong {
+  margin-top: 4px;
+  font-size: 20px;
+}
+
+.templateDetailHeader p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.templateDetailGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.templateDetailGrid article {
+  padding: 14px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.templateDetailGrid p {
+  margin: 8px 0 0;
+  line-height: 1.7;
 }
 
 .chips {
@@ -1151,6 +1434,13 @@ td span:not([data-ui="status-badge"]) {
 
 .dataTableWrap {
   overflow: auto;
+}
+
+.tableActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
 }
 
 .dataTable {
@@ -1729,6 +2019,69 @@ input[type="checkbox"] {
   line-height: 1.9;
 }
 
+.overviewCommandCenter {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.overviewCommandCenter > div:first-child {
+  max-width: 760px;
+}
+
+.eyebrow {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.overviewCommandCenter h1 {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.overviewCommandCenter p {
+  margin: 10px 0 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.dateNote {
+  min-width: 260px;
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--blue-soft);
+}
+
+.dateNote svg {
+  color: var(--blue);
+}
+
+.dateNote strong,
+.dateNote span {
+  display: block;
+}
+
+.dateNote span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .heroKpiSection {
   display: grid;
   grid-template-columns: 1.35fr 1fr 1fr;
@@ -1736,10 +2089,10 @@ input[type="checkbox"] {
 }
 
 .heroMetric {
-  min-height: 128px;
+  min-height: 190px;
   display: grid;
-  align-content: space-between;
-  gap: 10px;
+  grid-template-rows: auto auto 1fr;
+  gap: 12px;
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -1747,8 +2100,39 @@ input[type="checkbox"] {
   box-shadow: var(--shadow);
 }
 
+button.heroMetric {
+  width: 100%;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+
+button.heroMetric:hover {
+  border-color: rgba(22, 93, 255, .28);
+  box-shadow: 0 10px 26px rgba(22, 93, 255, .08);
+  transform: translateY(-1px);
+}
+
+button.heroMetric.active {
+  border-color: rgba(22, 93, 255, .46);
+  box-shadow: 0 12px 30px rgba(22, 93, 255, .12);
+}
+
 .heroMetric.primary {
   background: var(--surface);
+}
+
+.heroMetricTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.heroMetricBody {
+  display: grid;
+  gap: 8px;
 }
 
 .heroMetric span:not([data-ui="status-badge"]),
@@ -1777,6 +2161,126 @@ input[type="checkbox"] {
 .metricIcon.success { color: var(--green); background: var(--green-soft); }
 .metricIcon.trend { color: var(--amber); background: var(--amber-soft); }
 
+.deltaPill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.heroMetric .deltaPill {
+  font-size: 12px;
+}
+
+.deltaPill.up {
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.heroMetric .deltaPill.up {
+  color: var(--green);
+}
+
+.deltaPill.down {
+  color: var(--red);
+  background: var(--red-soft);
+}
+
+.heroMetric .deltaPill.down {
+  color: var(--red);
+}
+
+.deltaPill.flat {
+  color: var(--muted);
+  background: var(--surface-2);
+}
+
+.heroMetric .deltaPill.flat {
+  color: var(--muted);
+}
+
+.miniChartBars {
+  height: 64px;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  align-items: end;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.miniChartBars span {
+  height: 100%;
+  display: flex;
+  align-items: end;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eaf0f6;
+}
+
+.miniChartBars i {
+  width: 100%;
+  border-radius: inherit;
+  background: linear-gradient(180deg, #165DFF 0%, #5b8cff 100%);
+}
+
+.miniChartBars.green i {
+  background: linear-gradient(180deg, #34c858 0%, #7de99a 100%);
+}
+
+.miniChartBars.amber i {
+  background: linear-gradient(180deg, #ff9500 0%, #ffc56f 100%);
+}
+
+.miniLineChart {
+  width: 100%;
+  height: 64px;
+  align-self: end;
+  overflow: visible;
+}
+
+.miniLinePath,
+.miniLineArea {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.miniLinePath {
+  stroke-width: 4;
+}
+
+.miniLineArea {
+  stroke: none;
+  opacity: .14;
+  fill: currentColor;
+}
+
+.miniLineChart.green {
+  color: var(--green);
+}
+
+.miniLineChart.amber {
+  color: var(--amber);
+}
+
+.miniLineChart.green .miniLinePath {
+  stroke: var(--green);
+}
+
+.miniLineChart.amber .miniLinePath {
+  stroke: var(--amber);
+}
+
+.miniLineChart circle {
+  fill: #fff;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
 .secondaryMetricGrid,
 .ruleHero {
   display: grid;
@@ -1802,6 +2306,224 @@ input[type="checkbox"] {
 .secondaryMetric.green div { color: var(--green); background: var(--green-soft); }
 .secondaryMetric.amber div { color: var(--amber); background: var(--amber-soft); }
 .secondaryMetric.red div { color: var(--red); background: var(--red-soft); }
+
+.sendPulsePanel {
+  display: grid;
+  gap: 18px;
+}
+
+.pulseGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.pulseCard {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.pulseCard.accent {
+  background: var(--blue-soft);
+}
+
+.pulseCard span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.pulseCard strong {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.pulseCard p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.deltaText {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.deltaText.up {
+  color: var(--green);
+}
+
+.deltaText.down {
+  color: var(--red);
+}
+
+.deltaText.flat {
+  color: var(--muted);
+}
+
+.dailyTrend {
+  height: 156px;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  align-items: end;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.dailyTrend.green .dailyTrendBar span {
+  background: linear-gradient(180deg, #34c858 0%, #7de99a 100%);
+}
+
+.dailyTrend.amber .dailyTrendBar span {
+  background: linear-gradient(180deg, #ff9500 0%, #ffc56f 100%);
+}
+
+.dailyTrendItem {
+  min-width: 0;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+}
+
+.dailyTrendBar {
+  width: 100%;
+  max-width: 42px;
+  height: 82px;
+  display: flex;
+  align-items: end;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eaf0f6;
+}
+
+.dailyTrendBar span {
+  width: 100%;
+  border-radius: inherit;
+  background: linear-gradient(180deg, #165DFF 0%, #5b8cff 100%);
+}
+
+.dailyTrendItem strong {
+  font-size: 13px;
+}
+
+.dailyTrendItem small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.largeLineChart {
+  height: 190px;
+  padding: 10px 8px 0;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.largeLineChart svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.largeGridLine {
+  stroke: #dfe7f1;
+  stroke-width: 2;
+}
+
+.largeLineArea {
+  fill: currentColor;
+  opacity: .12;
+}
+
+.largeLinePath {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.largeLineChart.green {
+  color: var(--green);
+}
+
+.largeLineChart.amber {
+  color: var(--amber);
+}
+
+.largeLineChart circle {
+  fill: #fff;
+  stroke: currentColor;
+  stroke-width: 2.5;
+}
+
+.largeLineChart text {
+  fill: var(--text);
+  font-size: 16px;
+  font-weight: 800;
+  text-anchor: middle;
+}
+
+.largeLineChart .largeLineLabel {
+  fill: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.overviewInsightGrid {
+  display: grid;
+  grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr);
+  gap: 16px;
+}
+
+.healthPanel,
+.insightPanel {
+  display: grid;
+  gap: 14px;
+}
+
+.healthMetrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.healthMetrics div {
+  padding: 14px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.healthMetrics strong,
+.healthMetrics span {
+  display: block;
+}
+
+.healthMetrics strong {
+  font-size: 24px;
+}
+
+.healthMetrics span {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.insightPanel ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text);
+  line-height: 1.8;
+}
+
+.insightPanel li + li {
+  margin-top: 8px;
+}
 
 .marketingGrid {
   display: grid;
@@ -1884,16 +2606,19 @@ input[type="checkbox"] {
 
 .automationRuleGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(520px, 1fr));
+  gap: 22px;
 }
 
 .automationRuleCard {
   display: grid;
-  gap: 14px;
-  padding: 16px;
-  border-radius: 10px;
-  background: var(--surface-2);
+  align-content: start;
+  gap: 18px;
+  padding: 22px;
+  border: 1px solid #edf1f6;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, .05);
 }
 
 .automationRuleTop {
@@ -1903,8 +2628,25 @@ input[type="checkbox"] {
   gap: 16px;
 }
 
-.automationRuleTop > div {
+.ruleTitleBlock {
   min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.ruleTitleBlock strong {
+  overflow: hidden;
+  color: #1d2939;
+  font-size: 18px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ruleTitleBlock span {
+  color: #667085;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .automationRuleTop [data-ui="status-badge"] {
@@ -1917,6 +2659,137 @@ input[type="checkbox"] {
   justify-self: start;
   justify-content: center;
   padding-inline: 14px;
+}
+
+.ruleCardActions {
+  display: grid;
+  gap: 14px;
+  padding-top: 4px;
+}
+
+.rulePrimaryActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.rulePrimaryActions .secondaryButton,
+.rulePrimaryActions .primaryButton {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  justify-content: center;
+  padding: 0 10px;
+}
+
+.rulePrimaryActions .ruleDetailButton {
+  font-weight: 800;
+}
+
+.dangerSoft {
+  border-color: #fecdca;
+  background: #fff;
+  color: var(--red);
+}
+
+.ruleSecondaryActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px 0 0;
+  border-top: 1px solid #e9eef5;
+}
+
+.ruleUtilityButton {
+  min-width: 0;
+  min-height: 58px;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  border: 1px solid #edf1f6;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #344054;
+  text-align: left;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.ruleUtilityButton:hover {
+  border-color: #bfd2ff;
+  background: #f3f7ff;
+}
+
+.ruleUtilityButton > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.ruleUtilityButton small {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ruleSummary {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.ruleSummary > span {
+  width: fit-content;
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0 10px;
+}
+
+.ruleSummary strong {
+  color: #344054;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.ruleMetricStrip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid #edf1f6;
+  border-radius: 10px;
+}
+
+.ruleMetricStrip div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  background: #fff;
+}
+
+.ruleMetricStrip div + div {
+  border-left: 1px solid #edf1f6;
+}
+
+.ruleMetricStrip span {
+  color: #8a96a8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ruleMetricStrip strong {
+  color: #1d2939;
+  font-size: 17px;
+  line-height: 1.3;
 }
 
 .automationFlow {
@@ -2005,6 +2878,112 @@ input[type="checkbox"] {
   font-size: 13px;
   font-weight: 700;
   padding: 0 12px;
+}
+
+.statusTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.statusTabs button {
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-weight: 700;
+  padding: 0 14px;
+  cursor: pointer;
+}
+
+.statusTabs button.active {
+  border-color: var(--blue);
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.jsonTextarea,
+.jsonPreview {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: #344054;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.jsonTextarea {
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.jsonPreview {
+  max-height: 280px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  white-space: pre-wrap;
+}
+
+.mutedIcon {
+  color: var(--muted);
+}
+
+.safetySummary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  font-weight: 800;
+}
+
+.safetySummary.passed {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.safetySummary.blocked {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.chipGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.checkChip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0 12px;
+}
+
+.checkChip.passed {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.checkChip.blocked {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.checkChip.warning {
+  background: var(--amber-soft);
+  color: var(--amber);
 }
 
 .taskSectionTitle {
@@ -2222,9 +3201,17 @@ input[type="checkbox"] {
   .formGrid.two,
   .heroKpiSection,
   .secondaryMetricGrid,
+  .pulseGrid,
+  .overviewInsightGrid,
+  .healthMetrics,
+  .templateSummaryGrid,
+  .templateWorkspace,
+  .templateDetailGrid,
+  .templateFilterBar,
   .taskMetricGrid,
   .taskExplainGrid,
   .marketingGrid,
+  .automationRuleGrid,
   .ruleHero,
   .taskBoard {
     grid-template-columns: 1fr;
@@ -2239,6 +3226,7 @@ input[type="checkbox"] {
   .scenarioCard,
   .activityItem,
   .automationFlow,
+  .rulePrimaryActions,
   .ruleMetaGrid,
   .approvalSummaryGrid {
     grid-template-columns: 1fr;
@@ -2247,6 +3235,23 @@ input[type="checkbox"] {
   .settingsHero {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .templateHero {
+    flex-direction: column;
+  }
+
+  .templateSceneList article {
+    grid-template-columns: 1fr;
+  }
+
+  .overviewCommandCenter {
+    flex-direction: column;
+  }
+
+  .dateNote {
+    width: 100%;
+    min-width: 0;
   }
 
   .settingsStatus {

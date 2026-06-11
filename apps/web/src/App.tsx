@@ -162,9 +162,9 @@ export default function App() {
         api<Stats>('/api/stats/overview'),
         api<{ items: Template[] }>('/api/templates'),
         api<{ items: Rule[] }>('/api/rules'),
-        api<{ items: SendLog[] }>('/api/send-logs?pageSize=40'),
+        api<{ items: SendLog[] }>('/api/send-logs?pageSize=100'),
         api<{ items: EventItem[] }>('/api/events?pageSize=20'),
-        api<{ items: SmsTask[] }>('/api/tasks?pageSize=40')
+        api<{ items: SmsTask[] }>('/api/tasks?pageSize=100')
       ]);
       setHealth(healthData);
       setStats(statsData);

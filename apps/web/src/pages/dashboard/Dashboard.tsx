@@ -1,14 +1,295 @@
-import { Activity, BarChart3, CheckCircle2, Clock3, MessageSquare, ShieldCheck, TrendingUp, Zap } from 'lucide-react';
+import { useState } from 'react';
+import { Activity, BarChart3, CalendarDays, CheckCircle2, Clock3, MessageSquare, MousePointerClick, ShieldCheck, TrendingDown, TrendingUp, Zap } from 'lucide-react';
 import { eventLabels, sceneLabels } from '../../constants/labels';
 import type { Rule, SendLog, SmsTask, Stats } from '../../types';
 import { StatusBadge } from '../../components/StatusBadge';
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+type FocusMetric = 'send' | 'success' | 'ctr';
+
+function startOfLocalDay(date = new Date()) {
+  const value = new Date(date);
+  value.setHours(0, 0, 0, 0);
+  return value;
+}
+
+function countLogsInRange(logs: SendLog[], start: Date, end: Date) {
+  return logs.filter((log) => {
+    const createdAt = new Date(log.createdAt).getTime();
+    return createdAt >= start.getTime() && createdAt < end.getTime() && log.status !== 'blocked';
+  }).length;
+}
+
+function countSuccessInRange(logs: SendLog[], start: Date, end: Date) {
+  return logs.filter((log) => {
+    const createdAt = new Date(log.createdAt).getTime();
+    return createdAt >= start.getTime() && createdAt < end.getTime() && log.status === 'success';
+  }).length;
+}
+
+function sumClicksInRange(logs: SendLog[], start: Date, end: Date) {
+  return logs.reduce((total, log) => {
+    const createdAt = new Date(log.createdAt).getTime();
+    if (createdAt < start.getTime() || createdAt >= end.getTime()) return total;
+    return total + Number(log.clickCount || 0);
+  }, 0);
+}
+
+function aggregateLogsInRange(logs: SendLog[], start: Date, end: Date) {
+  const items = logs.filter((log) => {
+    const createdAt = new Date(log.createdAt).getTime();
+    return createdAt >= start.getTime() && createdAt < end.getTime();
+  });
+  const send = items.filter((log) => log.status !== 'blocked').length;
+  const success = items.filter((log) => log.status === 'success').length;
+  const failed = items.filter((log) => log.status === 'failed').length;
+  const blocked = items.filter((log) => log.status === 'blocked').length;
+  const clicks = items.reduce((total, log) => total + Number(log.clickCount || 0), 0);
+  return {
+    send,
+    success,
+    failed,
+    blocked,
+    clicks,
+    successRate: send > 0 ? (success / send) * 100 : 0,
+    ctr: success > 0 ? (clicks / success) * 100 : 0
+  };
+}
+
+function formatDelta(current: number, previous: number) {
+  const delta = current - previous;
+  if (!previous && !current) return { text: '持平', tone: 'flat', delta };
+  if (!previous) return { text: `新增 ${current}`, tone: 'up', delta };
+  const percent = (delta / previous) * 100;
+  if (delta === 0) return { text: '持平', tone: 'flat', delta };
+  return {
+    text: `${delta > 0 ? '+' : ''}${delta} / ${delta > 0 ? '+' : ''}${percent.toFixed(1)}%`,
+    tone: delta > 0 ? 'up' : 'down',
+    delta
+  };
+}
+
+function formatPointValue(value: number, unit: 'count' | 'rate') {
+  return unit === 'rate' ? `${value.toFixed(1)}%` : String(Math.round(value));
+}
+
+function formatRate(value: number) {
+  return `${Math.max(value, 0).toFixed(1)}%`;
+}
+
+function windowStart(days: number, end: Date) {
+  return new Date(end.getTime() - days * DAY_MS);
+}
+
+function MiniBarChart({ points, tone = 'blue' }: { points: { label: string; value: number }[]; tone?: 'blue' | 'green' | 'amber' }) {
+  const maxValue = Math.max(...points.map((item) => item.value), 1);
+  return (
+    <div className={`miniChartBars ${tone}`} aria-label="近 7 日柱状趋势">
+      {points.map((item) => (
+        <span key={item.label} title={`${item.label}: ${item.value}`}>
+          <i style={{ height: `${Math.max((item.value / maxValue) * 100, item.value ? 14 : 4)}%` }} />
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function MiniLineChart({ points, tone = 'green', suffix = '%' }: { points: { label: string; value: number }[]; tone?: 'green' | 'amber'; suffix?: string }) {
+  const width = 168;
+  const height = 56;
+  const maxValue = Math.max(...points.map((item) => item.value), 1);
+  const minValue = Math.min(...points.map((item) => item.value), 0);
+  const range = Math.max(maxValue - minValue, 1);
+  const coordinates = points.map((item, index) => {
+    const x = points.length === 1 ? width / 2 : (index / (points.length - 1)) * width;
+    const y = height - ((item.value - minValue) / range) * (height - 8) - 4;
+    return { ...item, x, y };
+  });
+  const line = coordinates.map((item) => `${item.x},${item.y}`).join(' ');
+  const area = `0,${height} ${coordinates.map((item) => `${item.x},${item.y}`).join(' ')} ${width},${height}`;
+  return (
+    <svg className={`miniLineChart ${tone}`} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="近 7 日折线趋势">
+      <polygon className="miniLineArea" points={area} />
+      <polyline className="miniLinePath" points={line} />
+      {coordinates.map((item) => (
+        <circle key={item.label} cx={item.x} cy={item.y} r="2.6">
+          <title>{`${item.label}: ${item.value.toFixed(1)}${suffix}`}</title>
+        </circle>
+      ))}
+    </svg>
+  );
+}
+
+function LargeTrendChart({ points, type, tone = 'blue', unit = 'count' }: { points: { label: string; value: number }[]; type: 'bar' | 'line'; tone?: 'blue' | 'green' | 'amber'; unit?: 'count' | 'rate' }) {
+  if (type === 'bar') {
+    const maxValue = Math.max(...points.map((item) => item.value), 1);
+    return (
+      <div className={`dailyTrend ${tone}`}>
+        {points.map((item) => (
+          <div className="dailyTrendItem" key={item.label}>
+            <div className="dailyTrendBar">
+              <span style={{ height: `${Math.max((item.value / maxValue) * 100, item.value ? 12 : 4)}%` }} />
+            </div>
+            <strong>{formatPointValue(item.value, unit)}</strong>
+            <small>{item.label}</small>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  const width = 720;
+  const height = 180;
+  const maxValue = Math.max(...points.map((item) => item.value), 1);
+  const minValue = Math.min(...points.map((item) => item.value), 0);
+  const range = Math.max(maxValue - minValue, 1);
+  const coordinates = points.map((item, index) => {
+    const x = 28 + (index / Math.max(points.length - 1, 1)) * (width - 56);
+    const y = 22 + (1 - ((item.value - minValue) / range)) * (height - 74);
+    return { ...item, x, y };
+  });
+  const line = coordinates.map((item) => `${item.x},${item.y}`).join(' ');
+  const area = `${coordinates[0]?.x || 28},${height - 34} ${coordinates.map((item) => `${item.x},${item.y}`).join(' ')} ${coordinates[coordinates.length - 1]?.x || width - 28},${height - 34}`;
+
+  return (
+    <div className={`largeLineChart ${tone}`}>
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="近 7 日折线趋势">
+        <line className="largeGridLine" x1="28" x2={width - 28} y1={height - 34} y2={height - 34} />
+        <polygon className="largeLineArea" points={area} />
+        <polyline className="largeLinePath" points={line} />
+        {coordinates.map((item) => (
+          <g key={item.label}>
+            <circle cx={item.x} cy={item.y} r="4">
+              <title>{`${item.label}: ${formatPointValue(item.value, unit)}`}</title>
+            </circle>
+            <text x={item.x} y={item.y - 10}>{formatPointValue(item.value, unit)}</text>
+            <text className="largeLineLabel" x={item.x} y={height - 10}>{item.label}</text>
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
 export default function Dashboard({ stats, logs, rules, tasks }: { stats: Stats | null; logs: SendLog[]; rules: Rule[]; tasks: SmsTask[] }) {
+  const [focusMetric, setFocusMetric] = useState<FocusMetric>('send');
+  const todayStart = startOfLocalDay();
+  const tomorrowStart = new Date(todayStart.getTime() + DAY_MS);
+  const yesterdayStart = new Date(todayStart.getTime() - DAY_MS);
+  const weekStart = windowStart(7, tomorrowStart);
+  const previousWeekStart = windowStart(14, tomorrowStart);
+  const monthStart = windowStart(30, tomorrowStart);
+  const previousMonthStart = windowStart(60, tomorrowStart);
+
   const sendCount = stats?.sendCount ?? 0;
   const successRate = sendCount > 0 ? `${(((stats?.successCount ?? 0) / sendCount) * 100).toFixed(1)}%` : '0.0%';
+  const failedRate = sendCount > 0 ? ((stats?.failedCount ?? 0) / sendCount) * 100 : 0;
+  const blockedRate = sendCount + (stats?.blockedCount ?? 0) > 0 ? ((stats?.blockedCount ?? 0) / (sendCount + (stats?.blockedCount ?? 0))) * 100 : 0;
   const scenarioEntries = Object.entries(stats?.scenes || {});
   const maxSceneCount = Math.max(...scenarioEntries.map(([, count]) => count), 1);
   const issueTasks = tasks.filter((task) => ['failed', 'blocked'].includes(task.status)).length;
+  const dueTasks = tasks.filter((task) => ['pending', 'failed'].includes(task.status) && new Date(task.scheduledAt).getTime() <= Date.now()).length;
+  const todaySendCount = countLogsInRange(logs, todayStart, tomorrowStart);
+  const yesterdaySendCount = countLogsInRange(logs, yesterdayStart, todayStart);
+  const todayAgg = aggregateLogsInRange(logs, todayStart, tomorrowStart);
+  const yesterdayAgg = aggregateLogsInRange(logs, yesterdayStart, todayStart);
+  const weekAgg = aggregateLogsInRange(logs, weekStart, tomorrowStart);
+  const previousWeekAgg = aggregateLogsInRange(logs, previousWeekStart, weekStart);
+  const monthAgg = aggregateLogsInRange(logs, monthStart, tomorrowStart);
+  const previousMonthAgg = aggregateLogsInRange(logs, previousMonthStart, monthStart);
+  const weekSendCount = weekAgg.send;
+  const monthSendCount = monthAgg.send;
+  const todayDelta = formatDelta(todayAgg.send, yesterdayAgg.send);
+  const weekDelta = formatDelta(weekAgg.send, previousWeekAgg.send);
+  const monthDelta = formatDelta(monthAgg.send, previousMonthAgg.send);
+  const todaySuccessDelta = formatDelta(todayAgg.successRate, yesterdayAgg.successRate);
+  const weekSuccessDelta = formatDelta(weekAgg.successRate, previousWeekAgg.successRate);
+  const monthSuccessDelta = formatDelta(monthAgg.successRate, previousMonthAgg.successRate);
+  const todayCtrDelta = formatDelta(todayAgg.ctr, yesterdayAgg.ctr);
+  const weekCtrDelta = formatDelta(weekAgg.ctr, previousWeekAgg.ctr);
+  const monthCtrDelta = formatDelta(monthAgg.ctr, previousMonthAgg.ctr);
+  const todaySuccessCount = countSuccessInRange(logs, todayStart, tomorrowStart);
+  const todaySuccessRate = todaySendCount > 0 ? (todaySuccessCount / todaySendCount) * 100 : 0;
+  const activeRuleRate = (stats?.ruleCount ?? 0) > 0 ? ((stats?.enabledRuleCount ?? 0) / (stats?.ruleCount ?? 0)) * 100 : 0;
+  const dailyTrend = Array.from({ length: 7 }).map((_, index) => {
+    const start = new Date(todayStart.getTime() - (6 - index) * DAY_MS);
+    const end = new Date(start.getTime() + DAY_MS);
+    const send = countLogsInRange(logs, start, end);
+    const success = countSuccessInRange(logs, start, end);
+    const clicks = sumClicksInRange(logs, start, end);
+    return {
+      label: `${start.getMonth() + 1}/${start.getDate()}`,
+      count: send,
+      successRate: send > 0 ? (success / send) * 100 : 0,
+      ctr: success > 0 ? (clicks / success) * 100 : 0
+    };
+  });
+  const maxDailyCount = Math.max(...dailyTrend.map((item) => item.count), 1);
+  const sendChartPoints = dailyTrend.map((item) => ({ label: item.label, value: item.count }));
+  const successChartPoints = dailyTrend.map((item) => ({ label: item.label, value: item.successRate }));
+  const ctrChartPoints = dailyTrend.map((item) => ({ label: item.label, value: item.ctr }));
+  const todayCtr = ctrChartPoints[ctrChartPoints.length - 1]?.value || 0;
+  const focusConfig = {
+    send: {
+      title: '发送量变化笔记',
+      subtitle: '按自然日、近 7 日、近 30 日观察运营节奏',
+      icon: <Activity size={18} />,
+      chartType: 'bar' as const,
+      chartTone: 'blue' as const,
+      chartUnit: 'count' as const,
+      points: sendChartPoints,
+      cards: [
+        { label: '今日发送', value: String(todayAgg.send), helper: '较昨日', delta: todayDelta },
+        { label: '近 7 日发送', value: String(weekAgg.send), helper: '较前 7 日', delta: weekDelta },
+        { label: '近 30 日发送', value: String(monthAgg.send), helper: '较前 30 日', delta: monthDelta },
+        { label: '今日成功率', value: formatRate(todaySuccessRate), helper: `今日成功 ${todaySuccessCount} 条，失败和拦截需进入发送记录排查`, accent: true }
+      ]
+    },
+    success: {
+      title: '成功率变化笔记',
+      subtitle: '比例指标用折线观察稳定性，同时结合失败量判断质量',
+      icon: <CheckCircle2 size={18} />,
+      chartType: 'line' as const,
+      chartTone: 'green' as const,
+      chartUnit: 'rate' as const,
+      points: successChartPoints,
+      cards: [
+        { label: '今日成功率', value: formatRate(todayAgg.successRate), helper: '较昨日', delta: todaySuccessDelta },
+        { label: '近 7 日成功率', value: formatRate(weekAgg.successRate), helper: '较前 7 日', delta: weekSuccessDelta },
+        { label: '近 30 日成功率', value: formatRate(monthAgg.successRate), helper: '较前 30 日', delta: monthSuccessDelta },
+        { label: '失败与拦截', value: `${todayAgg.failed + todayAgg.blocked}`, helper: `今日失败 ${todayAgg.failed} 条，拦截 ${todayAgg.blocked} 条`, accent: true }
+      ]
+    },
+    ctr: {
+      title: 'CTR 变化笔记',
+      subtitle: '点击率关注内容吸引力，需结合成功送达和点击次数一起看',
+      icon: <MousePointerClick size={18} />,
+      chartType: 'line' as const,
+      chartTone: 'amber' as const,
+      chartUnit: 'rate' as const,
+      points: ctrChartPoints,
+      cards: [
+        { label: '今日 CTR', value: formatRate(todayAgg.ctr), helper: '较昨日', delta: todayCtrDelta },
+        { label: '近 7 日 CTR', value: formatRate(weekAgg.ctr), helper: '较前 7 日', delta: weekCtrDelta },
+        { label: '近 30 日 CTR', value: formatRate(monthAgg.ctr), helper: '较前 30 日', delta: monthCtrDelta },
+        { label: '今日点击', value: String(todayAgg.clicks), helper: `基于今日成功 ${todayAgg.success} 条计算`, accent: true }
+      ]
+    }
+  }[focusMetric];
+  const leadingScene = scenarioEntries.sort((a, b) => b[1] - a[1])[0];
+  const insightItems = [
+    weekDelta.delta > 0
+      ? `近 7 日发送量较上一周期增加 ${weekDelta.delta} 条，触达节奏正在放大。`
+      : weekDelta.delta < 0
+        ? `近 7 日发送量较上一周期减少 ${Math.abs(weekDelta.delta)} 条，可检查规则启用和事件上报。`
+        : '近 7 日发送量与上一周期持平，适合观察场景结构变化。',
+    failedRate > 10
+      ? `失败率 ${formatRate(failedRate)} 偏高，建议优先查看 Provider 返回和失败任务。`
+      : `成功率 ${successRate}，发送质量处于可观察状态。`,
+    blockedRate > 15
+      ? `安全拦截占比 ${formatRate(blockedRate)}，需要确认白名单、黑名单、退订或频控策略是否符合预期。`
+      : `安全拦截 ${stats?.blockedCount ?? 0} 条，当前没有明显误发风险信号。`
+  ];
   const statusCards = [
     { label: '启用规则', value: stats?.enabledRuleCount ?? 0, icon: <Zap size={18} />, tone: 'blue' },
     { label: '待执行任务', value: stats?.pendingTaskCount ?? 0, icon: <Clock3 size={18} />, tone: 'amber' },
@@ -18,25 +299,83 @@ export default function Dashboard({ stats, logs, rules, tasks }: { stats: Stats 
 
   return (
     <section className="stack overviewPage">
+      <section className="overviewCommandCenter">
+        <div>
+          <span className="eyebrow">Growth overview</span>
+          <h1>增长总览</h1>
+          <p>聚焦发送量变化、规则运行和场景表现，快速判断今天、近 7 日、近 30 日触达节奏是否健康。</p>
+        </div>
+        <div className="dateNote">
+          <CalendarDays size={18} />
+          <div>
+            <strong>{todayStart.getFullYear()}年{todayStart.getMonth() + 1}月{todayStart.getDate()}日</strong>
+            <span>以发送记录创建时间统计日、周、月变化</span>
+          </div>
+        </div>
+      </section>
+
       <section className="heroKpiSection">
-        <article className="heroMetric primary">
-          <div className="metricIcon"><MessageSquare size={22} /></div>
-          <span>发送量</span>
-          <strong>{sendCount}</strong>
-          <p>覆盖 {stats?.eventCount ?? 0} 个业务事件</p>
-        </article>
-        <article className="heroMetric">
-          <div className="metricIcon success"><CheckCircle2 size={22} /></div>
-          <span>成功率</span>
-          <strong>{successRate}</strong>
-          <p>{stats?.successCount ?? 0} 次成功提交</p>
-        </article>
-        <article className="heroMetric">
-          <div className="metricIcon trend"><TrendingUp size={22} /></div>
-          <span>CTR</span>
-          <strong>{stats?.ctr ?? '0.0%'}</strong>
-          <p>{stats?.clickCount ?? 0} 次短链点击</p>
-        </article>
+        <button className={`heroMetric primary clickable ${focusMetric === 'send' ? 'active' : ''}`} type="button" onClick={() => setFocusMetric('send')}>
+          <div className="heroMetricTop">
+            <div className="metricIcon"><MessageSquare size={22} /></div>
+            <span className={`deltaPill ${weekDelta.tone}`}>{weekDelta.delta >= 0 ? '近 7 日增长' : '近 7 日下降'} {Math.abs(weekDelta.delta)}</span>
+          </div>
+          <div className="heroMetricBody">
+            <span>发送量</span>
+            <strong>{sendCount}</strong>
+            <p>覆盖 {stats?.eventCount ?? 0} 个业务事件 · 今日 {todaySendCount} 条</p>
+          </div>
+          <MiniBarChart points={sendChartPoints} />
+        </button>
+        <button className={`heroMetric clickable ${focusMetric === 'success' ? 'active' : ''}`} type="button" onClick={() => setFocusMetric('success')}>
+          <div className="heroMetricTop">
+            <div className="metricIcon success"><CheckCircle2 size={22} /></div>
+            <span className="deltaPill flat">今日 {formatRate(todaySuccessRate)}</span>
+          </div>
+          <div className="heroMetricBody">
+            <span>成功率</span>
+            <strong>{successRate}</strong>
+            <p>{stats?.successCount ?? 0} 次成功提交 · 近 7 日趋势</p>
+          </div>
+          <MiniLineChart points={successChartPoints} tone="green" />
+        </button>
+        <button className={`heroMetric clickable ${focusMetric === 'ctr' ? 'active' : ''}`} type="button" onClick={() => setFocusMetric('ctr')}>
+          <div className="heroMetricTop">
+            <div className="metricIcon trend"><TrendingUp size={22} /></div>
+            <span className="deltaPill flat">今日 {formatRate(todayCtr)}</span>
+          </div>
+          <div className="heroMetricBody">
+            <span>CTR</span>
+            <strong>{stats?.ctr ?? '0.0%'}</strong>
+            <p>{stats?.clickCount ?? 0} 次短链点击 · 跟随发送趋势观察</p>
+          </div>
+          <MiniLineChart points={ctrChartPoints} tone="amber" />
+        </button>
+      </section>
+
+      <section className="sendPulsePanel panel">
+        <div className="panelTitle">
+          <div>
+            <h2>{focusConfig.title}</h2>
+            <span>{focusConfig.subtitle}</span>
+          </div>
+          {focusConfig.icon}
+        </div>
+        <div className="pulseGrid">
+          {focusConfig.cards.map((item) => (
+            <article className={`pulseCard ${item.accent ? 'accent' : ''}`} key={item.label}>
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+              {'delta' in item && item.delta ? (
+                <p className={`deltaText ${item.delta.tone}`}>
+                  {item.delta.delta > 0 ? <TrendingUp size={14} /> : item.delta.delta < 0 ? <TrendingDown size={14} /> : <Activity size={14} />}
+                  {item.helper} {item.delta.text}
+                </p>
+              ) : <p>{item.helper}</p>}
+            </article>
+          ))}
+        </div>
+        <LargeTrendChart points={focusConfig.points} type={focusConfig.chartType} tone={focusConfig.chartTone} unit={focusConfig.chartUnit} />
       </section>
 
       <section className="secondaryMetricGrid">
@@ -49,12 +388,48 @@ export default function Dashboard({ stats, logs, rules, tasks }: { stats: Stats 
         ))}
       </section>
 
+      <section className="overviewInsightGrid">
+        <article className="panel healthPanel">
+          <div className="panelTitle">
+            <div>
+              <h2>运营健康度</h2>
+              <span>规则启用、任务积压和异常状态的综合观察</span>
+            </div>
+          </div>
+          <div className="healthMetrics">
+            <div>
+              <strong>{formatRate(activeRuleRate)}</strong>
+              <span>规则启用率</span>
+            </div>
+            <div>
+              <strong>{dueTasks}</strong>
+              <span>已到期待处理</span>
+            </div>
+            <div>
+              <strong>{formatRate(blockedRate)}</strong>
+              <span>安全拦截占比</span>
+            </div>
+          </div>
+        </article>
+        <article className="panel insightPanel">
+          <div className="panelTitle">
+            <div>
+              <h2>运营洞察</h2>
+              <span>基于当前总览数据自动生成</span>
+            </div>
+          </div>
+          <ul>
+            {insightItems.map((item) => <li key={item}>{item}</li>)}
+          </ul>
+        </article>
+      </section>
+
       <div className="marketingGrid">
         <section className="panel scenarioPanel">
           <div className="panelTitle">
             <div>
               <h2>场景表现</h2>
-              <span>按触达场景观察发送分布</span>
+              <span>{leadingScene ? `${sceneLabels[leadingScene[0]] || leadingScene[0]} 当前贡献最高` : '按触达场景观察发送分布'}</span>
             </div>
             <BarChart3 size={18} />
           </div>
