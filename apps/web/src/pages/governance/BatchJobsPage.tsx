@@ -25,6 +25,7 @@ export default function BatchJobsPage() {
   const [filters, setFilters] = useState(emptyFilters);
   const [pagination, setPagination] = useState<PaginationState>(defaultPagination);
   const [selected, setSelected] = useState<BatchJobItem | null>(null);
+  const [failedOnly, setFailedOnly] = useState(false);
 
   async function load(nextFilters = filters, nextPagination = pagination) {
     const data = await api<{ items: BatchJobItem[]; total: number; page: number; pageSize: number }>(`/api/batch-jobs?${withPaginationParams(nextFilters, nextPagination)}`);
@@ -39,6 +40,25 @@ export default function BatchJobsPage() {
   async function openDetail(item: BatchJobItem) {
     const data = await api<{ item: BatchJobItem }>(`/api/batch-jobs/${item.id}`);
     setSelected(data.item);
+    setFailedOnly(false);
+  }
+
+  function downloadFailedItems(item: BatchJobItem) {
+    const failedItems = (item.items || []).filter((detail) => detail.status !== 'success');
+    const rows = [
+      ['target', 'status', 'message'],
+      ...failedItems.map((detail) => [detail.target, detail.status, detail.message || ''])
+    ];
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `batch_failed_${item.id}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   }
 
   function search(nextFilters: QueryFilterValues) {
@@ -144,13 +164,19 @@ export default function BatchJobsPage() {
               <section className="approvalBlock">
                 <strong>失败概览</strong>
                 <p>存在 {selected.failedCount} 条失败记录，请在明细中查看失败原因后重新导入或重新执行对应业务动作。</p>
+                <div className="inlineActions">
+                  <button className={`segmentButton${failedOnly ? ' active' : ''}`} type="button" onClick={() => setFailedOnly(!failedOnly)}>
+                    {failedOnly ? '显示全部' : '只看失败'}
+                  </button>
+                  <button className="secondaryButton compact" type="button" onClick={() => downloadFailedItems(selected)}>下载失败明细</button>
+                </div>
               </section>
             )}
             <div className="dataTableWrap">
               <table className="dataTable compactTable">
                 <thead><tr><th>对象</th><th>状态</th><th>原因</th></tr></thead>
                 <tbody>
-                  {(selected.items || []).length ? selected.items?.map((item) => (
+                  {(selected.items || []).filter((item) => !failedOnly || item.status !== 'success').length ? selected.items?.filter((item) => !failedOnly || item.status !== 'success').map((item) => (
                     <tr key={item.id}>
                       <td>{item.target}</td>
                       <td><StatusBadge status={item.status === 'success' ? 'success' : 'failed'} /></td>

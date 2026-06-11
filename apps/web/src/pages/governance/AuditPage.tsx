@@ -43,6 +43,10 @@ function formatTime(value?: string) {
   return value ? new Date(value).toLocaleString() : '-';
 }
 
+function objectValue(value: unknown) {
+  return value && typeof value === 'object' ? value as Record<string, any> : {};
+}
+
 export default function AuditPage({ mode }: { mode: 'eventSourceLogs' | 'operationLogs' }) {
   const [items, setItems] = useState<AuditItem[]>([]);
   const [filters, setFilters] = useState(emptyFilters);
@@ -169,6 +173,14 @@ export default function AuditPage({ mode }: { mode: 'eventSourceLogs' | 'operati
               <strong>{(selected.status || selected.result) === 'success' ? '处理结果' : '失败原因'}</strong>
               <p>{selected.message || selected.errorMessage || selected.code || resultText(selected)}</p>
             </section>
+            {mode === 'eventSourceLogs' && (
+              <div className="detailCard">
+                <div><span>手机号</span><strong>{objectValue(selected.payload).phone || '-'}</strong></div>
+                <div><span>场景</span><strong>{objectValue(selected.payload).scene || '-'}</strong></div>
+                <div><span>来源</span><strong>{objectValue(selected.payload).source || '-'}</strong></div>
+                <div><span>业务金额</span><strong>{objectValue(selected.payload).amount ?? '-'}</strong></div>
+              </div>
+            )}
             <div className="detailCard">
               <div><span>{mode === 'eventSourceLogs' ? 'EventId' : '请求路径'}</span><strong>{mode === 'eventSourceLogs' ? selected.eventId || '-' : selected.path || '-'}</strong></div>
               <div><span>{mode === 'eventSourceLogs' ? '事件类型' : '资源类型'}</span><strong>{mode === 'eventSourceLogs' ? actionText(selected) : resourceLabel(selected.resource)}</strong></div>
@@ -183,6 +195,22 @@ export default function AuditPage({ mode }: { mode: 'eventSourceLogs' | 'operati
               <strong>{mode === 'eventSourceLogs' ? '事件 Payload' : '请求内容'}</strong>
               <pre>{formatJson(mode === 'eventSourceLogs' ? selected.payload : selected.requestBody)}</pre>
             </div>
+            {mode === 'operationLogs' && (objectValue(selected.requestBody).before || objectValue(selected.requestBody).after) && (
+              <section className="approvalBlock">
+                <strong>变更对比</strong>
+                <div className="dataTableWrap">
+                  <table className="dataTable compactTable">
+                    <thead><tr><th>变更前</th><th>变更后</th></tr></thead>
+                    <tbody>
+                      <tr>
+                        <td><pre>{formatJson(objectValue(selected.requestBody).before)}</pre></td>
+                        <td><pre>{formatJson(objectValue(selected.requestBody).after)}</pre></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
             <section className="approvalBlock">
               <strong>日志标识</strong>
               <p>{selected.id}</p>

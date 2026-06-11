@@ -6,6 +6,7 @@ import { config } from '../../config/env.js';
 import { createId } from '../../utils/ids.js';
 import { maskPhone } from '../../utils/mask-phone.js';
 import { mutateStore, readStore } from '../sms/sms.repository.js';
+import { createSmsProvider } from '../sms/providers/index.js';
 
 const prisma = new PrismaClient();
 const PHONE_PATTERN = /^1\d{10}$/;
@@ -56,15 +57,19 @@ export const ROLE_DEFINITIONS = [
       'security:whitelist:detail',
       'security:blacklist:base',
       'security:blacklist:add',
+      'security:blacklist:edit',
       'security:blacklist:import',
       'security:blacklist:remove',
       'security:blacklist:detail',
       'security:unsubscribe:base',
       'security:unsubscribe:add',
+      'security:unsubscribe:edit',
       'security:unsubscribe:import',
       'security:unsubscribe:status',
       'security:unsubscribe:detail',
       'security:setting:base',
+      'security:setting:providerTest',
+      'security:setting:workerRun',
       'integration:eventSource:base',
       'integration:eventSource:detail',
       'integration:eventSourceLog:base',
@@ -351,6 +356,12 @@ function maskExportRow(row = {}, exposeSensitive = false) {
 function safeExportFileName(fileName) {
   const normalized = String(fileName || `export_${Date.now()}.json`).replace(/[^a-zA-Z0-9_.-]/g, '_');
   return normalized.endsWith('.json') ? normalized : `${normalized}.json`;
+}
+
+function cleanOptionalString(value) {
+  if (value === undefined) return undefined;
+  const normalized = String(value || '').trim();
+  return normalized || null;
 }
 
 function exportFilePath(fileName) {
@@ -1333,10 +1344,12 @@ async function routePhoneList(req, url, readJson, actor) {
       if (item.path === 'whitelist') Object.assign(data, { remark: body.remark || null, createdById: actor.id });
       if (item.path === 'blacklist') Object.assign(data, { reason: body.reason || null, source: body.source || 'manual', createdById: actor.id });
       if (item.path === 'unsubscribes') Object.assign(data, { scene: body.scene || '', source: body.source || 'manual', remark: body.remark || null });
+      const updateData = { ...data, id: undefined, phone: undefined, phoneMasked: undefined };
+      if (item.path !== 'unsubscribes') updateData.createdById = actor.id;
       const created = await item.model.upsert({
         where: item.path === 'unsubscribes' ? { phone_scene: { phone, scene: body.scene || '' } } : { phone },
         create: data,
-        update: { ...data, id: undefined, phone: undefined, phoneMasked: undefined, createdById: actor.id }
+        update: updateData
       });
       await writeOperationLog({ req, actor, action: 'create', resource: item.resource, resourceId: created.id, requestBody: { phone: maskPhone(phone), scene: body.scene } });
       return ok({ success: true, item: created }, 201);
@@ -1373,6 +1386,48 @@ async function routePhoneList(req, url, readJson, actor) {
     const body = await readJson(req);
     const updated = await prisma.smsWhitelist.update({ where: { id: whitelistUpdateMatch[1] }, data: { remark: body.remark || null, scene: body.scene || null } });
     await writeOperationLog({ req, actor, action: 'update', resource: 'sms_whitelist', resourceId: updated.id, requestBody: body });
+    return ok({ success: true, item: updated });
+  }
+
+  const blacklistUpdateMatch = url.pathname.match(/^\/api\/blacklist\/([^/]+)\/update$/);
+  if (req.method === 'POST' && blacklistUpdateMatch) {
+    const body = await readJson(req);
+    const data = {};
+    const scene = cleanOptionalString(body.scene);
+    const reason = cleanOptionalString(body.reason);
+    const source = cleanOptionalString(body.source);
+    if (scene !== undefined) data.scene = scene;
+    if (reason !== undefined) data.reason = reason;
+    if (source !== undefined) data.source = source || 'manual';
+    const updated = await prisma.smsBlacklist.update({ where: { id: blacklistUpdateMatch[1] }, data });
+    await writeOperationLog({ req, actor, action: 'update', resource: 'sms_blacklist', resourceId: updated.id, requestBody: body });
+    return ok({ success: true, item: updated });
+  }
+
+  const unsubscribeUpdateMatch = url.pathname.match(/^\/api\/unsubscribes\/([^/]+)\/update$/);
+  if (req.method === 'POST' && unsubscribeUpdateMatch) {
+    const body = await readJson(req);
+    const current = await prisma.smsUnsubscribe.findUnique({ where: { id: unsubscribeUpdateMatch[1] } });
+    if (!current) return fail('PHONE_LIST_ITEM_NOT_FOUND', '退订记录不存在。', 404);
+    const data = {};
+    if (body.scene !== undefined) {
+      const nextScene = String(body.scene || '').trim();
+      const duplicated = await prisma.smsUnsubscribe.findFirst({
+        where: {
+          phone: current.phone,
+          scene: nextScene,
+          id: { not: current.id }
+        }
+      });
+      if (duplicated) return fail('UNSUBSCRIBE_DUPLICATED', '该手机号在目标场景下已有退订记录。', 409);
+      data.scene = nextScene;
+    }
+    const source = cleanOptionalString(body.source);
+    const remark = cleanOptionalString(body.remark);
+    if (source !== undefined) data.source = source || 'manual';
+    if (remark !== undefined) data.remark = remark;
+    const updated = await prisma.smsUnsubscribe.update({ where: { id: current.id }, data });
+    await writeOperationLog({ req, actor, action: 'update', resource: 'sms_unsubscribe', resourceId: updated.id, requestBody: body });
     return ok({ success: true, item: updated });
   }
 
@@ -1447,8 +1502,94 @@ async function routePhoneList(req, url, readJson, actor) {
   return null;
 }
 
-async function routeSettings(req, url, readJson, actor) {
+function workerStatusSnapshot(runtime = {}) {
+  const worker = runtime.taskWorker || {};
+  return {
+    enabled: Boolean(worker.enabled),
+    running: Boolean(worker.running),
+    intervalMs: worker.intervalMs ?? config.taskWorker.intervalMs,
+    batchSize: worker.batchSize ?? config.taskWorker.batchSize,
+    allowRealSend: config.taskWorker.allowRealSend,
+    lastRunAt: worker.lastRunAt || null,
+    lastProcessed: Number(worker.lastProcessed) || 0,
+    lastError: worker.lastError || null,
+    disabledReason: worker.disabledReason || null
+  };
+}
+
+async function testProviderConfig(providerName, options = {}) {
+  const provider = createSmsProvider(providerName);
+  const checks = [
+    { key: 'provider', status: 'passed', message: `Provider ${provider.name || providerName} 可识别。` }
+  ];
+
+  if (typeof provider.assertConfig === 'function') {
+    provider.assertConfig();
+    checks.push({ key: 'config', status: 'passed', message: '必填配置完整。' });
+  } else {
+    checks.push({ key: 'config', status: 'passed', message: '当前 Provider 不需要额外配置。' });
+  }
+
+  if (options.checkSdk && typeof provider.createClient === 'function') {
+    await provider.createClient();
+    checks.push({ key: 'sdk', status: 'passed', message: 'SDK 客户端初始化成功。' });
+  } else if (typeof provider.createClient === 'function') {
+    checks.push({ key: 'sdk', status: 'skipped', message: '已跳过 SDK 初始化。' });
+  }
+
+  return {
+    success: true,
+    provider: provider.name || providerName,
+    mode: 'dry_run',
+    checks
+  };
+}
+
+async function routeSettings(req, url, readJson, actor, runtime = {}) {
+  if (req.method === 'GET' && url.pathname === '/api/worker/status') {
+    return ok({ success: true, worker: workerStatusSnapshot(runtime) });
+  }
+  if (req.method === 'POST' && url.pathname === '/api/worker/run-once') {
+    if (typeof runtime.runDueTasks !== 'function') return fail('WORKER_RUNTIME_UNAVAILABLE', '当前进程未挂载 worker 执行入口。', 503);
+    const body = await readJson(req);
+    const limit = Math.min(Math.max(Number(body.limit) || config.taskWorker.batchSize || 20, 1), 200);
+    const startedAt = new Date();
+    try {
+      const result = await runtime.runDueTasks({ limit });
+      if (runtime.taskWorker) {
+        runtime.taskWorker.lastRunAt = startedAt.toISOString();
+        runtime.taskWorker.lastProcessed = result.body?.processed || 0;
+        runtime.taskWorker.lastError = null;
+      }
+      await writeOperationLog({ req, actor, action: 'run_once', resource: 'sms_worker', requestBody: { limit } });
+      return ok({ success: true, worker: workerStatusSnapshot(runtime), result: result.body || result });
+    } catch (error) {
+      if (runtime.taskWorker) {
+        runtime.taskWorker.lastRunAt = startedAt.toISOString();
+        runtime.taskWorker.lastError = error.message || 'Worker run failed.';
+      }
+      await writeOperationLog({ req, actor, action: 'run_once', resource: 'sms_worker', requestBody: { limit }, result: 'failed', statusCode: 500, errorMessage: error.message });
+      return fail('WORKER_RUN_FAILED', error.message || '手动执行 worker 失败。', 500);
+    }
+  }
   if (req.method === 'GET' && url.pathname === '/api/settings') return ok({ settings: await getSettingsObject() });
+  if (req.method === 'POST' && url.pathname === '/api/settings/provider/test') {
+    const body = await readJson(req);
+    const settings = await getSettingsObject();
+    const providerName = body.provider || settings['sms.provider']?.provider || config.smsProvider;
+    try {
+      const result = await testProviderConfig(providerName, { checkSdk: body.checkSdk === true });
+      await writeOperationLog({ req, actor, action: 'test_provider', resource: 'system_setting', requestBody: { provider: providerName, checkSdk: body.checkSdk === true } });
+      return ok(result);
+    } catch (error) {
+      await writeOperationLog({ req, actor, action: 'test_provider', resource: 'system_setting', requestBody: { provider: providerName, checkSdk: body.checkSdk === true }, result: 'failed', statusCode: 400, errorMessage: error.message });
+      return fail(error.code || 'PROVIDER_TEST_FAILED', error.message || 'Provider 配置自检失败。', 400, {
+        provider: providerName,
+        mode: 'dry_run',
+        checks: [{ key: 'config', status: 'failed', message: error.message || 'Provider 配置自检失败。' }]
+      });
+    }
+  }
   if (req.method === 'POST' && url.pathname === '/api/settings/update') {
     const body = await readJson(req);
     const nextSettings = body.settings || body;
@@ -1548,6 +1689,50 @@ async function routeEventSources(req, url, readJson, actor) {
     const item = await prisma.eventSource.update({ where: { id: sourceUpdateMatch[1] }, data: { name: body.name, remark: body.remark || null } });
     await writeOperationLog({ req, actor, action: 'update', resource: 'event_source', resourceId: item.id, requestBody: body });
     return ok({ success: true, item: { ...item, secretHash: undefined } });
+  }
+  const sourceLogsMatch = url.pathname.match(/^\/api\/event-sources\/([^/]+)\/logs$/);
+  if (req.method === 'GET' && sourceLogsMatch) {
+    const source = await prisma.eventSource.findUnique({ where: { id: sourceLogsMatch[1] } });
+    if (!source) return fail('EVENT_SOURCE_NOT_FOUND', '事件来源不存在。', 404);
+    const filters = Object.fromEntries(url.searchParams.entries());
+    return ok(await listWithCount(prisma.eventSourceLog, {
+      filters,
+      query: {
+        where: {
+          sourceId: source.id,
+          ...(filters.status ? { status: filters.status } : {}),
+          ...(filters.eventId ? { eventId: contains(filters.eventId) } : {}),
+          ...(filters.eventType ? { eventType: filters.eventType } : {}),
+          ...(filters.code ? { code: filters.code } : {}),
+          ...dateRange(filters)
+        },
+        orderBy: { createdAt: 'desc' }
+      }
+    }));
+  }
+  const sourceStatsMatch = url.pathname.match(/^\/api\/event-sources\/([^/]+)\/stats$/);
+  if (req.method === 'GET' && sourceStatsMatch) {
+    const source = await prisma.eventSource.findUnique({ where: { id: sourceStatsMatch[1] } });
+    if (!source) return fail('EVENT_SOURCE_NOT_FOUND', '事件来源不存在。', 404);
+    const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [total, success, failed, last24hTotal, latestLog] = await Promise.all([
+      prisma.eventSourceLog.count({ where: { sourceId: source.id } }),
+      prisma.eventSourceLog.count({ where: { sourceId: source.id, status: 'success' } }),
+      prisma.eventSourceLog.count({ where: { sourceId: source.id, status: { not: 'success' } } }),
+      prisma.eventSourceLog.count({ where: { sourceId: source.id, createdAt: { gte: last24h } } }),
+      prisma.eventSourceLog.findFirst({ where: { sourceId: source.id }, orderBy: { createdAt: 'desc' } })
+    ]);
+    return ok({
+      item: { ...source, secretHash: undefined },
+      stats: {
+        total,
+        success,
+        failed,
+        last24hTotal,
+        failureRate: total > 0 ? Number((failed / total).toFixed(4)) : 0,
+        latestLog
+      }
+    });
   }
   const sourceMatch = url.pathname.match(/^\/api\/event-sources\/([^/]+)$/);
   if (req.method === 'GET' && sourceMatch) {
@@ -1851,7 +2036,7 @@ async function routeAuxiliary(req, url, readJson, actor) {
   return null;
 }
 
-export async function handleGovernanceApi(req, url, readJson) {
+export async function handleGovernanceApi(req, url, readJson, runtime = {}) {
   const publicResult = await routePublicAuth(req, url, readJson);
   if (publicResult) return { handled: true, ...publicResult };
 
@@ -1863,6 +2048,7 @@ export async function handleGovernanceApi(req, url, readJson) {
     '/api/blacklist',
     '/api/unsubscribes',
     '/api/settings',
+    '/api/worker',
     '/api/event-sources',
     '/api/event-source-logs',
     '/api/operation-logs',
@@ -1885,7 +2071,7 @@ export async function handleGovernanceApi(req, url, readJson) {
     (await routeRegisterRequests(req, url, readJson, actor)) ||
     (await routeRoles(req, url, readJson, actor)) ||
     (await routePhoneList(req, url, readJson, actor)) ||
-    (await routeSettings(req, url, readJson, actor)) ||
+    (await routeSettings(req, url, readJson, actor, runtime)) ||
     (await routeEventSources(req, url, readJson, actor)) ||
     (await routeAudit(req, url, readJson, actor)) ||
     (await routeAuxiliary(req, url, readJson, actor));
@@ -1921,19 +2107,26 @@ function permissionFor(req, url) {
   if (url.pathname.match(/^\/api\/whitelist\/[^/]+$/)) return 'security:whitelist:detail';
   if (url.pathname === '/api/blacklist') return req.method === 'GET' ? 'security:blacklist:base' : 'security:blacklist:add';
   if (url.pathname === '/api/blacklist/import') return 'security:blacklist:import';
+  if (url.pathname.match(/^\/api\/blacklist\/[^/]+\/update$/)) return 'security:blacklist:edit';
   if (url.pathname.match(/^\/api\/blacklist\/[^/]+\/status$/)) return 'security:blacklist:remove';
   if (url.pathname.match(/^\/api\/blacklist\/[^/]+\/remove$/)) return 'security:blacklist:remove';
   if (url.pathname.match(/^\/api\/blacklist\/[^/]+$/)) return 'security:blacklist:detail';
   if (url.pathname === '/api/unsubscribes') return req.method === 'GET' ? 'security:unsubscribe:base' : 'security:unsubscribe:add';
   if (url.pathname === '/api/unsubscribes/import') return 'security:unsubscribe:import';
+  if (url.pathname.match(/^\/api\/unsubscribes\/[^/]+\/update$/)) return 'security:unsubscribe:edit';
   if (url.pathname.match(/^\/api\/unsubscribes\/[^/]+\/status$/)) return 'security:unsubscribe:status';
   if (url.pathname.match(/^\/api\/unsubscribes\/[^/]+$/)) return 'security:unsubscribe:detail';
   if (url.pathname === '/api/settings') return 'security:setting:base';
+  if (url.pathname === '/api/settings/provider/test') return 'security:setting:providerTest';
   if (url.pathname === '/api/settings/update') return 'security:setting:save';
+  if (url.pathname === '/api/worker/status') return 'security:setting:base';
+  if (url.pathname === '/api/worker/run-once') return 'security:setting:workerRun';
   if (url.pathname === '/api/event-sources') return req.method === 'GET' ? 'integration:eventSource:base' : 'integration:eventSource:add';
   if (url.pathname.match(/^\/api\/event-sources\/[^/]+\/update$/)) return 'integration:eventSource:edit';
   if (url.pathname.match(/^\/api\/event-sources\/[^/]+\/status$/)) return 'integration:eventSource:status';
   if (url.pathname.match(/^\/api\/event-sources\/[^/]+\/reset-secret$/)) return 'integration:eventSource:resetSecret';
+  if (url.pathname.match(/^\/api\/event-sources\/[^/]+\/logs$/)) return 'integration:eventSourceLog:base';
+  if (url.pathname.match(/^\/api\/event-sources\/[^/]+\/stats$/)) return 'integration:eventSource:detail';
   if (url.pathname.match(/^\/api\/event-sources\/[^/]+$/)) return 'integration:eventSource:detail';
   if (url.pathname === '/api/event-source-logs') return 'integration:eventSourceLog:base';
   if (url.pathname.match(/^\/api\/event-source-logs\/[^/]+$/)) return 'integration:eventSourceLog:detail';

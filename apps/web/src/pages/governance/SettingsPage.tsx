@@ -4,6 +4,8 @@ import { api } from '../../lib/api';
 import { SelectField } from '../../components/SelectField';
 import { StatusBadge } from '../../components/StatusBadge';
 import { AuthC } from '../../lib/auth';
+import { Modal } from '../../components/Modal';
+import type { WorkerStatus } from '../../types';
 
 const sceneOptions = [
   { value: 'register', label: '注册转化' },
@@ -25,29 +27,82 @@ const fallbackFrequencyPolicy = {
 
 export default function SettingsPage({ setNotice }: { setNotice: (value: string) => void }) {
   const [settings, setSettings] = useState<Record<string, any>>({});
+  const [baselineSettings, setBaselineSettings] = useState<Record<string, any>>({});
+  const [workerStatus, setWorkerStatus] = useState<WorkerStatus | null>(null);
+  const [providerTest, setProviderTest] = useState<{ success: boolean; provider: string; mode: string; checks: { key: string; status: string; message: string }[] } | null>(null);
   const [frequencyScene, setFrequencyScene] = useState('manual');
+  const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   async function load() {
-    const data = await api<{ settings: Record<string, any> }>('/api/settings');
+    const [data, workerData] = await Promise.all([
+      api<{ settings: Record<string, any> }>('/api/settings'),
+      api<{ worker: WorkerStatus }>('/api/worker/status')
+    ]);
     setSettings(data.settings);
+    setBaselineSettings(data.settings);
+    setWorkerStatus(workerData.worker);
   }
 
   useEffect(() => {
     load().catch((error) => setNotice(error instanceof Error ? error.message : '配置加载失败'));
   }, []);
 
-  async function save() {
-    const result = await api<{ approvalRequired?: boolean; approval?: { id: string }; settings?: Record<string, any> }>('/api/settings/update', {
-      method: 'POST',
-      body: JSON.stringify({ settings })
-    });
-    if (result.approvalRequired) {
-      setNotice(`已提交配置变更审批：${result.approval?.id?.slice(0, 8) || ''}，通过后生效`);
-      await load();
+  function settingChanges() {
+    const keys = [...new Set([...Object.keys(settings), ...Object.keys(baselineSettings)])];
+    return keys
+      .filter((key) => JSON.stringify(settings[key] ?? null) !== JSON.stringify(baselineSettings[key] ?? null))
+      .map((key) => ({ key, before: baselineSettings[key], after: settings[key], highRisk: ['sms.provider', 'sms.worker', 'sms.safety'].includes(key) }));
+  }
+
+  async function save(skipConfirm = false) {
+    const changes = settingChanges();
+    if (!skipConfirm && changes.some((item) => item.highRisk)) {
+      setConfirmSaveOpen(true);
       return;
     }
-    setNotice('发送控制已保存');
-    await load();
+    setSaving(true);
+    try {
+      const result = await api<{ approvalRequired?: boolean; approval?: { id: string }; settings?: Record<string, any> }>('/api/settings/update', {
+        method: 'POST',
+        body: JSON.stringify({ settings })
+      });
+      if (result.approvalRequired) {
+        setNotice(`已提交配置变更审批：${result.approval?.id?.slice(0, 8) || ''}，通过后生效`);
+        await load();
+        setConfirmSaveOpen(false);
+        return;
+      }
+      setNotice('发送控制已保存');
+      await load();
+      setConfirmSaveOpen(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function testProvider() {
+    const result = await api<{ success: boolean; provider: string; mode: string; checks: { key: string; status: string; message: string }[] }>('/api/settings/provider/test', {
+      method: 'POST',
+      body: JSON.stringify({ provider: currentProvider })
+    });
+    setProviderTest(result);
+    setNotice(`${result.provider} 配置自检通过，未发送短信`);
+  }
+
+  async function refreshWorkerStatus() {
+    const data = await api<{ worker: WorkerStatus }>('/api/worker/status');
+    setWorkerStatus(data.worker);
+    setNotice('Worker 状态已刷新');
+  }
+
+  async function runWorkerOnce() {
+    const data = await api<{ worker: WorkerStatus; result?: { processed?: number } }>('/api/worker/run-once', {
+      method: 'POST',
+      body: JSON.stringify({ limit: worker.batchSize || 20 })
+    });
+    setWorkerStatus(data.worker);
+    setNotice(`已执行一次到期扫描，处理 ${data.result?.processed ?? data.worker.lastProcessed ?? 0} 条`);
   }
 
   function updateSetting(key: string, value: Record<string, any>) {
@@ -82,6 +137,7 @@ export default function SettingsPage({ setNotice }: { setNotice: (value: string)
     { value: 'mock', label: 'Mock 测试通道' },
     { value: 'aliyun_dypns', label: '阿里云号码认证测试通道' }
   ];
+  const changes = settingChanges();
 
   return (
     <section className="stack">
@@ -119,6 +175,24 @@ export default function SettingsPage({ setNotice }: { setNotice: (value: string)
             <label>阿里云签名<input value={aliyun.signName || '速通互联验证码'} disabled /></label>
             <label>默认模板 Code<input value={aliyun.templateCode || '100001'} disabled /></label>
           </div>
+          <div className="inlineActions">
+            <AuthC authKey="security:setting:providerTest">
+              <button className="secondaryButton compact" type="button" onClick={testProvider}>Provider 自检</button>
+            </AuthC>
+          </div>
+          {providerTest && (
+            <section className="approvalBlock">
+              <strong>自检结果</strong>
+              <div className="miniTimeline">
+                {providerTest.checks.map((check) => (
+                  <div className="miniTimelineItem" key={check.key}>
+                    <div><strong>{check.key}</strong><span>{check.message}</span></div>
+                    <StatusBadge status={check.status === 'passed' ? 'success' : check.status === 'skipped' ? 'skipped' : 'failed'} />
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
         </section>
 
         <section className="panel formPanel">
@@ -140,6 +214,20 @@ export default function SettingsPage({ setNotice }: { setNotice: (value: string)
           <div className="formGrid two">
             <label>扫描间隔 ms<input type="number" value={worker.intervalMs || 30000} onChange={(event) => updateSetting('sms.worker', { ...worker, intervalMs: Number(event.target.value) })} /></label>
             <label>每批处理数<input type="number" value={worker.batchSize || 20} onChange={(event) => updateSetting('sms.worker', { ...worker, batchSize: Number(event.target.value) })} /></label>
+          </div>
+          <div className="detailCard">
+            <div><span>进程状态</span><StatusBadge status={workerStatus?.enabled ? 'enabled' : 'disabled'} /></div>
+            <div><span>执行中</span><strong>{workerStatus?.running ? '是' : '否'}</strong></div>
+            <div><span>最近执行</span><strong>{workerStatus?.lastRunAt ? new Date(workerStatus.lastRunAt).toLocaleString() : '-'}</strong></div>
+            <div><span>最近处理</span><strong>{workerStatus?.lastProcessed ?? 0}</strong></div>
+            <div><span>停用原因</span><strong>{workerStatus?.disabledReason || '-'}</strong></div>
+            <div><span>最近错误</span><strong>{workerStatus?.lastError || '-'}</strong></div>
+          </div>
+          <div className="inlineActions">
+            <button className="secondaryButton compact" type="button" onClick={refreshWorkerStatus}>刷新状态</button>
+            <AuthC authKey="security:setting:workerRun">
+              <button className="secondaryButton compact" type="button" onClick={runWorkerOnce}>执行一次扫描</button>
+            </AuthC>
           </div>
         </section>
 
@@ -214,11 +302,43 @@ export default function SettingsPage({ setNotice }: { setNotice: (value: string)
             <article><Clock3 size={18} /><strong>安静时段</strong><span>命中夜间时段时，任务会被拦截或顺延。</span></article>
             <article><Link2 size={18} /><strong>短链追踪</strong><span>短链点击用于发送记录和统计复盘。</span></article>
           </div>
+          <section className="approvalBlock">
+            <strong>待保存变更</strong>
+            <p>{changes.length ? `当前有 ${changes.length} 项配置变更，其中 ${changes.filter((item) => item.highRisk).length} 项属于高风险发送控制。` : '当前没有未保存的配置变更。'}</p>
+          </section>
           <AuthC authKey="security:setting:save">
-            <button className="primaryButton" onClick={save}><Settings size={16} />保存发送控制</button>
+            <button className="primaryButton" onClick={() => save(false)} disabled={saving || !changes.length}><Settings size={16} />保存发送控制</button>
           </AuthC>
         </section>
       </section>
+
+      <Modal open={confirmSaveOpen} title="确认保存发送控制" subtitle="高风险配置变更" onClose={() => setConfirmSaveOpen(false)} showClose={false} size="wide">
+        <div className="formPanel">
+          <section className="approvalBlock">
+            <strong>变更影响</strong>
+            <p>本次变更涉及 Provider、worker 或白名单保护，保存后可能进入审批；审批通过前不会生效。</p>
+          </section>
+          <div className="dataTableWrap">
+            <table className="dataTable compactTable">
+              <thead><tr><th>配置项</th><th>风险</th><th>变更前</th><th>变更后</th></tr></thead>
+              <tbody>
+                {changes.map((item) => (
+                  <tr key={item.key}>
+                    <td>{item.key}</td>
+                    <td><StatusBadge status={item.highRisk ? 'pending' : 'skipped'} /></td>
+                    <td><pre>{JSON.stringify(item.before ?? null, null, 2)}</pre></td>
+                    <td><pre>{JSON.stringify(item.after ?? null, null, 2)}</pre></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="modalActions">
+            <button className="secondaryButton compact" type="button" onClick={() => setConfirmSaveOpen(false)}>取消</button>
+            <button className="primaryButton compact" type="button" onClick={() => save(true)} disabled={saving}>确认保存</button>
+          </div>
+        </div>
+      </Modal>
     </section>
   );
 }

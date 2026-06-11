@@ -212,6 +212,28 @@ export interface EventSourceItem {
   status: string;
   remark?: string;
   createdAt: string;
+  updatedAt?: string;
+}
+
+export interface EventSourceStats {
+  total: number;
+  success: number;
+  failed: number;
+  last24hTotal: number;
+  failureRate: number;
+  latestLog?: AuditItem | null;
+}
+
+export interface WorkerStatus {
+  enabled: boolean;
+  running: boolean;
+  intervalMs: number;
+  batchSize: number;
+  allowRealSend: boolean;
+  lastRunAt: string | null;
+  lastProcessed: number;
+  lastError: string | null;
+  disabledReason: string | null;
 }
 
 export interface AuditItem {
