@@ -223,6 +223,15 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  if (req.method === 'GET' && (url.pathname === '/api/manual-send/logs' || url.pathname === '/api/sms/manual-send/logs')) {
+    const result = await listLogs({
+      ...Object.fromEntries(url.searchParams.entries()),
+      triggerType: 'manual'
+    });
+    sendJson(res, 200, result);
+    return;
+  }
+
   if (req.method === 'POST' && (url.pathname === '/api/manual-send' || url.pathname === '/api/sms/manual-send')) {
     const result = await manualSend(await readJson(req));
     sendJson(res, result.statusCode, result.body);

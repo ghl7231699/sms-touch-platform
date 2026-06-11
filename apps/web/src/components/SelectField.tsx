@@ -9,12 +9,14 @@ export function SelectField({
   value,
   options,
   onChange,
-  placeholder = '请选择'
+  placeholder = '请选择',
+  showSearch = false
 }: {
-  value: string;
+  value?: string;
   options: SelectOption[];
-  onChange: (value: string) => void;
+  onChange?: (value: string) => void;
   placeholder?: string;
+  showSearch?: boolean;
 }) {
   return (
     <Select
@@ -23,9 +25,9 @@ export function SelectField({
       optionFilterProp="label"
       options={options}
       placeholder={placeholder}
-      showSearch
+      showSearch={showSearch}
       value={value || undefined}
-      onChange={(nextValue) => onChange(nextValue || '')}
+      onChange={(nextValue) => onChange?.(nextValue || '')}
     />
   );
 }

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Copy, Eye, FileSearch, FlaskConical, ListChecks, MousePointerClick, Pencil, Send, Zap } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { ListChecks, MousePointerClick, Send, Zap } from 'lucide-react';
 import { api } from '../../lib/api';
 import { conditionLabel, eventLabels, sceneLabels } from '../../constants/labels';
 import type { Rule, SendLog, SmsTask, Template } from '../../types';
@@ -8,7 +8,6 @@ import { SelectField } from '../../components/SelectField';
 import { StatusBadge } from '../../components/StatusBadge';
 import { AuthC } from '../../lib/auth';
 import { EmptyState } from '../../components/EmptyState';
-import { QueryFilterBar, type QueryFilterValues } from '../../components/QueryFilterBar';
 
 type RuleForm = {
   name: string;
@@ -72,6 +71,8 @@ export default function Rules({
   onRefresh: () => Promise<void>;
   setNotice: (value: string) => void;
 }) {
+  const urlParams = new URLSearchParams(window.location.search);
+  const targetRuleId = urlParams.get('ruleId') || '';
   const [form, setForm] = useState<RuleForm>(defaultForm);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<Rule | null>(null);
@@ -80,15 +81,9 @@ export default function Rules({
   const [testPayload, setTestPayload] = useState('{\n  "phone": "18515385071",\n  "source": "operator-console"\n}');
   const [testResult, setTestResult] = useState<unknown>(null);
   const [estimateResult, setEstimateResult] = useState<unknown>(null);
-  const [filters, setFilters] = useState<QueryFilterValues>({ keyword: '', scene: '', eventType: '', status: '' });
+  const handledRuleIdRef = useRef('');
 
   const eventOptions = Object.entries(eventLabels).map(([value, label]) => ({ value, label }));
-  const eventFilterOptions = eventOptions;
-  const sceneFilterOptions = Object.entries(sceneLabels).map(([value, label]) => ({ value, label }));
-  const statusFilterOptions = [
-    { value: 'enabled', label: '启用' },
-    { value: 'disabled', label: '停用' }
-  ];
   const templateOptions = templates.map((template) => ({ value: template.id, label: template.name }));
   const delayUnitOptions = [
     { value: 'minute', label: '分钟' },
@@ -103,27 +98,14 @@ export default function Rules({
     { value: 'after_order_completed', label: '订单完成后' }
   ];
 
-  const normalizedKeyword = filters.keyword.trim().toLowerCase();
-  const filteredRules = rules.filter((rule) => {
-    const template = templates.find((item) => item.id === rule.templateId);
-    const keywordMatched = !normalizedKeyword || [
-      rule.name,
-      rule.code,
-      rule.scene,
-      sceneLabels[rule.scene],
-      eventLabels[rule.eventType],
-      conditionLabel(rule.conditionType),
-      template?.name
-    ].filter(Boolean).some((value) => String(value).toLowerCase().includes(normalizedKeyword));
-    return keywordMatched &&
-      (!filters.scene || rule.scene === filters.scene) &&
-      (!filters.eventType || rule.eventType === filters.eventType) &&
-      (!filters.status || rule.status === filters.status);
-  });
-
-  function search(nextFilters: QueryFilterValues) {
-    setFilters({ keyword: '', scene: '', eventType: '', status: '', ...nextFilters });
-  }
+  useEffect(() => {
+    if (!targetRuleId || handledRuleIdRef.current === targetRuleId) return;
+    const target = rules.find((rule) => rule.id === targetRuleId || rule.code === targetRuleId);
+    if (target) {
+      handledRuleIdRef.current = targetRuleId;
+      setDetailRule(target);
+    }
+  }, [targetRuleId, rules, detailRule]);
 
   function openEdit(rule: Rule) {
     setEditingRule(rule);
@@ -273,26 +255,13 @@ export default function Rules({
 
       <section className="panel">
         <div className="panelTitle">
-          <div><h2>自动化规则</h2><span>当前 {filteredRules.length}/{rules.length} 条，每条规则都是一个独立触达单元</span></div>
+          <div><h2>自动化规则</h2><span>当前 {rules.length} 条，每条规则都是一个独立触达单元</span></div>
           <AuthC authKey="touch:rule:add"><button className="secondaryButton compact" type="button" onClick={() => { setForm({ ...defaultForm, templateId: templates[0]?.id || defaultForm.templateId }); setModalOpen(true); }}><ListChecks size={16} />新建规则</button></AuthC>
         </div>
 
-        <QueryFilterBar
-          fields={[
-            { name: 'keyword', label: '搜索规则', placeholder: '名称、编码、模板或条件', span: 8 },
-            { name: 'scene', label: '场景', type: 'select', placeholder: '全部场景', options: sceneFilterOptions },
-            { name: 'eventType', label: '事件', type: 'select', placeholder: '全部事件', options: eventFilterOptions },
-            { name: 'status', label: '状态', type: 'select', placeholder: '全部状态', options: statusFilterOptions }
-          ]}
-          values={filters}
-          onChange={(value) => setFilters({ keyword: '', scene: '', eventType: '', status: '', ...value })}
-          onSearch={search}
-        />
-
         <div className="automationRuleGrid">
           {!rules.length && <EmptyState title="暂无自动化规则" description="新建规则后，业务事件才能自动生成短信触达任务。" />}
-          {rules.length > 0 && !filteredRules.length && <EmptyState title="没有匹配的规则" description="试试调整搜索、场景、事件或状态筛选。" />}
-          {filteredRules.map((rule) => {
+          {rules.map((rule) => {
             const template = templates.find((item) => item.id === rule.templateId);
             const ruleLogs = logs.filter((log) => log.ruleName === rule.name || log.ruleId === rule.id);
             const ruleTasks = tasks.filter((task) => task.ruleId === rule.id || task.ruleName === rule.name);
@@ -319,16 +288,13 @@ export default function Rules({
                 </div>
                 <div className="ruleCardActions">
                   <div className="rulePrimaryActions">
-                    <button className="primaryButton compact ruleDetailButton" type="button" onClick={() => setDetailRule(rule)}><Eye size={15} />查看规则详情</button>
-                    <AuthC authKey="touch:rule:edit"><button className="secondaryButton compact" type="button" onClick={() => openEdit(rule)}><Pencil size={15} />编辑配置</button></AuthC>
-                    <AuthC authKey="touch:rule:test"><button className="secondaryButton compact" type="button" onClick={() => { setTestingRule(rule); setTestResult(null); }}><FlaskConical size={15} />模拟测试</button></AuthC>
+                    <button className="primaryButton compact ruleDetailButton" type="button" onClick={() => setDetailRule(rule)}>查看详情</button>
+                    <AuthC authKey="touch:rule:edit"><button className="secondaryButton compact" type="button" onClick={() => openEdit(rule)}>编辑</button></AuthC>
+                    <AuthC authKey="touch:rule:test"><button className="secondaryButton compact" type="button" onClick={() => { setTestingRule(rule); setTestResult(null); }}>测试</button></AuthC>
                     <AuthC authKey={`touch:rule:${rule.status === 'enabled' ? 'disable' : 'enable'}`}><button className={rule.status === 'enabled' ? 'secondaryButton compact dangerSoft' : 'primaryButton compact'} type="button" onClick={() => toggle(rule)}>{rule.status === 'enabled' ? '停用规则' : '启用规则'}</button></AuthC>
                   </div>
                   <div className="ruleSecondaryActions">
-                    <button className="ruleUtilityButton" type="button" onClick={() => jumpTo('/touch/tasks', { ruleId: rule.id })}><span>查看生成任务</span><small>{ruleTasks.length} 条任务</small></button>
-                    <button className="ruleUtilityButton" type="button" onClick={() => jumpTo('/data/send-logs', { ruleId: rule.id })}><span>查看发送记录</span><small>{ruleLogs.length} 条记录</small></button>
-                    <AuthC authKey="touch:rule:copy"><button className="ruleUtilityButton" type="button" onClick={() => copy(rule)}><span><Copy size={14} />复制规则</span><small>创建停用副本</small></button></AuthC>
-                    <button className="ruleUtilityButton" type="button" onClick={() => estimate(rule)}><span><FileSearch size={14} />影响范围预估</span><small>预估命中和发送影响</small></button>
+                    <AuthC authKey="touch:rule:copy"><button className="ruleUtilityButton" type="button" onClick={() => copy(rule)}><span>复制规则</span><small>创建停用副本</small></button></AuthC>
                   </div>
                 </div>
               </article>
@@ -370,7 +336,11 @@ export default function Rules({
             </div>
             <pre className="jsonPreview">{JSON.stringify(detailRule.conditionConfig || {}, null, 2)}</pre>
             {Boolean(estimateResult) && <pre className="jsonPreview">{JSON.stringify(estimateResult, null, 2)}</pre>}
-            <div className="modalActions"><button className="secondaryButton compact" type="button" onClick={() => jumpTo('/touch/tasks', { ruleId: detailRule.id })}>查看生成任务</button><button className="secondaryButton compact" type="button" onClick={() => jumpTo('/data/send-logs', { ruleId: detailRule.id })}>查看发送记录</button></div>
+            <div className="modalActions">
+              <button className="secondaryButton compact" type="button" onClick={() => estimate(detailRule)}>影响范围预估</button>
+              <button className="secondaryButton compact" type="button" onClick={() => jumpTo('/touch/tasks', { ruleId: detailRule.id })}>查看生成任务</button>
+              <button className="secondaryButton compact" type="button" onClick={() => jumpTo('/data/send-logs', { ruleId: detailRule.id })}>查看发送记录</button>
+            </div>
           </div>
         )}
       </Modal>

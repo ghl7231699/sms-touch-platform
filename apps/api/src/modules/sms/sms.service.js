@@ -442,8 +442,26 @@ export async function listTasks(filters = {}) {
   const pageSize = Math.min(Math.max(Number(filters.pageSize) || 20, 1), 100);
   let tasks = store.tasks;
   if (filters.status) tasks = tasks.filter((task) => task.status === filters.status);
+  if (filters.dueOnly === '1' || filters.dueOnly === 'true') {
+    tasks = tasks.filter((task) => task.status === TASK_STATUS.PENDING && new Date(task.scheduledAt).getTime() <= Date.now());
+  }
+  if (filters.scene) tasks = tasks.filter((task) => task.scene === filters.scene);
   if (filters.triggerType) tasks = tasks.filter((task) => task.triggerType === filters.triggerType);
   if (filters.eventType) tasks = tasks.filter((task) => task.eventType === filters.eventType);
+  if (filters.keyword) {
+    const keyword = String(filters.keyword).trim().toLowerCase();
+    tasks = tasks.filter((task) => [
+      task.id,
+      task.ruleId,
+      task.ruleName,
+      task.eventId,
+      task.templateName,
+      task.templateCode,
+      task.phone,
+      task.phoneMasked
+    ].filter(Boolean).some((value) => String(value).toLowerCase().includes(keyword)));
+  }
+  tasks = [...tasks].sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
   const total = tasks.length;
   return { items: tasks.slice((page - 1) * pageSize, page * pageSize).map(safeTask), total, page, pageSize };
 }
@@ -682,6 +700,20 @@ export async function listEvents(filters = {}) {
   const pageSize = Math.min(Math.max(Number(filters.pageSize) || 20, 1), 100);
   let events = store.events;
   if (filters.eventType) events = events.filter((event) => event.eventType === filters.eventType);
+  if (filters.phoneSuffix) {
+    const suffix = String(filters.phoneSuffix).trim();
+    events = events.filter((event) => String(event.phone || '').endsWith(suffix));
+  }
+  if (filters.keyword) {
+    const keyword = String(filters.keyword).trim().toLowerCase();
+    events = events.filter((event) => [
+      event.id,
+      event.eventId,
+      event.eventType,
+      event.userId,
+      event.phone
+    ].filter(Boolean).some((value) => String(value).toLowerCase().includes(keyword)));
+  }
   const total = events.length;
   return { items: events.slice((page - 1) * pageSize, page * pageSize), total, page, pageSize };
 }
@@ -691,10 +723,46 @@ export async function listLogs(filters = {}) {
   const page = Math.max(Number(filters.page) || 1, 1);
   const pageSize = Math.min(Math.max(Number(filters.pageSize) || 20, 1), 100);
   let logs = store.logs;
+  if (filters.logId) logs = logs.filter((log) => log.id === filters.logId || log.requestId === filters.logId);
+  if (filters.ruleId) logs = logs.filter((log) => log.ruleId === filters.ruleId);
+  if (filters.eventId) logs = logs.filter((log) => log.eventId === filters.eventId);
+  if (filters.templateId) logs = logs.filter((log) => log.templateId === filters.templateId);
   if (filters.phone) logs = logs.filter((log) => log.phone === filters.phone);
   if (filters.status) logs = logs.filter((log) => log.status === filters.status);
+  if (filters.scene) logs = logs.filter((log) => log.scene === filters.scene);
   if (filters.provider) logs = logs.filter((log) => log.provider === filters.provider);
   if (filters.triggerType) logs = logs.filter((log) => log.triggerType === filters.triggerType);
+  if (filters.timeRange) {
+    const days = Number(filters.timeRange);
+    if (Number.isFinite(days) && days > 0) {
+      const since = Date.now() - days * 24 * 60 * 60 * 1000;
+      logs = logs.filter((log) => new Date(log.createdAt).getTime() >= since);
+    }
+  }
+  if (filters.startDate) {
+    const start = new Date(`${filters.startDate}T00:00:00`).getTime();
+    if (Number.isFinite(start)) logs = logs.filter((log) => new Date(log.createdAt).getTime() >= start);
+  }
+  if (filters.endDate) {
+    const end = new Date(`${filters.endDate}T23:59:59`).getTime();
+    if (Number.isFinite(end)) logs = logs.filter((log) => new Date(log.createdAt).getTime() <= end);
+  }
+  if (filters.keyword) {
+    const keyword = String(filters.keyword).trim().toLowerCase();
+    logs = logs.filter((log) => [
+      log.id,
+      log.requestId,
+      log.bizId,
+      log.ruleName,
+      log.eventId,
+      log.eventType,
+      log.templateName,
+      log.templateCode,
+      log.phoneMasked,
+      log.code,
+      log.message
+    ].filter(Boolean).some((value) => String(value).toLowerCase().includes(keyword)));
+  }
   const total = logs.length;
   return { items: logs.slice((page - 1) * pageSize, page * pageSize).map(safeLog), total, page, pageSize };
 }

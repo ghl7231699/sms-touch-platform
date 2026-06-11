@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Eye, MessageSquareText, ShieldCheck, Send } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, MessageSquareText, ShieldCheck } from 'lucide-react';
 import { api } from '../../lib/api';
 import { sceneLabels, statusLabel } from '../../constants/labels';
 import type { SendLog, Template } from '../../types';
@@ -7,6 +7,7 @@ import { Modal } from '../../components/Modal';
 import { SelectField } from '../../components/SelectField';
 import { AuthC } from '../../lib/auth';
 import { StatusBadge } from '../../components/StatusBadge';
+import { defaultPagination, ListPagination, withPaginationParams, type PaginationState } from '../../components/ListPagination';
 
 type SafetyResult = {
   passed: boolean;
@@ -75,6 +76,10 @@ export default function ManualSend({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [safety, setSafety] = useState<SafetyResult | null>(null);
   const [result, setResult] = useState<SendResult | null>(null);
+  const [selectedLog, setSelectedLog] = useState<SendLog | null>(null);
+  const [pagination, setPagination] = useState<PaginationState>({ ...defaultPagination, pageSize: 10 });
+  const [manualLogItems, setManualLogItems] = useState<SendLog[]>([]);
+  const [manualLogLoading, setManualLogLoading] = useState(false);
 
   const selectedTemplate = useMemo(
     () => templates.find((template) => template.id === templateId),
@@ -85,13 +90,34 @@ export default function ManualSend({
     label: `${template.name}${template.status !== 'enabled' ? '（停用）' : ''}`
   }));
   const preview = renderPreview(selectedTemplate?.content || '', variables);
-  const recentManualLogs = logs
-    .filter((log) => log.triggerType === 'manual')
-    .slice(0, 6);
+  const manualLogs = logs.filter((log) => log.triggerType === 'manual');
 
   useEffect(() => {
     setVariables((current) => hydrateVariables(selectedTemplate, current));
   }, [selectedTemplate]);
+
+  async function loadManualLogs(nextPagination = pagination) {
+    setManualLogLoading(true);
+    try {
+      const data = await api<{ items: SendLog[]; total: number; page: number; pageSize: number }>(
+        `/api/send-logs?${withPaginationParams({ triggerType: 'manual' }, nextPagination)}`
+      );
+      setManualLogItems(data.items);
+      setPagination({ page: data.page, pageSize: data.pageSize, total: data.total });
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : '手动发送记录加载失败');
+    } finally {
+      setManualLogLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadManualLogs({ ...pagination, page: 1 }).catch(() => undefined);
+  }, []);
+
+  function changePage(page: number, pageSize: number) {
+    loadManualLogs({ ...pagination, page, pageSize }).catch(() => undefined);
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -117,6 +143,7 @@ export default function ManualSend({
     setConfirmOpen(false);
     setModalOpen(false);
     await onRefresh();
+    await loadManualLogs({ ...pagination, page: 1 });
   }
 
   return (
@@ -125,30 +152,46 @@ export default function ManualSend({
         <div className="panelTitle">
           <div>
             <h2>手动发送</h2>
-            <span>模板选择、变量填写、短信预览、安全校验和确认发送形成完整闭环。</span>
+            <span>面向客服补发、运营小范围验证和异常通知的单号码触达。</span>
           </div>
           <AuthC authKey="touch:manual:send">
-            <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(true)}><Send size={16} />发送短信</button>
+            <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(true)}>新建发送</button>
           </AuthC>
+        </div>
+        <div className="manualPolicyGrid">
+          <article>
+            <strong>单号码触达</strong>
+            <span>不承载批量营销，适合明确对象的一次性补发。</span>
+          </article>
+          <article>
+            <strong>发送前校验</strong>
+            <span>频控、安静时段、黑名单和退订状态会先进入安全校验。</span>
+          </article>
+          <article>
+            <strong>结果可追踪</strong>
+            <span>发送后沉淀到发送记录，可查看 Provider 返回和回执。</span>
+          </article>
         </div>
         <div className="taskMetricGrid compact">
           <article className="secondaryMetric blue"><div><MessageSquareText size={18} /></div><span>可用模板</span><strong>{enabledTemplates.length}</strong></article>
-          <article className="secondaryMetric green"><div><CheckCircle2 size={18} /></div><span>手动成功</span><strong>{logs.filter((log) => log.triggerType === 'manual' && log.status === 'success').length}</strong></article>
-          <article className="secondaryMetric amber"><div><ShieldCheck size={18} /></div><span>安全拦截</span><strong>{logs.filter((log) => log.triggerType === 'manual' && log.status === 'blocked').length}</strong></article>
-          <article className="secondaryMetric red"><div><AlertTriangle size={18} /></div><span>发送失败</span><strong>{logs.filter((log) => log.triggerType === 'manual' && log.status === 'failed').length}</strong></article>
+          <article className="secondaryMetric green"><div><CheckCircle2 size={18} /></div><span>手动成功</span><strong>{manualLogs.filter((log) => log.status === 'success').length}</strong></article>
+          <article className="secondaryMetric amber"><div><ShieldCheck size={18} /></div><span>安全拦截</span><strong>{manualLogs.filter((log) => log.status === 'blocked').length}</strong></article>
+          <article className="secondaryMetric red"><div><AlertTriangle size={18} /></div><span>发送失败</span><strong>{manualLogs.filter((log) => log.status === 'failed').length}</strong></article>
         </div>
       </section>
 
       <section className="panel">
         <div className="panelTitle">
-          <h2>最近手动发送记录</h2>
-          <span>{recentManualLogs.length} 条</span>
+          <div>
+            <h2>最近手动发送记录</h2>
+            <span>{manualLogLoading ? '正在加载记录...' : `共 ${pagination.total} 条，按发送时间分页浏览。`}</span>
+          </div>
         </div>
         <div className="dataTableWrap">
           <table className="dataTable">
-            <thead><tr><th>模板</th><th>场景</th><th>手机号</th><th>状态</th><th>Provider</th><th>时间</th></tr></thead>
+            <thead><tr><th>模板</th><th>场景</th><th>手机号</th><th>状态</th><th>Provider</th><th>时间</th><th>操作</th></tr></thead>
             <tbody>
-              {recentManualLogs.map((log) => (
+              {manualLogItems.map((log) => (
                 <tr key={log.id}>
                   <td><strong>{log.templateName || log.templateCode}</strong><span>{log.requestId || log.id}</span></td>
                   <td>{sceneLabels[log.scene] || log.scene}</td>
@@ -156,36 +199,53 @@ export default function ManualSend({
                   <td><StatusBadge status={log.status} /></td>
                   <td>{log.provider}</td>
                   <td>{timeLabel(log.createdAt)}</td>
+                  <td><button className="tableButton compact" type="button" onClick={() => setSelectedLog(log)}>详情</button></td>
                 </tr>
               ))}
-              {!recentManualLogs.length && <tr><td colSpan={6}>暂无手动发送记录</td></tr>}
+              {!manualLogLoading && !manualLogItems.length && <tr><td colSpan={7}>暂无手动发送记录</td></tr>}
+              {manualLogLoading && <tr><td colSpan={7}>正在加载手动发送记录...</td></tr>}
             </tbody>
           </table>
         </div>
+        <ListPagination pagination={pagination} onChange={changePage} />
       </section>
 
-      <Modal open={modalOpen} title="手动发送" subtitle="模板选择 -> 变量填写 -> 短信预览 -> 安全校验" onClose={() => setModalOpen(false)} showClose={false} size="wide">
+      <Modal open={modalOpen} title="新建手动发送" subtitle="单号码、单模板、发送前校验" onClose={() => setModalOpen(false)} showClose={false} size="wide">
         <form className="formPanel" onSubmit={submit}>
-          <div className="formGrid two">
-            <label>手机号<input value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
-            <label>短信模板
-              <SelectField value={templateId} options={templateOptions} onChange={setTemplateId} />
-            </label>
-          </div>
-          <div className="detailCard">
-            <div><span>模板内容</span><strong>{selectedTemplate?.content || '请选择模板'}</strong></div>
-            <div><span>适用场景</span><strong>{selectedTemplate ? sceneLabels[selectedTemplate.scene] || selectedTemplate.scene : '-'}</strong></div>
-          </div>
-          <div className="formGrid two">
-            {Object.keys(variables).map((key) => (
-              <label key={key}>变量：{key}
-                <input value={variables[key]} onChange={(event) => setVariables((current) => ({ ...current, [key]: event.target.value }))} />
-              </label>
-            ))}
-          </div>
-          <div className="templateModalPreview">
-            <div><Eye size={16} />最终短信内容预览</div>
-            <p>{preview || '填写变量后展示最终短信内容'}</p>
+          <div className="manualSendComposer">
+            <section>
+              <strong>收件人与模板</strong>
+              <div className="formGrid two">
+                <label>手机号<input value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
+                <label>短信模板
+                  <SelectField value={templateId} options={templateOptions} onChange={setTemplateId} />
+                </label>
+              </div>
+            </section>
+            <section>
+              <strong>模板信息</strong>
+              <div className="detailCard">
+                <div><span>模板内容</span><strong>{selectedTemplate?.content || '请选择模板'}</strong></div>
+                <div><span>适用场景</span><strong>{selectedTemplate ? sceneLabels[selectedTemplate.scene] || selectedTemplate.scene : '-'}</strong></div>
+                <div><span>服务商 Code</span><strong>{selectedTemplate?.providerTemplateId || '-'}</strong></div>
+              </div>
+            </section>
+            <section>
+              <strong>变量配置</strong>
+              <div className="formGrid two">
+                {Object.keys(variables).map((key) => (
+                  <label key={key}>变量：{key}
+                    <input value={variables[key]} onChange={(event) => setVariables((current) => ({ ...current, [key]: event.target.value }))} />
+                  </label>
+                ))}
+              </div>
+            </section>
+            <section>
+              <strong>发送内容预览</strong>
+              <div className="templateModalPreview">
+                <p>{preview || '填写变量后展示最终短信内容'}</p>
+              </div>
+            </section>
           </div>
           <div className="modalActions">
             <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(false)}>取消</button>
@@ -220,6 +280,25 @@ export default function ManualSend({
           <div><span>手机号</span><strong>{result?.phoneMasked || '-'}</strong></div>
           <div><span>requestId / bizId</span><strong>{result?.requestId || '-'} / {result?.bizId || '-'}</strong></div>
           <div><span>返回消息</span><strong>{result?.message || '-'}</strong></div>
+        </div>
+      </Modal>
+
+      <Modal open={Boolean(selectedLog)} title="手动发送记录详情" subtitle={selectedLog?.requestId || selectedLog?.id} onClose={() => setSelectedLog(null)} size="wide">
+        <div className="stack">
+          <div className="ruleMetaGrid">
+            <div><span>发送状态</span><strong>{selectedLog ? statusLabel(selectedLog.status) : '-'}</strong></div>
+            <div><span>Provider</span><strong>{selectedLog?.provider || '-'}</strong></div>
+            <div><span>回执状态</span><strong>{selectedLog?.receiptStatus || '-'}</strong></div>
+            <div><span>发送时间</span><strong>{timeLabel(selectedLog?.createdAt)}</strong></div>
+          </div>
+          <div className="detailCard">
+            <div><span>手机号</span><strong>{selectedLog?.phoneMasked || '-'}</strong></div>
+            <div><span>业务场景</span><strong>{selectedLog ? sceneLabels[selectedLog.scene] || selectedLog.scene : '-'}</strong></div>
+            <div><span>模板</span><strong>{selectedLog?.templateName || selectedLog?.templateCode || '-'}</strong></div>
+            <div><span>requestId</span><strong>{selectedLog?.requestId || '-'}</strong></div>
+            <div><span>bizId</span><strong>{selectedLog?.bizId || '-'}</strong></div>
+            <div><span>返回消息</span><strong>{selectedLog?.message || '-'}</strong></div>
+          </div>
         </div>
       </Modal>
     </section>

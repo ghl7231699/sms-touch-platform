@@ -1,5 +1,4 @@
-import { useMemo, useState } from 'react';
-import { Clipboard, Eye, ExternalLink, Truck } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import type { EventItem, Rule, SendLog, SmsTask, Template } from '../../types';
 import { eventLabels, sceneLabels, statusLabel } from '../../constants/labels';
@@ -7,6 +6,7 @@ import { StatusBadge } from '../../components/StatusBadge';
 import { Modal } from '../../components/Modal';
 import { TableEmptyState } from '../../components/EmptyState';
 import { QueryFilterBar, type QueryFilterValues } from '../../components/QueryFilterBar';
+import { defaultPagination, ListPagination, withPaginationParams, type PaginationState } from '../../components/ListPagination';
 
 function timeLabel(value?: string) {
   return value ? new Date(value).toLocaleString() : '-';
@@ -29,20 +29,12 @@ function copyText(value: string | undefined, setNotice: (value: string) => void)
   setNotice(`已复制 ${value}`);
 }
 
-function inTimeRange(log: SendLog, range: string) {
-  if (!range) return true;
-  const days = Number(range);
-  const created = new Date(log.createdAt).getTime();
-  return Date.now() - created <= days * 24 * 60 * 60 * 1000;
-}
-
 export default function Logs({
   logs,
   tasks,
   events,
   rules,
   templates,
-  onRefresh,
   setNotice
 }: {
   logs: SendLog[];
@@ -50,7 +42,6 @@ export default function Logs({
   events: EventItem[];
   rules: Rule[];
   templates: Template[];
-  onRefresh: () => Promise<void>;
   setNotice: (value: string) => void;
 }) {
   const urlParams = new URLSearchParams(window.location.search);
@@ -61,6 +52,8 @@ export default function Logs({
     scene: '',
     triggerType: ''
   });
+  const [logItems, setLogItems] = useState<SendLog[]>([]);
+  const [pagination, setPagination] = useState<PaginationState>(defaultPagination);
   const [detail, setDetail] = useState<SendLog | null>(null);
 
   const sceneOptions = useMemo(() => {
@@ -68,21 +61,23 @@ export default function Logs({
     return scenes.map((scene) => ({ value: scene, label: sceneLabels[scene] || scene }));
   }, [logs]);
 
-  const filteredLogs = useMemo(() => logs
-    .filter((log) => inTimeRange(log, filters.timeRange))
-    .filter((log) => !filters.status || log.status === filters.status)
-    .filter((log) => !filters.scene || log.scene === filters.scene)
-    .filter((log) => !filters.triggerType || log.triggerType === filters.triggerType)
-    .filter((log) => {
-      const key = filters.keyword.trim().toLowerCase();
-      if (!key) return true;
-      return [log.id, log.requestId, log.bizId, log.ruleName, log.eventId, log.templateName, log.templateCode, log.phoneMasked]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(key));
-    }), [logs, filters]);
+  async function loadLogPage(nextFilters = filters, nextPagination = pagination) {
+    const data = await api<{ items: SendLog[]; total: number; page: number; pageSize: number }>(
+      `/api/send-logs?${withPaginationParams({ keyword: '', timeRange: '', status: '', scene: '', triggerType: '', ...nextFilters }, nextPagination)}`
+    );
+    setLogItems(data.items);
+    setPagination({ page: data.page, pageSize: data.pageSize, total: data.total });
+  }
 
   function search(nextFilters: QueryFilterValues) {
-    setFilters({ keyword: '', timeRange: '', status: '', scene: '', triggerType: '', ...nextFilters });
+    const typedFilters = { keyword: '', timeRange: '', status: '', scene: '', triggerType: '', ...nextFilters };
+    const nextPagination = { ...pagination, page: 1 };
+    setFilters(typedFilters);
+    loadLogPage(typedFilters, nextPagination).catch((error) => setNotice(error instanceof Error ? error.message : '发送记录查询失败'));
+  }
+
+  function changePage(page: number, pageSize: number) {
+    loadLogPage(filters, { ...pagination, page, pageSize }).catch((error) => setNotice(error instanceof Error ? error.message : '发送记录加载失败'));
   }
 
   const detailTask = tasks.find((task) => task.logId === detail?.id || task.eventId === detail?.eventId);
@@ -90,19 +85,9 @@ export default function Logs({
   const detailRule = rules.find((rule) => rule.id === detail?.ruleId);
   const detailTemplate = templates.find((template) => template.id === detail?.templateId);
 
-  async function markDelivered(log: SendLog) {
-    if (!window.confirm(`确认将 ${log.requestId || log.bizId || log.id} 标记为送达？`)) return;
-    await api('/api/sms/provider/callback', {
-      method: 'POST',
-      body: JSON.stringify({
-        bizId: log.bizId,
-        requestId: log.requestId,
-        receiptStatus: 'delivered'
-      })
-    });
-    setNotice('已标记送达');
-    await onRefresh();
-  }
+  useEffect(() => {
+    loadLogPage(filters, { ...pagination, page: 1 }).catch((error) => setNotice(error instanceof Error ? error.message : '发送记录加载失败'));
+  }, []);
 
   return (
     <section className="stack">
@@ -112,7 +97,7 @@ export default function Logs({
             <h2>发送记录</h2>
             <span>追踪 Provider 返回、回执、短链点击和触发来源。</span>
           </div>
-          <span>{filteredLogs.length} / {logs.length} 条</span>
+          <span>共 {pagination.total} 条</span>
         </div>
 
         <QueryFilterBar
@@ -136,7 +121,7 @@ export default function Logs({
               </tr>
             </thead>
             <tbody>
-              {filteredLogs.map((log) => (
+              {logItems.map((log) => (
                 <tr key={log.id}>
                   <td>{timeLabel(log.createdAt)}</td>
                   <td>{log.triggerType === 'auto' ? '自动' : '手动'}</td>
@@ -153,19 +138,16 @@ export default function Logs({
                   <td><strong>{log.code}</strong><span>{log.message}</span></td>
                   <td>
                     <div className="tableActions">
-                      <button className="tableButton compact" type="button" onClick={() => setDetail(log)}><Eye size={15} />详情</button>
-                      <button className="tableButton compact" type="button" onClick={() => copyText(log.requestId, setNotice)}><Clipboard size={15} />requestId</button>
-                      <button className="tableButton compact" type="button" onClick={() => copyText(log.bizId, setNotice)}>bizId</button>
-                      {log.shortUrl && <a className="tableButton compact" href={log.shortUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} />短链</a>}
-                      {(log.bizId || log.requestId) && <button className="tableButton compact" type="button" onClick={() => markDelivered(log)}><Truck size={15} />标记送达</button>}
+                      <button className="tableButton compact" type="button" onClick={() => setDetail(log)}>详情</button>
                     </div>
                   </td>
                 </tr>
               ))}
-              {!filteredLogs.length && <TableEmptyState colSpan={10} title="暂无发送记录" description="当前筛选条件下没有短信发送记录。" />}
+              {!logItems.length && <TableEmptyState colSpan={10} title="暂无发送记录" description="当前筛选条件下没有短信发送记录。" />}
             </tbody>
           </table>
         </div>
+        <ListPagination pagination={pagination} onChange={changePage} />
       </section>
 
       <Modal open={Boolean(detail)} title="发送记录详情" subtitle={detail?.requestId || detail?.id} onClose={() => setDetail(null)} size="wide">
@@ -177,8 +159,8 @@ export default function Logs({
             <div><span>短链点击</span><strong>{detail?.clickCount || 0}</strong></div>
           </div>
           <div className="detailCard">
-            <div><span>requestId</span><strong>{detail?.requestId || '-'}</strong></div>
-            <div><span>bizId</span><strong>{detail?.bizId || '-'}</strong></div>
+            <div><span>requestId</span><strong>{detail?.requestId || '-'}{detail?.requestId && <button className="inlineTextButton" type="button" onClick={() => copyText(detail.requestId, setNotice)}>复制</button>}</strong></div>
+            <div><span>bizId</span><strong>{detail?.bizId || '-'}{detail?.bizId && <button className="inlineTextButton" type="button" onClick={() => copyText(detail.bizId, setNotice)}>复制</button>}</strong></div>
             <div><span>关联任务</span><strong>{detailTask ? detailTask.id : '暂无'}</strong></div>
             <div><span>关联事件</span><strong>{detailEvent ? `${eventLabels[detailEvent.eventType] || detailEvent.eventType} · ${detailEvent.eventId}` : detail?.eventId || '暂无'}</strong></div>
             <div><span>关联规则</span><strong>{detailRule ? detailRule.name : detail?.ruleName || '暂无'}</strong></div>

@@ -145,7 +145,7 @@ export const menus: AppMenuItem[] = [
         title: '发送记录',
         icon: <Activity size={18} />,
         buttons: [button('页面查看', 'base'), button('查看详情', 'detail')],
-        component: ({ logs, tasks, events, rules, templates, onRefresh, setNotice }) => <Logs logs={logs} tasks={tasks} events={events} rules={rules} templates={templates} onRefresh={onRefresh} setNotice={setNotice} />
+        component: ({ logs, tasks, events, rules, templates, setNotice }) => <Logs logs={logs} tasks={tasks} events={events} rules={rules} templates={templates} setNotice={setNotice} />
       }
     ]
   },

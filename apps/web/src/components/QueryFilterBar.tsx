@@ -1,6 +1,7 @@
-import { Button, Col, DatePicker, Form, Input, Row, Select, Space } from 'antd';
+import { Button, Col, DatePicker, Form, Input, Row, Space } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect } from 'react';
+import { SelectField } from './SelectField';
 
 export type QueryFilterValues = Record<string, string>;
 
@@ -108,13 +109,7 @@ export function QueryFilterBar({
           <Col key={field.name} span={field.span || (field.type === 'dateRange' ? 8 : 6)}>
             <Form.Item name={field.name} label={field.label}>
               {field.type === 'select' ? (
-                <Select
-                  allowClear
-                  optionFilterProp="label"
-                  options={field.options.filter((option) => option.value !== '')}
-                  placeholder={field.placeholder || '请选择'}
-                  showSearch
-                />
+                <SelectField options={field.options.filter((option) => option.value !== '')} placeholder={field.placeholder || '请选择'} showSearch />
               ) : field.type === 'dateRange' ? (
                 <DatePicker.RangePicker style={{ width: '100%' }} />
               ) : (

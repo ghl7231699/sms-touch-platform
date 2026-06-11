@@ -1,4 +1,3 @@
-import { api } from '../lib/api';
 import { eventLabels, sceneLabels } from '../constants/labels';
 import type { SendLog, SmsTask } from '../types';
 import { TableEmptyState } from './EmptyState';
@@ -47,19 +46,7 @@ export function TaskTable({ tasks, showDetail = false }: { tasks: SmsTask[]; sho
   );
 }
 
-export function LogTable({ logs, showActions = false }: { logs: SendLog[]; showActions?: boolean }) {
-  async function markDelivered(log: SendLog) {
-    await api('/api/sms/provider/callback', {
-      method: 'POST',
-      body: JSON.stringify({
-        bizId: log.bizId,
-        requestId: log.requestId,
-        receiptStatus: 'delivered'
-      })
-    });
-    window.location.reload();
-  }
-
+export function LogTable({ logs }: { logs: SendLog[]; showActions?: boolean }) {
   return (
     <div className="dataTableWrap">
       <table className="dataTable">
@@ -74,7 +61,6 @@ export function LogTable({ logs, showActions = false }: { logs: SendLog[]; showA
             <th>回执</th>
             <th>短链</th>
             <th>返回</th>
-            {showActions && <th>操作</th>}
           </tr>
         </thead>
         <tbody>
@@ -93,16 +79,9 @@ export function LogTable({ logs, showActions = false }: { logs: SendLog[]; showA
                 ) : '-'}
               </td>
               <td><strong>{log.code}</strong><span>{log.message}</span></td>
-              {showActions && (
-                <td>
-                  {log.bizId || log.requestId ? (
-                    <button className="tableButton" onClick={() => markDelivered(log)}>标记送达</button>
-                  ) : '-'}
-                </td>
-              )}
             </tr>
           ))}
-          {!logs.length && <TableEmptyState colSpan={showActions ? 10 : 9} title="暂无发送记录" description="当前筛选条件下没有短信发送记录。" />}
+          {!logs.length && <TableEmptyState colSpan={9} title="暂无发送记录" description="当前筛选条件下没有短信发送记录。" />}
         </tbody>
       </table>
     </div>

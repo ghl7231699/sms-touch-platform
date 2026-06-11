@@ -67,7 +67,8 @@ export function Modal({
   children,
   onClose,
   size = 'default',
-  showClose = true
+  showClose = true,
+  footerDivider = true
 }: {
   open: boolean;
   title: string;
@@ -76,6 +77,7 @@ export function Modal({
   onClose: () => void;
   size?: 'default' | 'wide';
   showClose?: boolean;
+  footerDivider?: boolean;
 }) {
   const generatedFormId = `modal-form-${useId().replace(/:/g, '')}`;
   if (!open) return null;
@@ -96,7 +98,7 @@ export function Modal({
           )}
         </div>
         <div className="modalBody">{content}</div>
-        {footer && <div className="modalFooter">{footer}</div>}
+        {footer && <div className={`modalFooter ${footerDivider ? '' : 'noDivider'}`}>{footer}</div>}
       </section>
     </div>
   );

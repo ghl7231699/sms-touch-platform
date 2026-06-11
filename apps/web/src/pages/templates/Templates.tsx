@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Copy, Eye, FileText, Layers3, MessageSquareText, Pencil, Plus, RadioTower, Send, Sparkles } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { FileText, Layers3, MessageSquareText, Plus, RadioTower, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
 import { sceneLabels } from '../../constants/labels';
 import type { Template } from '../../types';
@@ -33,6 +33,8 @@ function previewWithParams(content: string, params: Record<string, string>) {
 }
 
 export default function Templates({ templates, onRefresh, setNotice }: { templates: Template[]; onRefresh: () => Promise<void>; setNotice: (value: string) => void }) {
+  const urlParams = new URLSearchParams(window.location.search);
+  const targetTemplateId = urlParams.get('templateId') || '';
   const [form, setForm] = useState({
     name: '',
     scene: 'register',
@@ -60,6 +62,7 @@ export default function Templates({ templates, onRefresh, setNotice }: { templat
     scene: '',
     status: ''
   });
+  const handledTemplateIdRef = useRef('');
   const sceneOptions = Object.entries(sceneLabels).map(([value, label]) => ({ value, label }));
   const sceneFilterOptions = sceneOptions;
   const statusFilterOptions = [
@@ -93,6 +96,15 @@ export default function Templates({ templates, onRefresh, setNotice }: { templat
   function search(nextFilters: QueryFilterValues) {
     setFilters({ keyword: '', scene: '', status: '', ...nextFilters });
   }
+
+  useEffect(() => {
+    if (!targetTemplateId || handledTemplateIdRef.current === targetTemplateId) return;
+    const target = templates.find((template) => template.id === targetTemplateId || template.providerTemplateId === targetTemplateId);
+    if (target) {
+      handledTemplateIdRef.current = targetTemplateId;
+      setSelectedTemplate(target);
+    }
+  }, [targetTemplateId, templates, selectedTemplate]);
 
   function parseTemplateParam(value: string) {
     return value.split('\n').reduce<Record<string, string>>((result, line) => {
@@ -255,12 +267,12 @@ export default function Templates({ templates, onRefresh, setNotice }: { templat
                 <strong>{previewContent(template.content, template.variables)}</strong>
               </div>
               <div className="templateActions">
-                <button className="secondaryButton compact" type="button" onClick={() => setSelectedTemplate(template)}><Eye size={15} />详情</button>
+                <button className="secondaryButton compact" type="button" onClick={() => setSelectedTemplate(template)}>详情</button>
                 <AuthC authKey="touch:template:edit">
-                  <button className="secondaryButton compact" type="button" onClick={() => openEdit(template)}><Pencil size={15} />编辑</button>
+                  <button className="secondaryButton compact" type="button" onClick={() => openEdit(template)}>编辑</button>
                 </AuthC>
                 <AuthC authKey="touch:template:test">
-                  <button className="secondaryButton compact" type="button" onClick={() => openTest(template)}><Send size={15} />测试发送</button>
+                  <button className="secondaryButton compact" type="button" onClick={() => openTest(template)}>测试发送</button>
                 </AuthC>
                 <AuthC authKey="touch:template:status">
                   <button className="secondaryButton compact" type="button" onClick={() => toggle(template)}>
@@ -401,7 +413,7 @@ export default function Templates({ templates, onRefresh, setNotice }: { templat
               <button className="secondaryButton compact" type="button" onClick={() => {
                 navigator.clipboard?.writeText(selectedTemplate.content);
                 setNotice('模板内容已复制');
-              }}><Copy size={15} />复制内容</button>
+              }}>复制内容</button>
             </div>
           </div>
         )}
