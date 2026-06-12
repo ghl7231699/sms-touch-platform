@@ -172,6 +172,17 @@ const roles = [
       'security:setting:workerRun',
       'integration:eventSource:base',
       'integration:eventSource:detail',
+      'integration:dataSource:base',
+      'integration:dataSource:add',
+      'integration:dataSource:detail',
+      'integration:dataSource:edit',
+      'integration:dataSource:copy',
+      'integration:dataSource:status',
+      'integration:dataSource:test',
+      'integration:dataSource:preview',
+      'integration:dataSource:createTasks',
+      'integration:dataSourceRun:base',
+      'integration:dataSourceRun:detail',
       'integration:eventSourceLog:base',
       'integration:eventSourceLog:detail',
       'audit:operationLog:base',
@@ -212,6 +223,10 @@ const roles = [
       'security:setting:base',
       'integration:eventSource:base',
       'integration:eventSource:detail',
+      'integration:dataSource:base',
+      'integration:dataSource:detail',
+      'integration:dataSourceRun:base',
+      'integration:dataSourceRun:detail',
       'integration:eventSourceLog:base',
       'integration:eventSourceLog:detail',
       'audit:operationLog:base',
@@ -570,6 +585,103 @@ async function main() {
       name: '线上商城事件源',
       status: 'enabled',
       remark: '演示用业务系统事件来源'
+    }
+  });
+
+  const dataSource = await prisma.dataSource.upsert({
+    where: { id: 'demo_data_source_member_expiring' },
+    create: {
+      id: 'demo_data_source_member_expiring',
+      name: '会员到期名单数据源',
+      systemName: '会员中心',
+      endpoint: 'mock://member-expiring',
+      method: 'GET',
+      authType: 'none',
+      requestConfig: { params: { limit: 4 } },
+      pagination: { type: 'none' },
+      responsePath: 'data.items',
+      fieldMapping: {
+        phone: 'phone',
+        userId: 'userId',
+        bizId: 'bizId',
+        scene: 'scene',
+        variables: {
+          name: 'name',
+          productName: 'productName',
+          daysLeft: 'daysLeft',
+          code: { default: '##code##' },
+          min: { default: '5' }
+        }
+      },
+      dedupeKey: 'phone',
+      defaultRuleId: 'rule_member_expired_3d',
+      defaultTemplateId: 'tpl_member_expired',
+      status: 'enabled',
+      remark: '演示用数据来源，可直接调试、预览并批量生成任务。',
+      createdById: admin.id
+    },
+    update: {
+      name: '会员到期名单数据源',
+      systemName: '会员中心',
+      endpoint: 'mock://member-expiring',
+      method: 'GET',
+      authType: 'none',
+      requestConfig: { params: { limit: 4 } },
+      pagination: { type: 'none' },
+      responsePath: 'data.items',
+      fieldMapping: {
+        phone: 'phone',
+        userId: 'userId',
+        bizId: 'bizId',
+        scene: 'scene',
+        variables: {
+          name: 'name',
+          productName: 'productName',
+          daysLeft: 'daysLeft',
+          code: { default: '##code##' },
+          min: { default: '5' }
+        }
+      },
+      dedupeKey: 'phone',
+      defaultRuleId: 'rule_member_expired_3d',
+      defaultTemplateId: 'tpl_member_expired',
+      status: 'enabled',
+      remark: '演示用数据来源，可直接调试、预览并批量生成任务。',
+      createdById: admin.id
+    }
+  });
+
+  await prisma.dataSourceRun.upsert({
+    where: { id: 'demo_data_source_run_preview' },
+    create: {
+      id: 'demo_data_source_run_preview',
+      dataSourceId: dataSource.id,
+      runType: 'preview',
+      status: 'success',
+      params: { limit: 4 },
+      summary: { totalCount: 4, validCount: 4, failedCount: 0, skippedCount: 0, estimatedTaskCount: 4, elapsedMs: 12 },
+      createdById: admin.id,
+      createdAt: dateAgo(0, 2),
+      items: {
+        create: demoPhones.slice(0, 4).map((phone, index) => ({
+          id: `demo_data_source_run_item_${index + 1}`,
+          rowIndex: index + 1,
+          phoneMasked: maskPhone(phone),
+          bizId: `expire_00${index + 1}`,
+          userId: `member_00${index + 1}`,
+          scene: 'member',
+          ruleId: 'rule_member_expired_3d',
+          templateId: 'tpl_member_expired',
+          status: 'valid',
+          message: '可生成任务',
+          raw: { phone, scene: 'member', productName: index % 2 ? '月度会员' : '年度会员' },
+          mapped: { phoneMasked: maskPhone(phone), scene: 'member' }
+        }))
+      }
+    },
+    update: {
+      status: 'success',
+      summary: { totalCount: 4, validCount: 4, failedCount: 0, skippedCount: 0, estimatedTaskCount: 4, elapsedMs: 12 }
     }
   });
 

@@ -224,6 +224,75 @@ export interface EventSourceStats {
   latestLog?: AuditItem | null;
 }
 
+export interface DataSourceItem {
+  id: string;
+  name: string;
+  systemName: string;
+  endpoint: string;
+  method: 'GET' | 'POST';
+  authType: string;
+  authConfig?: Record<string, unknown>;
+  requestConfig?: Record<string, unknown>;
+  pagination?: Record<string, unknown>;
+  responsePath: string;
+  fieldMapping: {
+    phone?: string;
+    userId?: string;
+    bizId?: string;
+    scene?: string;
+    variables?: Record<string, string>;
+  };
+  dedupeKey: string;
+  defaultRuleId?: string;
+  defaultTemplateId?: string;
+  status: string;
+  remark?: string;
+  lastRunAt?: string;
+  createdAt: string;
+  updatedAt?: string;
+  runs?: DataSourceRunItem[];
+}
+
+export interface DataSourceRunDetailItem {
+  id: string;
+  rowIndex: number;
+  phoneMasked?: string;
+  bizId?: string;
+  userId?: string;
+  scene?: string;
+  ruleId?: string;
+  templateId?: string;
+  status: string;
+  message?: string;
+  raw?: unknown;
+  mapped?: unknown;
+  taskId?: string;
+  createdAt: string;
+}
+
+export interface DataSourceRunItem {
+  id: string;
+  dataSourceId: string;
+  runType: string;
+  status: string;
+  params?: Record<string, unknown>;
+  summary?: {
+    totalCount?: number;
+    validCount?: number;
+    failedCount?: number;
+    skippedCount?: number;
+    estimatedTaskCount?: number;
+    createdTaskCount?: number;
+    elapsedMs?: number;
+  };
+  errorMessage?: string;
+  batchJobId?: string;
+  createdById?: string;
+  createdAt: string;
+  dataSource?: DataSourceItem;
+  items?: DataSourceRunDetailItem[];
+}
+
 export interface WorkerStatus {
   enabled: boolean;
   running: boolean;
