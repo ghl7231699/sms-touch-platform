@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import type { EventItem, Rule, SendLog, SmsTask, Template } from '../../types';
-import { eventLabels, sceneLabels, statusLabel } from '../../constants/labels';
+import { eventLabels, sceneLabels, sendStatusKey, statusLabel } from '../../constants/labels';
 import { StatusBadge } from '../../components/StatusBadge';
 import { Modal } from '../../components/Modal';
 import { TableEmptyState } from '../../components/EmptyState';
@@ -128,7 +128,7 @@ export default function Logs({
                   <td>{sceneLabels[log.scene] || log.scene}</td>
                   <td>{log.phoneMasked}</td>
                   <td><strong>{log.templateName || log.templateCode}</strong><span>{log.requestId || log.id}</span></td>
-                  <td><StatusBadge status={log.status} /></td>
+                  <td><StatusBadge status={sendStatusKey(log.status)} /></td>
                   <td>{log.receiptStatus || '-'}</td>
                   <td>
                     {log.shortUrl ? (
@@ -153,7 +153,7 @@ export default function Logs({
       <Modal open={Boolean(detail)} title="发送记录详情" subtitle={detail?.requestId || detail?.id} onClose={() => setDetail(null)} size="wide">
         <div className="stack">
           <div className="ruleMetaGrid">
-            <div><span>发送状态</span><strong>{detail ? statusLabel(detail.status) : '-'}</strong></div>
+            <div><span>发送状态</span><strong>{detail ? statusLabel(sendStatusKey(detail.status)) : '-'}</strong></div>
             <div><span>Provider</span><strong>{detail?.provider || '-'}</strong></div>
             <div><span>回执状态</span><strong>{detail?.receiptStatus || '-'}</strong></div>
             <div><span>短链点击</span><strong>{detail?.clickCount || 0}</strong></div>

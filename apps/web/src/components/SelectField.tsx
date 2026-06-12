@@ -10,17 +10,19 @@ export function SelectField({
   options,
   onChange,
   placeholder = '请选择',
-  showSearch = false
+  showSearch = false,
+  allowClear = false
 }: {
   value?: string;
   options: SelectOption[];
   onChange?: (value: string) => void;
   placeholder?: string;
   showSearch?: boolean;
+  allowClear?: boolean;
 }) {
   return (
     <Select
-      allowClear
+      allowClear={allowClear}
       className="selectField"
       optionFilterProp="label"
       options={options}

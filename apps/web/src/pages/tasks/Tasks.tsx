@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Clock3, RotateCcw, Send, XCircle } from 'lucide-react';
 import { api } from '../../lib/api';
 import type { EventItem, Rule, SendLog, SmsTask, Template } from '../../types';
-import { eventLabels, sceneLabels, statusLabel } from '../../constants/labels';
+import { eventLabels, sceneLabels, sendStatusKey, statusLabel, taskStatusKey } from '../../constants/labels';
 import { StatusBadge } from '../../components/StatusBadge';
 import { AuthC } from '../../lib/auth';
 import { Modal } from '../../components/Modal';
@@ -153,7 +153,7 @@ export default function Tasks({
 
   async function cancelOne(task: SmsTask) {
     const result = await api<{ item: SmsTask }>(`/api/tasks/${task.id}/cancel`, { method: 'POST' });
-    setNotice(`任务已${statusLabel(result.item.status)}`);
+    setNotice(`任务已${statusLabel(taskStatusKey(result.item.status))}`);
     setCancelTarget(null);
     await refreshTasks();
   }
@@ -161,7 +161,7 @@ export default function Tasks({
   async function retryOne(task: SmsTask) {
     if (!window.confirm(`确认重试任务 ${task.id}？`)) return;
     const result = await api<{ success: boolean; status: string; code?: string }>(`/api/tasks/${task.id}/retry`, { method: 'POST' });
-    setNotice(`重试结果：${statusLabel(result.status)}${result.code ? ` · ${result.code}` : ''}`);
+    setNotice(`重试结果：${statusLabel(taskStatusKey(result.status))}${result.code ? ` · ${result.code}` : ''}`);
     await refreshTasks();
   }
 
@@ -409,7 +409,7 @@ export default function Tasks({
                     <strong>{timeLabel(task.scheduledAt)}</strong>
                     <span>发送：{timeLabel(task.sentAt)}</span>
                   </td>
-                  <td><StatusBadge status={task.status} /></td>
+                  <td><StatusBadge status={taskStatusKey(task.status)} /></td>
                   <td>{task.attemptCount}/{task.maxAttempts}</td>
                   <td>{taskReason(task)}</td>
                   <td>
@@ -430,7 +430,7 @@ export default function Tasks({
       <Modal open={Boolean(detail)} title="任务详情" subtitle={detail?.id} onClose={() => setDetail(null)} size="wide">
         <div className="stack">
           <div className="ruleMetaGrid">
-            <div><span>状态</span><strong>{detail ? statusLabel(detail.status) : '-'}</strong></div>
+            <div><span>状态</span><strong>{detail ? statusLabel(taskStatusKey(detail.status)) : '-'}</strong></div>
             <div><span>场景</span><strong>{detail ? sceneLabels[detail.scene] || detail.scene : '-'}</strong></div>
             <div><span>计划时间</span><strong>{timeLabel(detail?.scheduledAt)}</strong></div>
             <div><span>发送时间</span><strong>{timeLabel(detail?.sentAt)}</strong></div>
@@ -461,7 +461,7 @@ export default function Tasks({
               </button>
               <button className={`taskSourceNode ${detailLog ? '' : 'empty'}`} type="button" disabled={!detailLog} onClick={() => setRelatedDetail('log')}>
                 <span>发送结果</span>
-                <strong>{detailLog ? statusLabel(detailLog.status) : detail?.logId || '暂无记录'}</strong>
+                <strong>{detailLog ? statusLabel(sendStatusKey(detailLog.status)) : detail?.logId || '暂无记录'}</strong>
                 <small>{detailLog ? detailLog.requestId || detailLog.id : '任务尚未生成发送记录'}</small>
               </button>
             </div>
@@ -538,7 +538,7 @@ export default function Tasks({
         {detailLog && (
           <div className="stack">
             <div className="ruleMetaGrid">
-              <div><span>发送状态</span><strong>{statusLabel(detailLog.status)}</strong></div>
+              <div><span>发送状态</span><strong>{statusLabel(sendStatusKey(detailLog.status))}</strong></div>
               <div><span>Provider</span><strong>{detailLog.provider || '-'}</strong></div>
               <div><span>回执状态</span><strong>{detailLog.receiptStatus || '-'}</strong></div>
               <div><span>发送时间</span><strong>{timeLabel(detailLog.createdAt)}</strong></div>
@@ -639,7 +639,7 @@ export default function Tasks({
                     </div>
                     <div>
                       <span>状态</span>
-                      <strong>{statusLabel(task.status)}</strong>
+                      <strong>{statusLabel(taskStatusKey(task.status))}</strong>
                     </div>
                   </article>
                 ))}

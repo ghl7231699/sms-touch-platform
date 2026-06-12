@@ -48,7 +48,7 @@ textarea {
 .shell {
   height: 100vh;
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-columns: 230px minmax(0, 1fr);
   overflow: hidden;
   transition: grid-template-columns .22s ease;
 }
@@ -60,10 +60,10 @@ textarea {
 .sidebar {
   background: var(--nav);
   color: var(--text);
-  padding: 20px 12px 24px;
+  padding: 18px 10px 22px;
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 18px;
   height: 100vh;
   overflow: auto;
   border-right: 1px solid var(--line);
@@ -76,7 +76,7 @@ textarea {
   align-items: center;
   gap: 10px;
   min-height: 48px;
-  padding: 0 8px;
+  padding: 0 6px;
 }
 
 .brand.large {
@@ -111,7 +111,7 @@ textarea {
 }
 
 .brand strong {
-  font-size: 20px;
+  font-size: 17px;
   line-height: 1.15;
 }
 
@@ -163,7 +163,7 @@ nav {
   height: 44px !important;
   line-height: 44px !important;
   margin: 3px 0 !important;
-  padding-inline: 14px !important;
+  padding-inline: 10px !important;
   border-radius: 8px !important;
   color: var(--text) !important;
   font-size: 14px;
@@ -189,7 +189,7 @@ nav {
 }
 
 .sideMenu .ant-menu-title-content {
-  margin-inline-start: 10px;
+  margin-inline-start: 9px;
 }
 
 .sideMenu .ant-menu-submenu-arrow {
@@ -216,7 +216,7 @@ nav {
 }
 
 .sideMenu .ant-menu-sub .ant-menu-item {
-  padding-left: 38px !important;
+  padding-left: 30px !important;
   font-weight: 500;
 }
 
@@ -699,6 +699,852 @@ p {
   font-size: 16px;
 }
 
+.settingsConsole {
+  max-width: 1480px;
+}
+
+.sendOpsConsole {
+  gap: 18px;
+}
+
+.sendOpsTopbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 20px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #ffffff 0%, #f7fbff 62%, #eef6ff 100%);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
+}
+
+.sendOpsTopbar h1 {
+  margin: 0;
+  color: #111827;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.sendOpsTopbar p {
+  margin: 8px 0 0;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.sendOpsTopActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.sendOpsCockpit {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.sendOpsStatusCard {
+  min-height: 160px;
+  border: 0;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
+}
+
+.sendOpsStatusCard .ant-card-body {
+  display: grid;
+  gap: 12px;
+  height: 100%;
+  padding: 16px;
+}
+
+.sendOpsCardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sendOpsIcon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+}
+
+.sendOpsIcon.blue { background: #e6f4ff; color: #1677ff; }
+.sendOpsIcon.green { background: #f6ffed; color: #52c41a; }
+.sendOpsIcon.amber { background: #fffbe6; color: #faad14; }
+
+.sendOpsCardMeta,
+.sendOpsRateGrid {
+  display: grid;
+  gap: 5px;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.sendOpsRateGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.sendOpsRateGrid b {
+  display: block;
+  color: #111827;
+  font-size: 14px;
+}
+
+.sendOpsPanel {
+  border: 0;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
+}
+
+.sendOpsPanel .ant-card-head {
+  min-height: 58px;
+  border-bottom-color: #eef2f7;
+}
+
+.sendOpsPanel .ant-card-head-title > div,
+.sendOpsPanel .ant-card-head-title {
+  min-width: 0;
+}
+
+.sendOpsPanel .ant-card-head-title strong {
+  display: block;
+  color: #111827;
+  font-size: 16px;
+}
+
+.sendOpsPanel .ant-card-head-title span {
+  display: block;
+  margin-top: 4px;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.sendOpsFlowCard .ant-card-body {
+  padding: 18px;
+}
+
+.sendOpsFlow {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 8px;
+}
+
+.sendOpsFlowItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sendOpsFlowItem:last-child {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.sendOpsFlowNode {
+  position: relative;
+  min-height: 142px;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #edf2f7;
+  border-radius: 10px;
+  background: #fbfcff;
+}
+
+.sendOpsFlowNode.normal {
+  border-color: #d9f7be;
+  background: #fcfffa;
+}
+
+.sendOpsFlowNode.warning {
+  border-color: #ffe58f;
+  background: #fffdf2;
+}
+
+.sendOpsFlowNode.error {
+  border-color: #ffccc7;
+  background: #fff7f6;
+}
+
+.sendOpsFlowDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.sendOpsFlowNode > div span,
+.strategyCardHead > div > span,
+.frequencyMetricGrid label > span,
+.frequencyMetricGrid > div > span {
+  color: #667085;
+  font-size: 12px;
+}
+
+.sendOpsFlowNode strong {
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.sendOpsFlowNode small {
+  color: #667085;
+  line-height: 1.5;
+}
+
+.sendOpsFlowArrow {
+  color: #98a2b3;
+  font-weight: 800;
+}
+
+.sendOpsCommercialGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 16px;
+  align-items: start;
+}
+
+.sendOpsPrimary,
+.sendOpsAside {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.sendOpsAside {
+  position: sticky;
+  top: 16px;
+}
+
+.sendOpsWarnings {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.riskStrategyGrid {
+  display: grid;
+  grid-template-columns: minmax(300px, .9fr) minmax(0, 1.4fr);
+  gap: 14px;
+}
+
+.strategyCard {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #edf2f7;
+  border-radius: 10px;
+  background: #fbfcff;
+}
+
+.strategyCardHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.strategyCardHead > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.strategyCard strong {
+  color: #111827;
+  font-size: 16px;
+}
+
+.strategyCard small,
+.strategyCard p,
+.frequencyMetricGrid small {
+  margin: 0;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.frequencyMetricGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.frequencySceneControl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #edf2f7;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.frequencySceneControl > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.frequencySceneControl > div > span {
+  color: #344054;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.frequencySceneControl > div > small {
+  color: #667085;
+  font-size: 12px;
+}
+
+.frequencySceneControl .selectField,
+.frequencySceneControl .selectField.ant-select {
+  width: 100%;
+}
+
+.frequencyMetricGrid label,
+.frequencyMetricGrid > div {
+  display: grid;
+  gap: 6px;
+  min-height: 104px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px #edf2f7;
+}
+
+.frequencyMetricGrid input {
+  width: 100%;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #111827;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.frequencyMetricGrid strong {
+  color: #111827;
+  font-size: 20px;
+}
+
+.quietTimeEditor {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.sendOpsConfigSection {
+  display: grid;
+  gap: 14px;
+}
+
+.sendOpsCollapse {
+  background: transparent;
+}
+
+.sendOpsCollapse .ant-collapse-item {
+  margin-bottom: 10px;
+  border: 1px solid #edf2f7;
+  border-radius: 10px !important;
+  overflow: hidden;
+  background: #fbfcff;
+}
+
+.sendOpsCollapse .ant-collapse-header {
+  align-items: center !important;
+  padding: 14px 16px !important;
+  font-weight: 700;
+}
+
+.sendOpsCollapse .ant-collapse-content-box {
+  padding: 16px !important;
+  background: #fff;
+}
+
+.commercialSwitchRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 14px;
+  border: 1px solid #edf2f7;
+  border-radius: 10px;
+  background: #fbfcff;
+}
+
+.commercialSwitchRow span {
+  display: grid;
+  gap: 4px;
+}
+
+.commercialSwitchRow strong {
+  color: #111827;
+  font-size: 14px;
+}
+
+.commercialSwitchRow small {
+  color: #667085;
+  font-size: 12px;
+}
+
+.commercialProviderList article {
+  border-color: #edf2f7;
+  box-shadow: none;
+}
+
+.providerTags {
+  display: flex !important;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px !important;
+}
+
+.commercialStateList {
+  margin-bottom: 14px;
+}
+
+.commercialChangeSummary {
+  margin-bottom: 12px;
+  background: linear-gradient(135deg, #e6f4ff 0%, #f8fbff 100%);
+}
+
+.sendControlHero {
+  align-items: stretch;
+}
+
+.sendControlHero p {
+  max-width: 760px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.sendControlHeroActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 220px;
+}
+
+.sendControlSummary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.sendControlSummary article {
+  position: relative;
+  display: grid;
+  gap: 7px;
+  min-height: 126px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.sendControlSummary article > span,
+.settingsStateList span,
+.settingsChangeList span,
+.settingsHint,
+.controlBlockHead span,
+.sendControlFlow small,
+.toggleRow small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.sendControlSummary article > strong {
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.sendControlSummary p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.sendControlSummary [data-ui="status-badge"] {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+}
+
+.sendControlLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 16px;
+  align-items: start;
+}
+
+.sendControlMain {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.sendControlAside {
+  position: sticky;
+  top: 16px;
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.sendControlPanel {
+  gap: 18px;
+}
+
+.sendControlFlow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: linear-gradient(180deg, #fbfcff 0%, #f8fafc 100%);
+}
+
+.sendControlFlow article {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  min-width: 0;
+}
+
+.sendControlFlow b {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-size: 13px;
+}
+
+.sendControlFlow div,
+.controlBlockHead div,
+.toggleRow span,
+.settingsChangeList article > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sendControlFlow span,
+.controlBlockHead strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.sendControlFlow strong {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.sendControlTwoCols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.controlBlock {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.controlBlockHead {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.controlBlockHead svg {
+  flex: 0 0 auto;
+  color: var(--blue);
+}
+
+.providerConfigToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.providerConfigToolbar > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.providerConfigToolbar strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.providerConfigToolbar > div > span,
+.providerConfigMeta,
+.providerConfigList p,
+.currentProviderTag {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.providerConfigList {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.providerConfigList article {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.providerConfigList article.active {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.providerConfigMain {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.providerConfigMain > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.providerConfigMain strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.providerConfigMain span:not([data-ui="status-badge"]) {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.providerConfigMeta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  line-height: 1.5;
+}
+
+.providerConfigMeta span,
+.providerConfigList p {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.providerConfigActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.providerConfigActions button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.providerConfigActions button:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.currentProviderTag {
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: var(--blue);
+  font-weight: 700;
+}
+
+.providerModalGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.providerModalGrid .providerRemark {
+  grid-column: 1 / -1;
+}
+
+.providerModalTip {
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--blue-soft);
+}
+
+.settingsHint {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.toggleRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.toggleRow input {
+  margin-top: 2px;
+  flex: 0 0 auto;
+}
+
+.toggleRow strong {
+  font-size: 13px;
+}
+
+.riskNotice {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  padding: 11px 12px;
+  border-radius: 8px;
+  background: var(--amber-soft);
+  color: #92400e;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.riskNotice svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.settingsStateList {
+  display: grid;
+  gap: 10px;
+}
+
+.settingsStateList > div {
+  display: grid;
+  grid-template-columns: minmax(84px, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 30px;
+}
+
+.settingsStateList strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.sendControlActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.changeSummary {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border-radius: 10px;
+  background: var(--blue-soft);
+}
+
+.changeSummary strong {
+  color: var(--blue);
+  font-size: 30px;
+  line-height: 1;
+}
+
+.changeSummary span,
+.changeSummary p {
+  color: #344054;
+  font-size: 13px;
+}
+
+.changeSummary p {
+  margin: 2px 0 0;
+  line-height: 1.6;
+}
+
+.settingsChangeList {
+  display: grid;
+  gap: 8px;
+}
+
+.settingsChangeList article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.settingsChangeList strong {
+  font-size: 13px;
+}
+
 .formGrid {
   display: grid;
   gap: 14px;
@@ -768,6 +1614,86 @@ p {
 .panelTitle span:not([data-ui="status-badge"]) {
   color: var(--muted);
   font-size: 13px;
+}
+
+.accountPageToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 4px 0 18px;
+}
+
+.accountTextTabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 24px;
+  min-height: 40px;
+}
+
+.accountTextTab {
+  position: relative;
+  height: 40px;
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  background: transparent;
+  color: #667085;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.accountTextTab::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.accountTextTab em {
+  min-width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #f2f4f7;
+  color: #667085;
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1;
+}
+
+.accountTextTab:hover {
+  color: #344054;
+}
+
+.accountTextTab.active {
+  color: var(--blue);
+}
+
+.accountTextTab.active::after {
+  background: var(--blue);
+}
+
+.accountTextTab.active em {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.accountToolbarActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 120px;
 }
 
 .ruleList, .eventList {
@@ -1967,8 +2893,15 @@ label {
 }
 
 .selectField .ant-select-arrow,
+.selectField .ant-select-suffix,
 .selectField .ant-select-clear {
-  inset-inline-end: 12px;
+  position: absolute !important;
+  inset-inline-start: auto !important;
+  inset-inline-end: 12px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  margin: 0 !important;
+  color: #98a2b3;
 }
 
 .queryFilterForm .selectField,
@@ -3976,7 +4909,21 @@ button.heroMetric.active {
   .twoCol,
   .workspace,
   .controlGrid,
+  .sendOpsTopbar,
+  .sendOpsCockpit,
+  .sendOpsFlow,
+  .sendOpsCommercialGrid,
+  .riskStrategyGrid,
+  .frequencySceneControl,
+  .frequencyMetricGrid,
+  .quietTimeEditor,
+  .sendControlSummary,
+  .sendControlLayout,
+  .sendControlFlow,
+  .sendControlTwoCols,
   .formGrid.two,
+  .providerConfigMeta,
+  .providerModalGrid,
   .heroKpiSection,
   .secondaryMetricGrid,
   .pulseGrid,
@@ -4011,6 +4958,41 @@ button.heroMetric.active {
     grid-template-columns: 1fr;
   }
 
+  .sendOpsTopbar,
+  .sendOpsTopActions,
+  .accountPageToolbar,
+  .strategyCardHead {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .sendOpsTopActions,
+  .accountToolbarActions {
+    width: 100%;
+  }
+
+  .accountTextTabs {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 20px;
+  }
+
+  .accountTextTab {
+    height: 36px;
+  }
+
+  .sendOpsFlowItem {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sendOpsFlowArrow {
+    display: none;
+  }
+
+  .sendOpsAside {
+    position: static;
+  }
+
   .taskFilterSection .queryFilterActions {
     justify-content: flex-start;
   }
@@ -4035,6 +5017,15 @@ button.heroMetric.active {
   .settingsHero {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .sendControlHeroActions {
+    justify-content: flex-start;
+    min-width: 0;
+  }
+
+  .sendControlAside {
+    position: static;
   }
 
   .templateHero {

@@ -5,7 +5,7 @@ import type { AuthUser } from '../../types';
 import { Modal } from '../../components/Modal';
 
 export default function LoginPage({ onLogin }: { onLogin: (token: string, user: AuthUser) => void }) {
-  const [email, setEmail] = useState('admin@sms.local');
+  const [email, setEmail] = useState('admin');
   const [password, setPassword] = useState('Admin123!');
   const [dialog, setDialog] = useState<'apply' | 'forgot' | null>(null);
   const [name, setName] = useState('');
@@ -117,7 +117,7 @@ export default function LoginPage({ onLogin }: { onLogin: (token: string, user: 
             <span>欢迎回来</span>
             <h2>登录工作台</h2>
           </div>
-          <label>邮箱<input value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
+          <label>账号<input value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
           <label>密码<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
           <button className="primaryButton authSubmit" type="submit">
             <Lock size={16} />

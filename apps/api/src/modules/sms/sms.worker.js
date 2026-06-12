@@ -15,7 +15,7 @@ export function createTaskWorker() {
   };
 
   if (!config.taskWorker.enabled) {
-    state.disabledReason = 'SMS_TASK_WORKER_ENABLED is false.';
+    state.disabledReason = 'Worker 未启用，请在环境变量中配置 SMS_TASK_WORKER_ENABLED=true 后重启服务。';
     return state;
   }
 
@@ -28,8 +28,8 @@ export function createTaskWorker() {
     state.lastRunAt = new Date().toISOString();
     try {
       const providerName = await getSmsProviderName();
-      if (providerName !== 'mock' && !config.taskWorker.allowRealSend) {
-        state.disabledReason = 'Real provider worker requires SMS_TASK_WORKER_ALLOW_REAL_SEND=true.';
+      if (!config.taskWorker.allowRealSend) {
+        state.disabledReason = '真实短信发送未放行，请在环境变量中配置 SMS_TASK_WORKER_ALLOW_REAL_SEND=true 后重启服务。';
         state.lastProcessed = 0;
         state.lastError = null;
         return;

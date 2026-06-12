@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, MessageSquareText, ShieldCheck } from 'lucide-react';
 import { api } from '../../lib/api';
-import { sceneLabels, statusLabel } from '../../constants/labels';
+import { sceneLabels, sendStatusKey, statusLabel } from '../../constants/labels';
 import type { SendLog, Template } from '../../types';
 import { Modal } from '../../components/Modal';
 import { SelectField } from '../../components/SelectField';
@@ -139,7 +139,7 @@ export default function ManualSend({
       body: JSON.stringify({ phone, templateId, templateParam: variables })
     });
     setResult(sent);
-    setNotice(`${statusLabel(sent.status)} · ${sent.code}`);
+    setNotice(`${statusLabel(sendStatusKey(sent.status))} · ${sent.code}`);
     setConfirmOpen(false);
     setModalOpen(false);
     await onRefresh();
@@ -196,7 +196,7 @@ export default function ManualSend({
                   <td><strong>{log.templateName || log.templateCode}</strong><span>{log.requestId || log.id}</span></td>
                   <td>{sceneLabels[log.scene] || log.scene}</td>
                   <td>{log.phoneMasked}</td>
-                  <td><StatusBadge status={log.status} /></td>
+                  <td><StatusBadge status={sendStatusKey(log.status)} /></td>
                   <td>{log.provider}</td>
                   <td>{timeLabel(log.createdAt)}</td>
                   <td><button className="tableButton compact" type="button" onClick={() => setSelectedLog(log)}>详情</button></td>
@@ -273,9 +273,9 @@ export default function ManualSend({
         </div>
       </Modal>
 
-      <Modal open={Boolean(result)} title="发送结果详情" subtitle={result ? `${statusLabel(result.status)} · ${result.code}` : undefined} onClose={() => setResult(null)}>
+      <Modal open={Boolean(result)} title="发送结果详情" subtitle={result ? `${statusLabel(sendStatusKey(result.status))} · ${result.code}` : undefined} onClose={() => setResult(null)}>
         <div className="detailCard">
-          <div><span>发送状态</span><strong>{result ? statusLabel(result.status) : '-'}</strong></div>
+          <div><span>发送状态</span><strong>{result ? statusLabel(sendStatusKey(result.status)) : '-'}</strong></div>
           <div><span>Provider</span><strong>{result?.provider || '-'}</strong></div>
           <div><span>手机号</span><strong>{result?.phoneMasked || '-'}</strong></div>
           <div><span>requestId / bizId</span><strong>{result?.requestId || '-'} / {result?.bizId || '-'}</strong></div>
@@ -286,7 +286,7 @@ export default function ManualSend({
       <Modal open={Boolean(selectedLog)} title="手动发送记录详情" subtitle={selectedLog?.requestId || selectedLog?.id} onClose={() => setSelectedLog(null)} size="wide">
         <div className="stack">
           <div className="ruleMetaGrid">
-            <div><span>发送状态</span><strong>{selectedLog ? statusLabel(selectedLog.status) : '-'}</strong></div>
+            <div><span>发送状态</span><strong>{selectedLog ? statusLabel(sendStatusKey(selectedLog.status)) : '-'}</strong></div>
             <div><span>Provider</span><strong>{selectedLog?.provider || '-'}</strong></div>
             <div><span>回执状态</span><strong>{selectedLog?.receiptStatus || '-'}</strong></div>
             <div><span>发送时间</span><strong>{timeLabel(selectedLog?.createdAt)}</strong></div>

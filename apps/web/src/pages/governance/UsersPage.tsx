@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Trash2, Users } from 'lucide-react';
+import { Button } from 'antd';
+import { Trash2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import type { AdminUser, AdminUserDetail, RegisterRequestItem, RoleItem } from '../../types';
 import { Modal } from '../../components/Modal';
 import { SelectField } from '../../components/SelectField';
 import { StatusBadge } from '../../components/StatusBadge';
 import { AuthTree } from '../../components/AuthTree';
-import { AuthC, requireAuth } from '../../lib/auth';
+import { AuthC, getAccessData, requireAuth } from '../../lib/auth';
 import { operationLabel } from '../../constants/labels';
 import { QueryFilterBar, type QueryFilterValues } from '../../components/QueryFilterBar';
 import { defaultPagination, ListPagination, withPaginationParams, type PaginationState } from '../../components/ListPagination';
@@ -18,6 +19,8 @@ const emptyUserForm = { email: '', name: '', phone: '', roleCode: 'operator' };
 const emptyRejectForm = { reason: '' };
 const emptyUserFilters = { keyword: '', status: '', dateFrom: '', dateTo: '' };
 const emptyRequestFilters = { keyword: '', status: '', dateFrom: '', dateTo: '' };
+const emptyResetResult = { setupToken: '', setupUrl: '', expiresAt: '' };
+const emptyCreateResult = { name: '', email: '', initialPassword: '' };
 
 export default function UsersPage({ setNotice }: { setNotice: (value: string) => void }) {
   const [tab, setTab] = useState<UserTab>('users');
@@ -31,10 +34,13 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
   const [form, setForm] = useState(emptyUserForm);
   const [editForm, setEditForm] = useState({ id: '', name: '', phone: '', roleCode: 'operator' });
   const [rejectForm, setRejectForm] = useState(emptyRejectForm);
+  const [createResult, setCreateResult] = useState(emptyCreateResult);
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<AdminUser | null>(null);
   const [deletingUser, setDeletingUser] = useState<AdminUser | null>(null);
   const [statusUser, setStatusUser] = useState<AdminUser | null>(null);
+  const [resetUser, setResetUser] = useState<AdminUser | null>(null);
+  const [resetResult, setResetResult] = useState(emptyResetResult);
   const [selectedUser, setSelectedUser] = useState<AdminUserDetail | null>(null);
   const [roleForm, setRoleForm] = useState({ name: '', description: '', permissions: [] as string[] });
   const [selectedRequest, setSelectedRequest] = useState<RegisterRequestItem | null>(null);
@@ -58,6 +64,14 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
     const source = [...new Set(role.permissions)].sort();
     const next = [...new Set(roleForm.permissions)].sort();
     return source.length !== next.length || source.some((permission, index) => permission !== next[index]);
+  }
+
+  function isSystemAdmin(user?: Pick<AdminUser, 'roles'> | null) {
+    return Boolean(user?.roles.some((role) => role.code === 'admin'));
+  }
+
+  function isCurrentPlatformAdmin() {
+    return Boolean(getAccessData()?.roles?.some((role) => role.code === 'admin'));
   }
 
   async function loadUsers(nextFilters = userFilters, nextPagination = userPagination) {
@@ -91,7 +105,12 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
       method: 'POST',
       body: JSON.stringify(form)
     });
-    setNotice(result.initialPassword ? `用户已创建，初始密码 ${result.initialPassword}` : '用户已创建');
+    setCreateResult({
+      name: form.name,
+      email: form.email,
+      initialPassword: result.initialPassword || ''
+    });
+    setNotice('用户已创建');
     setForm(emptyUserForm);
     setCreateOpen(false);
     await load();
@@ -165,6 +184,11 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
   }
 
   async function changeStatus(user: AdminUser) {
+    if (isSystemAdmin(user)) {
+      setNotice('系统管理员账号不能在前端禁用');
+      setStatusUser(null);
+      return;
+    }
     try {
       await api(`/api/users/${user.id}/status`, {
         method: 'POST',
@@ -178,9 +202,25 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
     }
   }
 
-  async function resetPassword(user: AdminUser) {
-    const result = await api<{ setupToken: string }>(`/api/users/${user.id}/reset-password`, { method: 'POST' });
-    setNotice(`${user.name} 的设置密码链接 token：${result.setupToken}`);
+  async function resetPassword() {
+    if (!resetUser) return;
+    const result = await api<{ setupToken: string; expiresAt?: string }>(`/api/users/${resetUser.id}/reset-password`, { method: 'POST' });
+    const setupUrl = `${window.location.origin}/set-password?token=${encodeURIComponent(result.setupToken)}`;
+    setResetResult({ setupToken: result.setupToken, setupUrl, expiresAt: result.expiresAt || '' });
+    setNotice(`${resetUser.name} 的密码已重置，请发送设置密码链接给用户`);
+    await load();
+  }
+
+  async function copyResetLink() {
+    if (!resetResult.setupUrl) return;
+    await navigator.clipboard?.writeText(resetResult.setupUrl);
+    setNotice('设置密码链接已复制');
+  }
+
+  async function copyInitialPassword() {
+    if (!createResult.initialPassword) return;
+    await navigator.clipboard?.writeText(createResult.initialPassword);
+    setNotice('初始密码已复制');
   }
 
   async function openUserDetail(user: AdminUser) {
@@ -190,6 +230,11 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
 
   async function deleteUser() {
     if (!deletingUser) return;
+    if (isSystemAdmin(deletingUser)) {
+      setNotice('系统管理员账号不能在前端删除');
+      setDeletingUser(null);
+      return;
+    }
     await api(`/api/users/${deletingUser.id}/delete`, { method: 'POST' });
     setNotice(`${deletingUser.name} 已删除`);
     setDeletingUser(null);
@@ -227,12 +272,23 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
             <h2>用户管理</h2>
             <span>后台账号、固定角色和注册申请审核</span>
           </div>
-          <div className="inlineActions">
-            <button className={`segmentButton${tab === 'users' ? ' active' : ''}`} type="button" onClick={() => setTab('users')}>后台用户</button>
-            <button className={`segmentButton${tab === 'requests' ? ' active' : ''}`} type="button" onClick={() => setTab('requests')}>注册申请</button>
-            {tab === 'users' && (
+        </div>
+
+        <div className="accountPageToolbar">
+          <div className="accountTextTabs" role="tablist" aria-label="用户管理视图">
+            <button className={`accountTextTab${tab === 'users' ? ' active' : ''}`} type="button" role="tab" aria-selected={tab === 'users'} onClick={() => setTab('users')}>
+              <span>账号列表</span>
+              <em>{userPagination.total}</em>
+            </button>
+            <button className={`accountTextTab${tab === 'requests' ? ' active' : ''}`} type="button" role="tab" aria-selected={tab === 'requests'} onClick={() => setTab('requests')}>
+              <span>注册审核</span>
+              <em>{requestPagination.total}</em>
+            </button>
+          </div>
+          <div className="accountToolbarActions">
+            {tab === 'users' && isCurrentPlatformAdmin() && (
               <AuthC authKey="account:user:add">
-                <button className="secondaryButton compact" type="button" onClick={() => setCreateOpen(true)}><Users size={16} />新建账号</button>
+                <Button type="primary" onClick={() => setCreateOpen(true)}>新建账号</Button>
               </AuthC>
             )}
           </div>
@@ -279,14 +335,21 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
                             <button className="tableButton" type="button" onClick={() => openEdit(user)}>编辑</button>
                           </AuthC>
                           <AuthC authKey="account:user:resetPassword">
-                            <button className="tableButton" type="button" onClick={() => resetPassword(user)}>重置密码</button>
+                            <button className="tableButton" type="button" onClick={() => {
+                              setResetUser(user);
+                              setResetResult(emptyResetResult);
+                            }}>重置密码</button>
                           </AuthC>
-                          <AuthC authKey="account:user:status">
-                            <button className="tableButton" type="button" onClick={() => setStatusUser(user)}>{user.status === 'active' ? '禁用' : '启用'}</button>
-                          </AuthC>
-                          <AuthC authKey="account:user:delete">
-                            <button className="tableButton danger" type="button" onClick={() => setDeletingUser(user)}>删除</button>
-                          </AuthC>
+                          {!isSystemAdmin(user) && (
+                            <AuthC authKey="account:user:status">
+                              <button className="tableButton" type="button" onClick={() => setStatusUser(user)}>{user.status === 'active' ? '禁用' : '启用'}</button>
+                            </AuthC>
+                          )}
+                          {!isSystemAdmin(user) && (
+                            <AuthC authKey="account:user:delete">
+                              <button className="tableButton danger" type="button" onClick={() => setDeletingUser(user)}>删除</button>
+                            </AuthC>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -325,7 +388,7 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
                     <tr key={item.id}>
                       <td><strong>{item.name}</strong><span>{item.email}{item.phone ? ` · ${item.phone}` : ''}</span></td>
                       <td>{roleMap.get(item.requestedRole)?.name || item.requestedRole}</td>
-                      <td><StatusBadge status={item.status === 'approved' ? 'success' : item.status === 'rejected' ? 'failed' : 'pending'} /></td>
+                      <td><StatusBadge status={item.status === 'approved' ? 'success' : item.status === 'rejected' ? 'failed' : 'register_pending'} /></td>
                       <td>{new Date(item.createdAt).toLocaleString()}</td>
                       <td>
                         <div className="inlineActions">
@@ -367,6 +430,25 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
             <button className="primaryButton compact" type="submit">创建</button>
           </div>
         </form>
+      </Modal>
+
+      <Modal open={Boolean(createResult.email)} title="账号创建成功" subtitle={createResult.email} onClose={() => setCreateResult(emptyCreateResult)} showClose={false}>
+        <div className="formPanel">
+          <div className="readonlyBox">
+            <div>
+              <strong>{createResult.name} 已创建</strong>
+              <span>请将初始密码安全发送给用户。用户首次登录后可在右上角修改密码。</span>
+            </div>
+          </div>
+          <div className="detailCard">
+            <div><span>账号邮箱</span><strong>{createResult.email}</strong></div>
+            <div><span>初始密码</span><strong>{createResult.initialPassword || '-'}</strong></div>
+          </div>
+          <div className="modalActions">
+            <button className="secondaryButton compact" type="button" onClick={() => setCreateResult(emptyCreateResult)}>关闭</button>
+            <button className="primaryButton compact" type="button" onClick={copyInitialPassword} disabled={!createResult.initialPassword}>复制密码</button>
+          </div>
+        </div>
       </Modal>
 
       <Modal open={Boolean(editing)} title="编辑用户" subtitle={editing?.email} onClose={() => setEditing(null)} size="wide" showClose={false}>
@@ -446,6 +528,44 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
         )}
       </Modal>
 
+      <Modal open={Boolean(resetUser)} title="重置密码" subtitle={resetUser?.email} onClose={() => setResetUser(null)} showClose={false}>
+        {resetUser && (
+          <div className="formPanel">
+            {!resetResult.setupUrl ? (
+              <>
+                <div className="detailCard">
+                  <div><span>用户</span><strong>{resetUser.name}</strong></div>
+                  <div><span>邮箱</span><strong>{resetUser.email}</strong></div>
+                  <div><span>角色</span><strong>{resetUser.roles.map((role) => role.name).join(' / ') || '-'}</strong></div>
+                </div>
+                <div className="fieldBlock">
+                  <span>重置影响</span>
+                  <strong>确认后该用户当前密码会失效，已登录会话会被退出。系统会生成一次性设置密码链接，由管理员发送给用户自行设置新密码。</strong>
+                </div>
+                <div className="modalActions">
+                  <button className="secondaryButton compact" type="button" onClick={() => setResetUser(null)}>取消</button>
+                  <button className="primaryButton compact" type="button" onClick={resetPassword}>确认重置</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="readonlyBox">
+                  <div>
+                    <strong>密码已重置，等待用户重新设置</strong>
+                    <span>旧密码和原登录会话已失效。请把下面链接发送给 {resetUser.name}，链接有效期至 {resetResult.expiresAt ? new Date(resetResult.expiresAt).toLocaleString() : '24 小时后'}。</span>
+                  </div>
+                </div>
+                <label>设置密码链接<input value={resetResult.setupUrl} readOnly /></label>
+                <div className="modalActions">
+                  <button className="secondaryButton compact" type="button" onClick={() => setResetUser(null)}>关闭</button>
+                  <button className="primaryButton compact" type="button" onClick={copyResetLink}>复制链接</button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </Modal>
+
       <Modal open={Boolean(selectedUser)} title="用户详情" onClose={() => setSelectedUser(null)}>
         {selectedUser && (
           <div className="formPanel">
@@ -505,7 +625,7 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
               <div><span>申请人</span><strong>{selectedRequest.name}</strong></div>
               <div><span>手机号</span><strong>{selectedRequest.phone || '-'}</strong></div>
               <div><span>申请角色</span><strong>{roleMap.get(selectedRequest.requestedRole)?.name || selectedRequest.requestedRole}</strong></div>
-              <div><span>状态</span><StatusBadge status={selectedRequest.status === 'approved' ? 'success' : selectedRequest.status === 'rejected' ? 'failed' : 'pending'} /></div>
+              <div><span>状态</span><StatusBadge status={selectedRequest.status === 'approved' ? 'success' : selectedRequest.status === 'rejected' ? 'failed' : 'register_pending'} /></div>
             </div>
             <div className="fieldBlock"><span>申请说明</span><strong>{selectedRequest.reason || '-'}</strong></div>
             {selectedRequest.rejectReason && <div className="fieldBlock"><span>驳回原因</span><strong>{selectedRequest.rejectReason}</strong></div>}

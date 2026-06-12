@@ -329,7 +329,7 @@ function demoLog(index) {
   const createdAt = dateAgo(Math.floor(index / 5), index % 8, index * 3);
   return {
     id: `demo_log_${index + 1}`,
-    provider: index % 4 === 0 ? 'aliyun_dypns' : 'mock',
+    provider: 'aliyun_dypns',
     triggerType: index % 5 === 0 ? 'manual' : 'auto',
     scene: scenario.scene,
     phone,
@@ -424,10 +424,10 @@ async function main() {
     });
   }
 
-  const adminEmail = process.env.ADMIN_BOOTSTRAP_EMAIL || 'admin@sms.local';
+  const adminEmail = process.env.ADMIN_BOOTSTRAP_EMAIL || 'admin';
   const adminPassword = process.env.ADMIN_BOOTSTRAP_PASSWORD || 'Admin123!';
   const admin = await prisma.adminUser.upsert({
-    where: { email: adminEmail },
+    where: { id: 'admin_bootstrap' },
     create: {
       id: 'admin_bootstrap',
       email: adminEmail,
@@ -436,6 +436,7 @@ async function main() {
       status: 'active'
     },
     update: {
+      email: adminEmail,
       name: '平台管理员',
       status: 'active'
     }
@@ -475,12 +476,12 @@ async function main() {
   }
 
   const settings = [
-    { key: 'sms.provider', value: { provider: process.env.SMS_PROVIDER || 'mock' } },
+    { key: 'sms.provider', value: { provider: process.env.SMS_PROVIDER || 'aliyun_dypns' } },
     { key: 'sms.worker', value: { enabled: false, intervalMs: 30000, batchSize: 20, allowRealSend: false } },
     { key: 'sms.short_link', value: { enabled: true, baseUrl: 'http://127.0.0.1:3100', targetUrl: 'https://example.com/sms-touch-platform' } },
-    { key: 'sms.safety', value: { requireWhitelistForMock: false, requireWhitelistForRealProvider: true } },
+    { key: 'sms.safety', value: { requireWhitelistForRealProvider: true } },
     { key: 'sms.verification_code', value: { validMinutes: 5, resendIntervalSeconds: 60, dailyLimit: 10 } },
-    { key: 'sms.receipt', value: { enabled: true, allowMockDelivered: true } },
+    { key: 'sms.receipt', value: { enabled: true } },
     {
       key: 'sms.aliyun',
       value: {
@@ -489,6 +490,26 @@ async function main() {
         region: process.env.ALIYUN_DYPNS_REGION || 'cn-hangzhou',
         signName: process.env.ALIYUN_SMS_SIGN_NAME || '速通互联验证码',
         templateCode: process.env.ALIYUN_SMS_TEMPLATE_CODE || '100001'
+      }
+    },
+    {
+      key: 'sms.provider_configs',
+      value: {
+        items: [
+          {
+            id: 'provider_aliyun_default',
+            name: '阿里云短信通道',
+            provider: 'aliyun_dypns',
+            endpoint: process.env.ALIYUN_DYPNS_ENDPOINT || 'dypnsapi.aliyuncs.com',
+            region: process.env.ALIYUN_DYPNS_REGION || 'cn-hangzhou',
+            signName: process.env.ALIYUN_SMS_SIGN_NAME || '速通互联验证码',
+            templateCode: process.env.ALIYUN_SMS_TEMPLATE_CODE || '100001',
+            status: 'enabled',
+            remark: '默认服务商配置，密钥从环境变量读取。',
+            createdAt: null,
+            updatedAt: null
+          }
+        ]
       }
     }
   ];
@@ -594,7 +615,7 @@ async function main() {
       id: 'demo_data_source_member_expiring',
       name: '会员到期名单数据源',
       systemName: '会员中心',
-      endpoint: 'mock://member-expiring',
+      endpoint: 'https://example.com/api/member-expiring',
       method: 'GET',
       authType: 'none',
       requestConfig: { params: { limit: 4 } },
@@ -623,7 +644,7 @@ async function main() {
     update: {
       name: '会员到期名单数据源',
       systemName: '会员中心',
-      endpoint: 'mock://member-expiring',
+      endpoint: 'https://example.com/api/member-expiring',
       method: 'GET',
       authType: 'none',
       requestConfig: { params: { limit: 4 } },
@@ -915,16 +936,16 @@ async function main() {
       createdAt: dateAgo(1, 2),
       payload: {
         scenario: '配置变更',
-        reason: '从 mock 切换到阿里云测试通道。',
+        reason: '启用阿里云真实短信通道。',
         riskLevel: 'high',
-        before: { provider: { provider: 'mock' } },
+        before: { provider: { provider: 'aliyun_dypns' } },
         after: { provider: { provider: 'aliyun_dypns' } },
         impact: { title: '真实发送安全策略', description: '审批通过后真实服务商配置生效。' },
         execute: { type: 'update_system_settings', settings: { 'sms.provider': { provider: 'aliyun_dypns' } } },
         executeResult: { executed: true, type: 'update_system_settings', result: { appliedKeys: ['sms.provider'] } },
         summary: { scenario: '配置变更', reason: 'Provider 切换', riskLevel: 'high', impact: { title: '真实发送安全策略' } }
       },
-      records: [['create', '申请切换阿里云测试通道'], ['approve', '测试手机号均已加入白名单，同意。']]
+      records: [['create', '申请确认阿里云真实短信通道'], ['approve', '测试手机号均已加入白名单，同意。']]
     },
     {
       id: 'demo_approval_plain_export',

@@ -15,7 +15,7 @@ function approvalStatus(status: string) {
   if (status === 'approved') return 'success';
   if (status === 'rejected') return 'failed';
   if (status === 'withdrawn') return 'cancelled';
-  return 'pending';
+  return 'approval_pending';
 }
 
 function formatJson(value: unknown) {

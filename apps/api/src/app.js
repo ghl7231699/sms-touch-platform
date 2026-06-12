@@ -10,7 +10,14 @@ import {
   copyRule,
   estimateRuleImpact,
   getDashboard,
+  getClickLog,
+  getEvent,
+  getLog,
+  getReceipt,
+  getRule,
   getStats,
+  getTask,
+  getTemplate,
   listClickLogs,
   listEvents,
   listLogs,
@@ -157,6 +164,13 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  const templateDetailMatch = url.pathname.match(/^\/api\/(?:sms\/)?templates\/([^/]+)$/);
+  if (req.method === 'GET' && templateDetailMatch) {
+    const result = await getTemplate(decodeURIComponent(templateDetailMatch[1]));
+    sendJson(res, result.statusCode, result.body);
+    return;
+  }
+
   if (req.method === 'POST' && (url.pathname === '/api/templates' || url.pathname === '/api/sms/templates')) {
     const result = await createTemplate(await readJson(req));
     sendJson(res, result.statusCode, result.body);
@@ -179,6 +193,13 @@ async function handleApi(req, res, url) {
 
   if (req.method === 'GET' && (url.pathname === '/api/rules' || url.pathname === '/api/sms/rules')) {
     sendJson(res, 200, await listRules());
+    return;
+  }
+
+  const ruleDetailMatch = url.pathname.match(/^\/api\/(?:sms\/)?rules\/([^/]+)$/);
+  if (req.method === 'GET' && ruleDetailMatch) {
+    const result = await getRule(decodeURIComponent(ruleDetailMatch[1]));
+    sendJson(res, result.statusCode, result.body);
     return;
   }
 
@@ -276,8 +297,22 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  const eventDetailMatch = url.pathname.match(/^\/api\/(?:sms\/)?events\/([^/]+)$/);
+  if (req.method === 'GET' && eventDetailMatch) {
+    const result = await getEvent(decodeURIComponent(eventDetailMatch[1]));
+    sendJson(res, result.statusCode, result.body);
+    return;
+  }
+
   if (req.method === 'GET' && (url.pathname === '/api/tasks' || url.pathname === '/api/sms/tasks')) {
     sendJson(res, 200, await listTasks(Object.fromEntries(url.searchParams.entries())));
+    return;
+  }
+
+  const taskDetailMatch = url.pathname.match(/^\/api\/(?:sms\/)?tasks\/([^/]+)$/);
+  if (req.method === 'GET' && taskDetailMatch) {
+    const result = await getTask(decodeURIComponent(taskDetailMatch[1]));
+    sendJson(res, result.statusCode, result.body);
     return;
   }
 
@@ -301,13 +336,27 @@ async function handleApi(req, res, url) {
     return;
   }
 
-  if (req.method === 'GET' && url.pathname === '/api/receipts') {
+  if (req.method === 'GET' && (url.pathname === '/api/receipts' || url.pathname === '/api/sms/receipts')) {
     sendJson(res, 200, await listReceipts(Object.fromEntries(url.searchParams.entries())));
     return;
   }
 
-  if (req.method === 'GET' && url.pathname === '/api/click-logs') {
+  const receiptDetailMatch = url.pathname.match(/^\/api\/(?:sms\/)?receipts\/([^/]+)$/);
+  if (req.method === 'GET' && receiptDetailMatch) {
+    const result = await getReceipt(decodeURIComponent(receiptDetailMatch[1]));
+    sendJson(res, result.statusCode, result.body);
+    return;
+  }
+
+  if (req.method === 'GET' && (url.pathname === '/api/click-logs' || url.pathname === '/api/sms/click-logs')) {
     sendJson(res, 200, await listClickLogs(Object.fromEntries(url.searchParams.entries())));
+    return;
+  }
+
+  const clickLogDetailMatch = url.pathname.match(/^\/api\/(?:sms\/)?click-logs\/([^/]+)$/);
+  if (req.method === 'GET' && clickLogDetailMatch) {
+    const result = await getClickLog(decodeURIComponent(clickLogDetailMatch[1]));
+    sendJson(res, result.statusCode, result.body);
     return;
   }
 
@@ -323,6 +372,13 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  const sendLogDetailMatch = url.pathname.match(/^\/api\/(?:sms\/)?send-logs\/([^/]+)$/);
+  if (req.method === 'GET' && sendLogDetailMatch) {
+    const result = await getLog(decodeURIComponent(sendLogDetailMatch[1]));
+    sendJson(res, result.statusCode, result.body);
+    return;
+  }
+
   if (req.method === 'GET' && (url.pathname === '/api/sms/stats/overview' || url.pathname === '/api/sms/stats')) {
     sendJson(res, 200, await getStats());
     return;
@@ -334,7 +390,7 @@ async function handleApi(req, res, url) {
   }
 
   if (url.pathname.startsWith('/api/')) {
-    sendJson(res, 404, { error: 'API not found' });
+    sendJson(res, 404, { success: false, code: 'API_NOT_FOUND', message: 'API not found.' });
     return;
   }
 

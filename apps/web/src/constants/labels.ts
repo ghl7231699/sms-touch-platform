@@ -17,7 +17,10 @@ export function statusLabel(status: string) {
     enabled: '启用',
     disabled: '停用',
     success: '成功',
-    pending: '待发送',
+    pending: '待处理',
+    task_pending: '待发送',
+    approval_pending: '待审批',
+    register_pending: '待审核',
     sending: '发送中',
     failed: '失败',
     partial_failed: '部分失败',
@@ -31,6 +34,14 @@ export function statusLabel(status: string) {
     withdrawn: '已撤回',
     locked: '锁定'
   }[status] || status;
+}
+
+export function taskStatusKey(status?: string) {
+  return status === 'pending' ? 'task_pending' : status || '';
+}
+
+export function sendStatusKey(status?: string) {
+  return status === 'pending' ? 'task_pending' : status || '';
 }
 
 export function conditionLabel(condition: string) {
