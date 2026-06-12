@@ -7,12 +7,7 @@
 ## 快速启动
 
 ```bash
-npm install
-cp .env.example .env
-npm run db:up
-npm run db:migrate
-npm run db:seed
-npm run dev
+./scripts/start-dev.sh --install --seed
 ```
 
 开发模式打开：
@@ -21,7 +16,19 @@ npm run dev
 http://127.0.0.1:5173
 ```
 
-`npm run dev` 会同时启动后端 `3100` 和 React/Vite `5173`，前端支持 hot reload。生产构建或只看构建产物时，可执行 `npm run build && npm run dev:server`，然后访问 `http://127.0.0.1:3100`。
+日常启动：
+
+```bash
+./scripts/start-dev.sh
+```
+
+也可以通过 npm 别名启动：
+
+```bash
+npm run dev:sh
+```
+
+脚本会自动复制 `.env`、启动本地 PostgreSQL 容器、等待数据库就绪、执行 Prisma migration，并同时启动后端 `3100` 和 React/Vite `5173`。生产构建或只看构建产物时，可执行 `npm run build && npm run dev:server`，然后访问 `http://127.0.0.1:3100`。
 
 默认 `SMS_PROVIDER=mock`，不会真实发送短信。只有在 `.env` 中显式设置 `SMS_PROVIDER=aliyun_dypns` 并填写 AccessKey 后，才会调用阿里云 SDK。
 
@@ -31,10 +38,8 @@ http://127.0.0.1:5173
 
 后台任务 worker 默认关闭，避免真实短信模式下误发。需要自动扫描到期任务时显式开启：
 
-```text
-SMS_TASK_WORKER_ENABLED=true
-SMS_TASK_WORKER_INTERVAL_MS=30000
-SMS_TASK_WORKER_BATCH_SIZE=20
+```bash
+./scripts/start-dev.sh --worker
 ```
 
 当 `SMS_PROVIDER` 不是 `mock` 时，还必须设置 `SMS_TASK_WORKER_ALLOW_REAL_SEND=true`，worker 才会启动。

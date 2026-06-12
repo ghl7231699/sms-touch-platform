@@ -14,12 +14,7 @@
 ## 首次启动
 
 ```bash
-npm install
-cp .env.example .env
-npm run db:up
-npm run db:migrate
-npm run db:seed
-npm run dev
+./scripts/start-dev.sh --install --seed
 ```
 
 启动后打开：
@@ -28,15 +23,14 @@ npm run dev
 http://127.0.0.1:5173
 ```
 
-`npm run dev` 会同时启动后端 `3100` 和 React/Vite `5173`，前端支持 hot reload。默认 `SMS_PROVIDER=mock`，不会真实发送短信。
+脚本会自动复制 `.env`、启动本地 PostgreSQL 容器、等待数据库就绪、执行 Prisma migration、按需写入 seed 数据，并同时启动后端 `3100` 和 React/Vite `5173`。默认 `SMS_PROVIDER=mock`，不会真实发送短信。
 
 ## 日常启动
 
 如果已经完成过首次初始化，日常只需要：
 
 ```bash
-npm run db:up
-npm run dev
+./scripts/start-dev.sh
 ```
 
 访问热更新开发页：
@@ -48,10 +42,20 @@ http://127.0.0.1:5173
 需要后台自动扫描到期任务时：
 
 ```bash
-npm run dev:worker
+./scripts/start-dev.sh --worker
 ```
 
-`dev:worker` 会启用内置任务 worker，但仍然使用 `.env` 中的短信通道配置。
+`--worker` 会启用内置任务 worker，但仍然使用 `.env` 中的短信通道配置。
+
+脚本参数：
+
+| 参数 | 用途 |
+| --- | --- |
+| `--install` | 启动前执行 `npm install` |
+| `--seed` | 启动前写入或刷新演示数据 |
+| `--worker` | 启动 API 内置任务 worker，同时启动 Web |
+| `--skip-db` | 跳过 Docker PostgreSQL 启动和健康检查 |
+| `--skip-migrate` | 跳过 Prisma migration |
 
 ## 环境变量
 
@@ -151,6 +155,7 @@ SMS_TASK_WORKER_ALLOW_REAL_SEND=false
 | 命令 | 用途 |
 | --- | --- |
 | `npm run dev` | 同时启动后端 `3100` 和 React/Vite `5173`，支持 hot reload |
+| `npm run dev:sh` | 通过 `scripts/start-dev.sh` 完成数据库准备、migration 和开发服务启动 |
 | `npm run dev:api` | 只启动后端 API，访问 `3100` |
 | `npm run dev:server` | `dev:api` 的兼容别名 |
 | `npm run dev:web` | 只启动 React/Vite 开发服务，访问 `5173` |
