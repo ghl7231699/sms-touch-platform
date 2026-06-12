@@ -227,11 +227,11 @@ export default function PhoneListPage({ kind, title, setNotice }: { kind: PhoneL
 
   return (
     <section className="stack">
-      <section className="panel">
-        <div className="panelTitle">
+      <section className="moduleSummaryPanel">
+        <div className="moduleHeader">
           <div>
-            <h2>{title}</h2>
-            <span>共 {items.length} 条，支持按手机号、状态、场景和日期查询</span>
+            <h1>{title}</h1>
+            <p>共 {items.length} 条，支持按手机号、状态、场景和日期查询。</p>
           </div>
           <div className="inlineActions">
             <AuthC authKey={`${authPrefix}:add`}>

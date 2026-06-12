@@ -83,11 +83,11 @@ export default function ApprovalsPage({ setNotice }: { setNotice: (value: string
   }
 
   return (
-    <section className="panel">
-      <div className="panelTitle">
+    <section className="moduleSummaryPanel">
+      <div className="moduleHeader">
         <div>
-          <h2>审批记录</h2>
-          <span>高风险操作从业务动作发起，审批通过后才执行</span>
+          <h1>审批记录</h1>
+          <p>高风险操作从业务动作发起，审批通过后才执行。</p>
         </div>
       </div>
 

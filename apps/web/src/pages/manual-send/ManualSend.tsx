@@ -148,11 +148,11 @@ export default function ManualSend({
 
   return (
     <section className="stack">
-      <section className="panel">
-        <div className="panelTitle">
+      <section className="moduleSummaryPanel">
+        <div className="moduleHeader">
           <div>
-            <h2>手动发送</h2>
-            <span>面向客服补发、运营小范围验证和异常通知的单号码触达。</span>
+            <h1>手动发送</h1>
+            <p>面向客服补发、运营小范围验证和异常通知的单号码触达。</p>
           </div>
           <AuthC authKey="touch:manual:send">
             <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(true)}>新建发送</button>

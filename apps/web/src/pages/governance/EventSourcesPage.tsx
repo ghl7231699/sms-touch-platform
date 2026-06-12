@@ -132,11 +132,11 @@ export default function EventSourcesPage({ setNotice }: { setNotice: (value: str
 
   return (
     <section className="stack">
-      <section className="panel">
-        <div className="panelTitle">
+      <section className="moduleSummaryPanel">
+        <div className="moduleHeader">
           <div>
-            <h2>业务系统接入</h2>
-            <span>管理来源系统 appId、secret、启停和调用状态</span>
+            <h1>业务系统接入</h1>
+            <p>管理来源系统 appId、secret、启停和调用状态。</p>
           </div>
           <AuthC authKey="integration:eventSource:add">
             <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(true)}><KeyRound size={16} />新建来源</button>

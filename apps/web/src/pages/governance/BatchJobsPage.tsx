@@ -73,11 +73,11 @@ export default function BatchJobsPage() {
   }
 
   return (
-    <section className="panel">
-      <div className="panelTitle">
+    <section className="moduleSummaryPanel">
+      <div className="moduleHeader">
         <div>
-          <h2>批量操作</h2>
-          <span>批次由任务中心、名单导入等真实业务动作生成</span>
+          <h1>批量操作</h1>
+          <p>批次由任务中心、名单导入等真实业务动作生成。</p>
         </div>
       </div>
 

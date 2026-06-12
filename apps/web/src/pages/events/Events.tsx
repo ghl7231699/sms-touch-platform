@@ -120,11 +120,11 @@ export default function Events({
 
   return (
     <section className="stack">
-      <section className="panel">
-        <div className="panelTitle">
+      <section className="moduleSummaryPanel">
+        <div className="moduleHeader">
           <div>
-            <h2>事件流水</h2>
-            <span>展示业务事件进入触达系统后的匹配、派生任务和 payload。</span>
+            <h1>事件流水</h1>
+            <p>展示业务事件进入触达系统后的匹配、派生任务和 payload。</p>
           </div>
           <AuthC authKey="touch:event:simulate">
             <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(true)}><Zap size={16} />模拟事件</button>

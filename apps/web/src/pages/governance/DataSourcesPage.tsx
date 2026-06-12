@@ -231,11 +231,11 @@ export default function DataSourcesPage({ rules, templates, setNotice, onRefresh
 
   return (
     <section className="stack">
-      <section className="panel">
-        <div className="panelTitle">
+      <section className="moduleSummaryPanel">
+        <div className="moduleHeader">
           <div>
-            <h2>数据来源</h2>
-            <span>调用外部系统接口，完成字段映射、规则适配和批量生成任务</span>
+            <h1>数据来源</h1>
+            <p>调用外部系统接口，完成字段映射、规则适配和批量生成任务。</p>
           </div>
           <AuthC authKey="integration:dataSource:add">
             <button className="secondaryButton compact" type="button" onClick={() => { setForm(emptyForm); setDraftPreview(null); setModalOpen(true); }}><Plus size={16} />新建数据来源</button>

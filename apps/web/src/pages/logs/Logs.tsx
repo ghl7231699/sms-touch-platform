@@ -91,11 +91,11 @@ export default function Logs({
 
   return (
     <section className="stack">
-      <section className="panel">
-        <div className="panelTitle">
+      <section className="moduleSummaryPanel">
+        <div className="moduleHeader">
           <div>
-            <h2>发送记录</h2>
-            <span>追踪 Provider 返回、回执、短链点击和触发来源。</span>
+            <h1>发送记录</h1>
+            <p>追踪 Provider 返回、回执、短链点击和触发来源。</p>
           </div>
           <span>共 {pagination.total} 条</span>
         </div>

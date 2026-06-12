@@ -266,11 +266,11 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
 
   return (
     <section className="stack">
-      <section className="panel">
-        <div className="panelTitle">
+      <section className="moduleSummaryPanel">
+        <div className="moduleHeader">
           <div>
-            <h2>用户管理</h2>
-            <span>后台账号、固定角色和注册申请审核</span>
+            <h1>用户管理</h1>
+            <p>后台账号、固定角色和注册申请审核。</p>
           </div>
         </div>
 

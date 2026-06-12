@@ -101,11 +101,11 @@ export default function ExportTasksPage({ setNotice }: { setNotice: (value: stri
   }
 
   return (
-    <section className="panel">
-      <div className="panelTitle">
+    <section className="moduleSummaryPanel">
+      <div className="moduleHeader">
         <div>
-          <h2>导出任务</h2>
-          <span>按资源创建导出，明文敏感字段需审批</span>
+          <h1>导出任务</h1>
+          <p>按资源创建导出，明文敏感字段需审批。</p>
         </div>
         <AuthC authKey="audit:exportTask:add">
           <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(true)}><FileText size={16} />新建导出</button>

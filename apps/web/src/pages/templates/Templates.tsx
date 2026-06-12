@@ -183,6 +183,15 @@ export default function Templates({ templates, onRefresh, setNotice }: { templat
     });
   }
 
+  function applyEditScenePreset(scene: string) {
+    const preset = presetForScene(scene);
+    setEditForm({
+      ...editForm,
+      scene,
+      providerTemplateId: preset.providerTemplateId
+    });
+  }
+
   async function toggle(template: Template) {
     await api(`/api/templates/${template.id}/status`, {
       method: 'POST',
@@ -194,9 +203,10 @@ export default function Templates({ templates, onRefresh, setNotice }: { templat
 
   async function create(event: React.FormEvent) {
     event.preventDefault();
+    const preset = presetForScene(form.scene);
     await api('/api/templates', {
       method: 'POST',
-      body: JSON.stringify({ ...form, variables: formVariables.length ? formVariables : defaultVariables })
+      body: JSON.stringify({ ...form, providerTemplateId: preset.providerTemplateId, variables: formVariables.length ? formVariables : defaultVariables })
     });
     setNotice(`${form.name} 已创建`);
     setForm({ ...form, name: '', variables: defaultVariables.join(', ') });
@@ -208,9 +218,10 @@ export default function Templates({ templates, onRefresh, setNotice }: { templat
     event.preventDefault();
     if (!editingTemplate) return;
     const variables = editVariables.length ? editVariables : defaultVariables;
+    const preset = presetForScene(editForm.scene);
     await api(`/api/templates/${editingTemplate.id}/update`, {
       method: 'POST',
-      body: JSON.stringify({ ...editForm, variables })
+      body: JSON.stringify({ ...editForm, providerTemplateId: preset.providerTemplateId, variables })
     });
     setNotice(`${editForm.name} 已更新`);
     setEditingTemplate(null);
@@ -400,7 +411,7 @@ export default function Templates({ templates, onRefresh, setNotice }: { templat
             <label>业务场景
               <SelectField value={form.scene} options={sceneOptions} onChange={applyScenePreset} />
             </label>
-            <label>服务商模板 Code<input value={form.providerTemplateId} onChange={(event) => setForm({ ...form, providerTemplateId: event.target.value })} /></label>
+            <label>服务商模板 Code<input value={form.providerTemplateId} readOnly aria-readonly="true" title="服务商模板 Code 由业务场景自动带出，不支持手动修改" /></label>
             <label>变量列表<input value={form.variables} onChange={(event) => setForm({ ...form, variables: event.target.value })} placeholder="link" /></label>
             <label>短链目标地址<input value={form.shortLinkTargetUrl} onChange={(event) => setForm({ ...form, shortLinkTargetUrl: event.target.value })} placeholder="https://example.com/landing-page" /></label>
           </div>
@@ -422,9 +433,9 @@ export default function Templates({ templates, onRefresh, setNotice }: { templat
             <div className="formGrid two">
               <label>模板名称<input value={editForm.name} onChange={(event) => setEditForm({ ...editForm, name: event.target.value })} required /></label>
               <label>业务场景
-                <SelectField value={editForm.scene} options={sceneOptions} onChange={(scene) => setEditForm({ ...editForm, scene })} />
+                <SelectField value={editForm.scene} options={sceneOptions} onChange={applyEditScenePreset} />
               </label>
-              <label>服务商模板 Code<input value={editForm.providerTemplateId} onChange={(event) => setEditForm({ ...editForm, providerTemplateId: event.target.value })} /></label>
+              <label>服务商模板 Code<input value={editForm.providerTemplateId} readOnly aria-readonly="true" title="服务商模板 Code 由业务场景自动带出，不支持手动修改" /></label>
               <label>变量列表<input value={editForm.variables} onChange={(event) => setEditForm({ ...editForm, variables: event.target.value })} placeholder="link" /></label>
               <label>短链目标地址<input value={editForm.shortLinkTargetUrl} onChange={(event) => setEditForm({ ...editForm, shortLinkTargetUrl: event.target.value })} placeholder="https://example.com/landing-page" /></label>
             </div>

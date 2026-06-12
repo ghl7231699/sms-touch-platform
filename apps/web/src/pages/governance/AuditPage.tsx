@@ -97,11 +97,11 @@ export default function AuditPage({ mode }: { mode: 'eventSourceLogs' | 'operati
   }
 
   return (
-    <section className="panel">
-      <div className="panelTitle">
+    <section className="moduleSummaryPanel">
+      <div className="moduleHeader">
         <div>
-          <h2>{title}</h2>
-          <span>{items.length} 条，支持按主体、结果和时间筛选</span>
+          <h1>{title}</h1>
+          <p>{items.length} 条，支持按主体、结果和时间筛选。</p>
         </div>
       </div>
 

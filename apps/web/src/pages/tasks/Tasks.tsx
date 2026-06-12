@@ -340,14 +340,14 @@ export default function Tasks({
 
   return (
     <section className="stack">
-      <section className="panel taskOverviewPanel">
-        <div className="panelTitle">
+      <section className="moduleSummaryPanel taskOverviewPanel">
+        <div className="moduleHeader">
           <div>
-            <h2>任务中心</h2>
-            <span>自动化规则命中后生成短信任务，任务中心负责排队、执行、重试和取消。</span>
+            <h1>任务中心</h1>
+            <p>自动化规则命中后生成短信任务，任务中心负责排队、执行、重试和取消。</p>
           </div>
-          <div className="headerActions">
-            <Button onClick={() => setOperationOpen(true)}>更多操作</Button>
+          <div className="moduleHeaderActions">
+            <Button type="primary" onClick={() => setOperationOpen(true)}>更多操作</Button>
           </div>
         </div>
 
