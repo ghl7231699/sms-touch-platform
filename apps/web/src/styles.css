@@ -4112,6 +4112,452 @@ button.heroMetric.active {
   font-size: 14px;
 }
 
+.rulesOpsPage {
+  gap: 18px;
+}
+
+.rulesOpsHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 0 2px;
+}
+
+.rulesOpsHeader h1 {
+  margin: 0;
+  color: #111827;
+  font-size: 24px;
+  line-height: 1.25;
+}
+
+.rulesOpsHeader p {
+  margin: 8px 0 0;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.rulesOpsMetrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.rulesOpsMetricCard {
+  min-height: 140px;
+  border: 0;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
+}
+
+.rulesOpsMetricCard .ant-card-body {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+}
+
+.rulesOpsMetricHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #667085;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.rulesOpsMetricHead div {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+}
+
+.rulesOpsMetricCard.blue .rulesOpsMetricHead div { background: #e6f4ff; color: #1677ff; }
+.rulesOpsMetricCard.violet .rulesOpsMetricHead div { background: #f0f5ff; color: #2f54eb; }
+.rulesOpsMetricCard.green .rulesOpsMetricHead div { background: #f6ffed; color: #52c41a; }
+.rulesOpsMetricCard.amber .rulesOpsMetricHead div { background: #fffbe6; color: #faad14; }
+.rulesOpsMetricCard.red .rulesOpsMetricHead div { background: #fff1f0; color: #ff4d4f; }
+
+.rulesOpsMetricCard strong {
+  color: #111827;
+  font-size: 30px;
+  line-height: 1;
+}
+
+.rulesOpsMetricCard small {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.rulesOpsWorkbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  align-items: start;
+  gap: 16px;
+}
+
+.rulesOpsPanel {
+  border: 0;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
+}
+
+.rulesOpsPanel .ant-card-head {
+  min-height: 60px;
+  border-bottom-color: #eef2f7;
+}
+
+.rulesOpsPanel .ant-card-body {
+  overflow: visible;
+}
+
+.rulesOpsPanel .ant-card-head-title strong {
+  display: block;
+  color: #111827;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.rulesOpsPanel .ant-card-head-title span {
+  display: block;
+  margin-top: 4px;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.rulesOpsTableWrap {
+  overflow-x: auto;
+  overflow-y: visible;
+  padding-bottom: 8px;
+  scrollbar-width: thin;
+}
+
+.rulesOpsTableWrap::-webkit-scrollbar {
+  height: 8px;
+}
+
+.rulesOpsTableWrap::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #c7d0dd;
+}
+
+.rulesOpsTableWrap::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: #eef2f7;
+}
+
+.rulesOpsTableHeader,
+.rulesOpsRow {
+  display: grid;
+  grid-template-columns: minmax(884px, 1fr) 156px;
+  gap: 0;
+  align-items: center;
+  width: max(100%, 1040px);
+}
+
+.rulesOpsTableHeader {
+  position: relative;
+  z-index: 3;
+  min-height: 42px;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #7a8798;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0 14px;
+}
+
+.rulesOpsRows {
+  display: grid;
+}
+
+.rulesOpsRow {
+  min-height: 116px;
+  border-bottom: 1px solid #eef2f7;
+  padding: 16px 14px;
+  background: #fff;
+}
+
+.rulesOpsScrollCols {
+  min-width: 884px;
+  display: grid;
+  grid-template-columns: minmax(340px, 1.5fr) 150px 300px 180px;
+  gap: 16px;
+  align-items: center;
+}
+
+.rulesOpsFixedHead {
+  position: sticky;
+  right: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 42px;
+  background: linear-gradient(90deg, rgba(248, 250, 252, .88), #f8fafc 18px);
+  padding-left: 18px;
+}
+
+.rulesOpsRow:last-child {
+  border-bottom: 0;
+}
+
+.ruleOpsNameCell,
+.ruleOpsStatusCell,
+.ruleOpsDateCell {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.ruleOpsNameCell strong,
+.ruleOpsDateCell strong {
+  overflow: hidden;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ruleOpsNameCell span,
+.ruleOpsStatusCell small,
+.ruleOpsDateCell span {
+  overflow: hidden;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ruleFlowPreview {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  overflow: visible;
+  margin-top: 2px;
+}
+
+.ruleFlowPreview b {
+  position: relative;
+  max-width: 108px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: #f3f7ff;
+  color: #456079;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ruleFlowPreview b + b {
+  margin-left: 0;
+}
+
+.ruleFlowPreview b + b::before {
+  display: none;
+}
+
+.ruleRunBadge {
+  width: fit-content;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0 11px;
+}
+
+.ruleRunBadge i {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.ruleRunBadge.running {
+  background: #f6ffed;
+  color: #389e0d;
+}
+
+.ruleRunBadge.paused {
+  background: #fffbe6;
+  color: #d48806;
+}
+
+.ruleRunBadge.error {
+  background: #fff1f0;
+  color: #cf1322;
+}
+
+.ruleOpsNumberCell {
+  display: flex;
+  align-items: center;
+  color: #111827;
+}
+
+.ruleOpsNumberCell strong {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.ruleOpsNumberCell.accent strong {
+  color: #1677ff;
+}
+
+.ruleOpsPerformanceCell {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid #edf1f6;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.ruleOpsPerformanceCell div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  padding: 9px 10px;
+}
+
+.ruleOpsPerformanceCell div + div {
+  border-left: 1px solid #edf1f6;
+}
+
+.ruleOpsPerformanceCell span {
+  color: #8a96a8;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.ruleOpsPerformanceCell strong {
+  color: #111827;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.ruleOpsPerformanceCell .accent strong {
+  color: #1677ff;
+}
+
+.ruleOpsActions {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, .88), #fff 18px);
+  padding-left: 18px;
+}
+
+.rulesOpsEmpty {
+  display: grid;
+  place-items: center;
+  min-height: 280px;
+}
+
+.rulesRankingList {
+  display: grid;
+  gap: 10px;
+}
+
+.rulesRankingItem {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #111827;
+  text-align: left;
+  padding: 12px;
+  cursor: pointer;
+}
+
+.rulesRankingItem:hover {
+  background: #f3f7ff;
+}
+
+.rulesRankNumber {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #e6f4ff;
+  color: #1677ff;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.rulesRankNumber.rank1 {
+  background: #fff7e6;
+  color: #d46b08;
+}
+
+.rulesRankNumber.rank2 {
+  background: #f0f5ff;
+  color: #2f54eb;
+}
+
+.rulesRankNumber.rank3 {
+  background: #f6ffed;
+  color: #389e0d;
+}
+
+.rulesRankingItem div {
+  min-width: 0;
+}
+
+.rulesRankingItem strong,
+.rulesRankingItem small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rulesRankingItem strong {
+  font-size: 13px;
+}
+
+.rulesRankingItem small {
+  margin-top: 4px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.rulesRankingItem > b {
+  color: #1677ff;
+  font-size: 15px;
+}
+
+@media (max-width: 1320px) {
+  .rulesOpsWorkbench {
+    grid-template-columns: 1fr;
+  }
+}
+
 .taskBoard {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -4938,6 +5384,8 @@ button.heroMetric.active {
   .taskExplainGrid,
   .marketingGrid,
   .automationRuleGrid,
+  .rulesOpsMetrics,
+  .rulesOpsWorkbench,
   .ruleHero,
   .taskBoard {
     grid-template-columns: 1fr;
@@ -4960,6 +5408,7 @@ button.heroMetric.active {
 
   .sendOpsTopbar,
   .sendOpsTopActions,
+  .rulesOpsHeader,
   .accountPageToolbar,
   .strategyCardHead {
     align-items: stretch;

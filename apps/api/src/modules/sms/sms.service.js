@@ -12,6 +12,7 @@ const EVENT_TYPES = ['user_register', 'membership_expired', 'campaign_start', 'o
 
 const now = () => new Date().toISOString();
 const normalizePhone = (phone) => String(phone || '').trim();
+const normalizeScene = (scene) => String(scene || '').trim();
 const createShortCode = () => Math.random().toString(36).slice(2, 8);
 
 function ok(body, statusCode = 200) {
@@ -98,6 +99,57 @@ function resolveScheduledAt(rule, occurredAt) {
     days: 24 * 60 * 60 * 1000
   };
   return new Date(base.getTime() + value * (multipliers[unit] || multipliers.hour)).toISOString();
+}
+
+function normalizeRuleConditionConfig(value = {}) {
+  const normalized = JSON.parse(JSON.stringify(value || {}));
+  if (Array.isArray(normalized.membershipProductIds)) {
+    normalized.membershipProductIds = [...normalized.membershipProductIds]
+      .map((item) => String(item).trim())
+      .filter(Boolean)
+      .sort();
+  }
+  return normalized;
+}
+
+function conditionFingerprintConfig(value = {}) {
+  const normalized = normalizeRuleConditionConfig(value);
+  delete normalized.window;
+  return normalized;
+}
+
+function stableStringify(value) {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function ruleBusinessFingerprint(rule) {
+  return [
+    rule.scene || '',
+    rule.eventType || '',
+    rule.conditionType || '',
+    stableStringify(conditionFingerprintConfig(rule.conditionConfig || { type: rule.conditionType || 'none' })),
+    rule.templateId || ''
+  ].join('|');
+}
+
+function findDuplicateRule(rules, candidate, excludeId) {
+  const fingerprint = ruleBusinessFingerprint(candidate);
+  return rules.find((rule) => rule.id !== excludeId && ruleBusinessFingerprint(rule) === fingerprint);
+}
+
+function duplicateRuleResult(rule) {
+  return fail('RULE_DUPLICATED', '已存在相同触达规则，请编辑原规则或删除旧规则后重新创建。', 409, {
+    duplicatedRule: {
+      id: rule.id,
+      name: rule.name,
+      code: rule.code,
+      status: rule.status
+    }
+  });
 }
 
 function createTaskPayload({ phone, template, rule, event, triggerType, taskType, templateParam }) {
@@ -350,12 +402,14 @@ export async function createRule(input) {
     delayValue: Number(input.delayValue) || 0,
     delayUnit: input.delayUnit || 'hour',
     conditionType: input.conditionType || 'none',
-    conditionConfig: input.conditionConfig || { type: input.conditionType || 'none' },
+    conditionConfig: normalizeRuleConditionConfig(input.conditionConfig || { type: input.conditionType || 'none' }),
     templateId: input.templateId,
     status: input.status || 'enabled',
     createdAt,
     updatedAt: createdAt
   };
+  const duplicated = findDuplicateRule(store.rules, rule);
+  if (duplicated) return duplicateRuleResult(duplicated);
   await mutateStore((current) => current.rules.unshift(rule));
   return ok({ success: true, item: rule }, 201);
 }
@@ -366,17 +420,27 @@ export async function updateRule(id, input) {
   const store = await readStore();
   const template = store.templates.find((item) => item.id === input.templateId);
   if (!template) return fail('TEMPLATE_NOT_FOUND', 'Template not found.', 404);
+  const candidate = {
+    ...input,
+    scene: input.scene || template.scene,
+    delayValue: Number(input.delayValue) || 0,
+    delayUnit: input.delayUnit || 'hour',
+    conditionType: input.conditionType || 'none',
+    conditionConfig: normalizeRuleConditionConfig(input.conditionConfig || { type: input.conditionType || 'none' })
+  };
+  const duplicated = findDuplicateRule(store.rules, candidate, id);
+  if (duplicated) return duplicateRuleResult(duplicated);
   return mutateStore((current) => {
     const item = current.rules.find((rule) => rule.id === id);
     if (!item) return fail('RULE_NOT_FOUND', 'Rule not found.', 404);
     item.name = input.name;
     item.code = input.code || item.code;
-    item.scene = input.scene || template.scene;
+    item.scene = candidate.scene;
     item.eventType = input.eventType;
-    item.delayValue = Number(input.delayValue) || 0;
-    item.delayUnit = input.delayUnit || 'hour';
-    item.conditionType = input.conditionType || 'none';
-    item.conditionConfig = input.conditionConfig || { type: input.conditionType || 'none' };
+    item.delayValue = candidate.delayValue;
+    item.delayUnit = candidate.delayUnit;
+    item.conditionType = candidate.conditionType;
+    item.conditionConfig = candidate.conditionConfig;
     item.templateId = input.templateId;
     item.updatedAt = now();
     return ok({ success: true, item });
@@ -401,7 +465,31 @@ export async function copyRule(id) {
   return ok({ success: true, item: rule }, 201);
 }
 
+export async function deleteRule(id) {
+  const store = await readStore();
+  const source = store.rules.find((rule) => rule.id === id || rule.code === id);
+  if (!source) return fail('RULE_NOT_FOUND', 'Rule not found.', 404);
+  const hasTasks = store.tasks.some((task) => task.ruleId === source.id || task.ruleName === source.name);
+  const hasLogs = store.logs.some((log) => log.ruleId === source.id || log.ruleName === source.name);
+  if (source.status === 'enabled' && (hasTasks || hasLogs)) {
+    return fail('RULE_IN_USE', 'Rule has generated tasks or send logs. Disable it before deleting.', 409);
+  }
+  return mutateStore((current) => {
+    const index = current.rules.findIndex((rule) => rule.id === source.id);
+    if (index < 0) return fail('RULE_NOT_FOUND', 'Rule not found.', 404);
+    const [item] = current.rules.splice(index, 1);
+    return ok({ success: true, item });
+  });
+}
+
 export async function updateRuleStatus(id, status) {
+  const store = await readStore();
+  const source = store.rules.find((rule) => rule.id === id);
+  if (!source) return fail('RULE_NOT_FOUND', 'Rule not found.', 404);
+  if (status !== 'disabled') {
+    const duplicated = findDuplicateRule(store.rules, { ...source, status: 'enabled' }, id);
+    if (duplicated) return duplicateRuleResult(duplicated);
+  }
   return mutateStore((store) => {
     const item = store.rules.find((rule) => rule.id === id);
     if (!item) return fail('RULE_NOT_FOUND', 'Rule not found.', 404);
@@ -417,11 +505,15 @@ export async function testRule(id, input = {}) {
   if (!rule) return fail('RULE_NOT_FOUND', 'Rule not found.', 404);
   const template = store.templates.find((item) => item.id === rule.templateId);
   const eventType = input.eventType || rule.eventType;
-  const matched = rule.status === 'enabled' && rule.eventType === eventType;
+  const eventScene = normalizeScene(input.scene || input.payload?.scene || rule.scene);
+  const matched = rule.status === 'enabled'
+    && rule.eventType === eventType
+    && rule.scene === eventScene;
   const payload = input.payload || {};
   const event = {
     eventId: input.eventId || `test_${Date.now()}`,
     eventType,
+    scene: eventScene,
     userId: input.userId || payload.userId || 'test-user',
     phone: input.phone || payload.phone || '',
     payload,
@@ -693,25 +785,33 @@ export async function receiveEvent(input) {
     id: createId(),
     eventId: input.eventId || `evt_${Date.now()}`,
     eventType: input.eventType,
+    scene: normalizeScene(input.scene || input.payload?.scene),
     userId: input.userId || input.payload?.userId || '',
     phone,
     payload: input.payload || {},
     occurredAt: input.occurredAt || now(),
     createdAt: now()
   };
-
   const store = await readStore();
   if (store.events.some((item) => item.eventId === event.eventId)) {
     return fail('EVENT_DUPLICATED', 'Event already exists.', 409);
   }
 
-  const matchedRules = store.rules.filter((rule) => rule.status === 'enabled' && rule.eventType === event.eventType);
+  const matchedRules = store.rules.filter((rule) => (
+    rule.status === 'enabled'
+    && rule.eventType === event.eventType
+    && (!event.scene || rule.scene === event.scene)
+  ));
+  const seenFingerprints = new Set();
   const queuedTasks = [];
   await mutateStore((current) => {
     current.events.unshift(event);
   });
 
   for (const rule of matchedRules) {
+    const fingerprint = `${phone}|${event.eventId}|${ruleBusinessFingerprint(rule)}`;
+    if (seenFingerprints.has(fingerprint)) continue;
+    seenFingerprints.add(fingerprint);
     const template = store.templates.find((item) => item.id === rule.templateId);
     if (!template || template.status !== 'enabled') continue;
     const task = await enqueueTask({

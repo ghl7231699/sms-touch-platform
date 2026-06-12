@@ -37,6 +37,7 @@ export const ROLE_DEFINITIONS = [
       'touch:rule:edit',
       'touch:rule:test',
       'touch:rule:copy',
+      'touch:rule:delete',
       'touch:rule:enable',
       'touch:rule:disable',
       'touch:manual:base',

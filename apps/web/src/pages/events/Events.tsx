@@ -41,6 +41,7 @@ export default function Events({
   const urlParams = new URLSearchParams(window.location.search);
   const targetEventId = urlParams.get('eventId') || '';
   const [phone, setPhone] = useState('18515385071');
+  const [scene, setScene] = useState('register');
   const [eventType, setEventType] = useState('user_register');
   const [payloadText, setPayloadText] = useState('{\n  "source": "operator-console",\n  "hasActiveMembership": false\n}');
   const [modalOpen, setModalOpen] = useState(false);
@@ -51,6 +52,7 @@ export default function Events({
   const handledEventIdRef = useRef('');
 
   const eventOptions = Object.entries(eventLabels).map(([value, label]) => ({ value, label }));
+  const sceneOptions = Object.entries(sceneLabels).map(([value, label]) => ({ value, label }));
 
   async function loadEventPage(nextFilters = filters, nextPagination = pagination) {
     const data = await api<{ items: EventItem[]; total: number; page: number; pageSize: number }>(`/api/events?${withPaginationParams({ ...emptyFilters, ...nextFilters }, nextPagination)}`);
@@ -73,8 +75,11 @@ export default function Events({
     return tasks.filter((task) => task.eventId === eventId);
   }
 
-  function rulesForEvent(type?: string) {
-    return rules.filter((rule) => rule.eventType === type);
+  function rulesForEvent(type?: string, eventScene = '') {
+    return rules.filter((rule) => (
+      rule.eventType === type
+      && (!eventScene || rule.scene === eventScene)
+    ));
   }
 
   async function submit(event: React.FormEvent) {
@@ -90,9 +95,10 @@ export default function Events({
       method: 'POST',
       body: JSON.stringify({
         eventType,
+        scene,
         phone,
         userId: String(payload.userId || 'test-user'),
-        payload: { ...payload, phone }
+        payload: { ...payload, phone, scene }
       })
     });
     setNotice(`事件已接收，匹配 ${result.matchedRuleCount} 条规则，生成 ${result.queuedTaskCount} 个任务`);
@@ -149,7 +155,7 @@ export default function Events({
                     <td><strong>{eventLabels[item.eventType] || item.eventType}</strong><span>{item.eventId}</span></td>
                     <td>{item.phone}</td>
                     <td>{timeLabel(item.createdAt || item.occurredAt)}</td>
-                    <td>{rulesForEvent(item.eventType).length}</td>
+                    <td>{rulesForEvent(item.eventType, item.scene || '').length}</td>
                     <td>{relatedTasks.length}</td>
                     <td>
                       <div className="tableActions">
@@ -173,9 +179,14 @@ export default function Events({
       <Modal open={modalOpen} title="模拟业务事件" subtitle="可编辑 payload JSON，用于验证规则匹配和任务生成" onClose={() => setModalOpen(false)} showClose={false} size="wide">
         <form className="formPanel" onSubmit={submit}>
           <div className="formGrid two">
+            <label>场景
+              <SelectField value={scene} options={sceneOptions} onChange={setScene} />
+            </label>
             <label>事件类型
               <SelectField value={eventType} options={eventOptions} onChange={setEventType} />
             </label>
+          </div>
+          <div className="formGrid two">
             <label>手机号<input value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
           </div>
           <label>payload JSON
@@ -192,8 +203,9 @@ export default function Events({
         <div className="stack">
           <div className="ruleMetaGrid">
             <div><span>事件类型</span><strong>{detail ? eventLabels[detail.eventType] || detail.eventType : '-'}</strong></div>
+            <div><span>场景</span><strong>{detail?.scene ? sceneLabels[detail.scene] || detail.scene : '-'}</strong></div>
             <div><span>手机号</span><strong>{detail?.phone || '-'}</strong></div>
-            <div><span>匹配规则数</span><strong>{rulesForEvent(detail?.eventType).length}</strong></div>
+            <div><span>匹配规则数</span><strong>{rulesForEvent(detail?.eventType, detail?.scene || '').length}</strong></div>
             <div><span>生成任务数</span><strong>{tasksForEvent(detail?.eventId).length}</strong></div>
           </div>
           <div className="detailCard">
@@ -216,7 +228,7 @@ export default function Events({
             </table>
           </div>
           <div className="detailCard">
-            <div><span>关联规则</span><strong>{rulesForEvent(detail?.eventType).map((rule) => `${rule.name}（${statusLabel(rule.status)}）`).join('、') || '暂无'}</strong></div>
+            <div><span>关联规则</span><strong>{rulesForEvent(detail?.eventType, detail?.scene || '').map((rule) => `${rule.name}（${statusLabel(rule.status)}）`).join('、') || '暂无'}</strong></div>
           </div>
         </div>
       </Modal>

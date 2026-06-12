@@ -45,6 +45,7 @@ model SmsRule {
   tasks    SmsTask[]
 
   @@index([eventType, status])
+  @@index([scene, eventType])
   @@map("sms_rule")
 }
 
@@ -52,6 +53,7 @@ model SmsEvent {
   id         String   @id
   eventId    String   @unique
   eventType  String
+  scene      String?
   userId     String?
   phone      String?
   payload    Json
@@ -62,6 +64,7 @@ model SmsEvent {
   tasks SmsTask[]
 
   @@index([eventType])
+  @@index([scene])
   @@map("sms_event")
 }
 

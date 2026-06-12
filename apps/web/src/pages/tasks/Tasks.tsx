@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Button } from 'antd';
 import { AlertTriangle, CheckCircle2, Clock3, RotateCcw, Send, XCircle } from 'lucide-react';
 import { api } from '../../lib/api';
 import type { EventItem, Rule, SendLog, SmsTask, Template } from '../../types';
@@ -58,7 +59,7 @@ const statusTabs = [
   { value: 'cancelled', label: '已取消' }
 ];
 
-const emptyFilters = { keyword: '', scene: '', triggerType: '' };
+const emptyFilters = { keyword: '', scene: '' };
 type TaskActionType = 'cancelPending' | 'retryFailed' | 'runDue';
 type TaskActionDialog = {
   type: TaskActionType;
@@ -93,14 +94,15 @@ export default function Tasks({
   const [statusTab, setStatusTab] = useState(urlParams.get('status') || 'all');
   const [filters, setFilters] = useState<QueryFilterValues>({
     keyword: urlParams.get('eventId') || urlParams.get('ruleId') || '',
-    scene: '',
-    triggerType: ''
+    scene: ''
   });
   const [taskItems, setTaskItems] = useState<SmsTask[]>([]);
   const [pagination, setPagination] = useState<PaginationState>(defaultPagination);
   const [detail, setDetail] = useState<SmsTask | null>(null);
   const [relatedDetail, setRelatedDetail] = useState<RelatedDetailType | null>(null);
   const [cancelTarget, setCancelTarget] = useState<SmsTask | null>(null);
+  const [retryTarget, setRetryTarget] = useState<SmsTask | null>(null);
+  const [retrying, setRetrying] = useState(false);
   const [operationOpen, setOperationOpen] = useState(false);
   const [actionDialog, setActionDialog] = useState<TaskActionDialog | null>(null);
 
@@ -159,10 +161,15 @@ export default function Tasks({
   }
 
   async function retryOne(task: SmsTask) {
-    if (!window.confirm(`确认重试任务 ${task.id}？`)) return;
-    const result = await api<{ success: boolean; status: string; code?: string }>(`/api/tasks/${task.id}/retry`, { method: 'POST' });
-    setNotice(`重试结果：${statusLabel(taskStatusKey(result.status))}${result.code ? ` · ${result.code}` : ''}`);
-    await refreshTasks();
+    setRetrying(true);
+    try {
+      const result = await api<{ success: boolean; status: string; code?: string }>(`/api/tasks/${task.id}/retry`, { method: 'POST' });
+      setNotice(`重试结果：${statusLabel(taskStatusKey(result.status))}${result.code ? ` · ${result.code}` : ''}`);
+      setRetryTarget(null);
+      await refreshTasks();
+    } finally {
+      setRetrying(false);
+    }
   }
 
   const pendingTasks = tasks.filter((task) => task.status === 'pending');
@@ -300,9 +307,9 @@ export default function Tasks({
   const actionPreviewTasks = actionAffectedTasks.slice(0, 8);
 
   const sceneOptions = useMemo(() => {
-    const scenes = Array.from(new Set(tasks.map((task) => task.scene).filter(Boolean)));
+    const scenes = Array.from(new Set(rules.map((rule) => rule.scene).filter(Boolean)));
     return scenes.map((scene) => ({ value: scene, label: sceneLabels[scene] || scene }));
-  }, [tasks]);
+  }, [rules]);
 
   function search(nextFilters: QueryFilterValues) {
     const typedFilters = { ...emptyFilters, ...nextFilters };
@@ -327,7 +334,7 @@ export default function Tasks({
 
   function rowActions(task: SmsTask) {
     if (task.status === 'pending') return <button className="tableButton danger compact" type="button" onClick={() => setCancelTarget(task)}>取消</button>;
-    if (task.status === 'failed') return <button className="tableButton compact" type="button" onClick={() => retryOne(task)}>重试</button>;
+    if (task.status === 'failed') return <button className="tableButton compact" type="button" onClick={() => setRetryTarget(task)}>重试</button>;
     return null;
   }
 
@@ -340,7 +347,7 @@ export default function Tasks({
             <span>自动化规则命中后生成短信任务，任务中心负责排队、执行、重试和取消。</span>
           </div>
           <div className="headerActions">
-            <button className="secondaryButton compact" type="button" onClick={() => setOperationOpen(true)}>更多操作</button>
+            <Button onClick={() => setOperationOpen(true)}>更多操作</Button>
           </div>
         </div>
 
@@ -382,11 +389,10 @@ export default function Tasks({
             <QueryFilterBar
               fields={[
                 { name: 'keyword', label: '任务筛选', placeholder: '任务/事件/规则/模板/手机号', span: 8 },
-                { name: 'scene', label: '场景', type: 'select', placeholder: '全部场景', options: sceneOptions },
-                { name: 'triggerType', label: '触发方式', type: 'select', placeholder: '全部方式', options: [{ value: 'auto', label: '自动触发' }, { value: 'manual', label: '手动发送' }] }
+                { name: 'scene', label: '场景', type: 'select', placeholder: '全部场景', options: sceneOptions }
               ]}
               values={filters}
-              onChange={(value) => setFilters({ keyword: '', scene: '', triggerType: '', ...value })}
+              onChange={(value) => setFilters({ keyword: '', scene: '', ...value })}
               onSearch={search}
             />
           </div>
@@ -474,6 +480,7 @@ export default function Tasks({
           <div className="stack">
             <div className="ruleMetaGrid">
               <div><span>事件类型</span><strong>{eventLabels[detailEvent.eventType] || detailEvent.eventType}</strong></div>
+              <div><span>场景</span><strong>{detailEvent.scene ? sceneLabels[detailEvent.scene] || detailEvent.scene : '-'}</strong></div>
               <div><span>手机号</span><strong>{detailEvent.phone}</strong></div>
               <div><span>用户</span><strong>{detailEvent.userId || '-'}</strong></div>
               <div><span>接收时间</span><strong>{timeLabel(detailEvent.createdAt || detailEvent.occurredAt)}</strong></div>
@@ -596,6 +603,24 @@ export default function Tasks({
           <div className="modalActions">
             <button className="secondaryButton compact" type="button" onClick={() => setCancelTarget(null)}>取消</button>
             <button className="primaryButton compact" type="button" onClick={() => cancelTarget && cancelOne(cancelTarget)}>确认</button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={Boolean(retryTarget)} title="重试任务" onClose={() => retrying ? undefined : setRetryTarget(null)} showClose={false} footerDivider={false}>
+        <div className="stack">
+          <p className="modalPlainText">
+            确认重试【{retryTarget?.phoneMasked || '-'}】的【{retryTarget?.templateName || retryTarget?.templateCode || retryTarget?.ruleName || '短信任务'}】吗？
+          </p>
+          <div className="taskActionTrace">
+            <strong>执行结果在哪里看</strong>
+            <span>确认后任务会重新放回待执行队列，后续状态可在当前任务明细中查看；发送成功后可在「数据分析 / 发送记录」查看服务商返回。</span>
+          </div>
+          <div className="modalActions">
+            <button className="secondaryButton compact" type="button" onClick={() => setRetryTarget(null)} disabled={retrying}>取消</button>
+            <button className="primaryButton compact" type="button" onClick={() => retryTarget && retryOne(retryTarget)} disabled={retrying}>
+              {retrying ? '处理中' : '确认'}
+            </button>
           </div>
         </div>
       </Modal>

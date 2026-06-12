@@ -13,7 +13,7 @@ function toRule(item) {
 }
 
 function toEvent(item) {
-  return { ...item, payload: item.payload || {}, occurredAt: iso(item.occurredAt), createdAt: iso(item.createdAt) };
+  return { ...item, scene: item.scene || '', payload: item.payload || {}, occurredAt: iso(item.occurredAt), createdAt: iso(item.createdAt) };
 }
 
 function toLog(item) {
@@ -123,6 +123,7 @@ async function createEvent(tx, item) {
       id: item.id,
       eventId: item.eventId,
       eventType: item.eventType,
+      scene: item.scene || null,
       userId: item.userId || null,
       phone: item.phone || null,
       payload: item.payload || {},
@@ -359,6 +360,14 @@ async function persistUpdates(tx, before, after) {
   }
 }
 
+async function persistDeletes(tx, before, after) {
+  const afterRules = byId(after.rules);
+
+  for (const item of before.rules) {
+    if (!afterRules.has(item.id)) await tx.smsRule.delete({ where: { id: item.id } });
+  }
+}
+
 export async function mutateStore(mutator) {
   const before = await readStore();
   const after = cloneStore(before);
@@ -367,6 +376,7 @@ export async function mutateStore(mutator) {
   await prisma.$transaction(async (tx) => {
     await persistCreates(tx, before, after);
     await persistUpdates(tx, before, after);
+    await persistDeletes(tx, before, after);
   });
 
   return result;

@@ -58,6 +58,7 @@ export interface EventItem {
   id: string;
   eventId: string;
   eventType: string;
+  scene?: string;
   userId: string;
   phone: string;
   payload?: Record<string, unknown>;

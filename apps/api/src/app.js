@@ -8,6 +8,7 @@ import {
   createTemplate,
   cancelTask,
   copyRule,
+  deleteRule,
   estimateRuleImpact,
   getDashboard,
   getClickLog,
@@ -219,6 +220,13 @@ async function handleApi(req, res, url) {
   const ruleCopyMatch = url.pathname.match(/^\/api\/(?:sms\/)?rules\/([^/]+)\/copy$/);
   if (req.method === 'POST' && ruleCopyMatch) {
     const result = await copyRule(ruleCopyMatch[1]);
+    sendJson(res, result.statusCode, result.body);
+    return;
+  }
+
+  const ruleDeleteMatch = url.pathname.match(/^\/api\/(?:sms\/)?rules\/([^/]+)\/delete$/);
+  if (req.method === 'POST' && ruleDeleteMatch) {
+    const result = await deleteRule(ruleDeleteMatch[1]);
     sendJson(res, result.statusCode, result.body);
     return;
   }

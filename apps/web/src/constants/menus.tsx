@@ -105,7 +105,7 @@ export const menus: AppMenuItem[] = [
         path: '/touch/rules',
         title: '规则中心',
         icon: <ListChecks size={18} />,
-        buttons: [button('页面查看', 'base'), button('新建规则', 'add'), button('编辑规则', 'edit'), button('测试规则', 'test'), button('复制规则', 'copy'), button('启用规则', 'enable'), button('停用规则', 'disable')],
+        buttons: [button('页面查看', 'base'), button('新建规则', 'add'), button('编辑规则', 'edit'), button('测试规则', 'test'), button('复制规则', 'copy'), button('删除规则', 'delete'), button('启用规则', 'enable'), button('停用规则', 'disable')],
         component: ({ rules, templates, logs, tasks, onRefresh, setNotice }) => <Rules rules={rules} templates={templates} logs={logs} tasks={tasks} onRefresh={onRefresh} setNotice={setNotice} />
       },
       {
