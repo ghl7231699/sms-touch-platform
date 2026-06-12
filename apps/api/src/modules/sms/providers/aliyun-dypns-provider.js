@@ -24,8 +24,8 @@ export class AliyunDypnsVerifyProvider {
     const Dypnsapi = await import('@alicloud/dypnsapi20170525');
     const OpenApi = await import('@alicloud/openapi-client');
 
-    const Client = Dypnsapi.default;
-    const Config = OpenApi.Config || OpenApi.default?.Config;
+    const Client = Dypnsapi.default?.default || Dypnsapi.default;
+    const Config = OpenApi.Config || OpenApi.default?.Config || OpenApi.default?.default?.Config;
     if (!Client || !Config) {
       throw new Error('Aliyun SDK exports are unavailable.');
     }
@@ -48,7 +48,7 @@ export class AliyunDypnsVerifyProvider {
     const client = await this.createClient();
 
     const Request = Dypnsapi.SendSmsVerifyCodeRequest || Dypnsapi.default?.SendSmsVerifyCodeRequest;
-    const RuntimeOptions = Util.RuntimeOptions || Util.default?.RuntimeOptions;
+    const RuntimeOptions = Util.RuntimeOptions || Util.default?.RuntimeOptions || Util.default?.default?.RuntimeOptions;
     if (!Request || !RuntimeOptions) {
       throw new Error('Aliyun SendSmsVerifyCode SDK types are unavailable.');
     }

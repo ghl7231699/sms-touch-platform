@@ -185,6 +185,14 @@ export const menus: AppMenuItem[] = [
     icon: <ShieldCheck size={18} />,
     children: [
       {
+        key: 'setting',
+        path: '/security/settings',
+        title: '发送控制',
+        icon: <Settings size={18} />,
+        buttons: [button('页面查看', 'base'), button('保存配置', 'save'), button('Provider 自检', 'providerTest'), button('执行 Worker', 'workerRun')],
+        component: ({ setNotice }) => <SettingsPage setNotice={setNotice} />
+      },
+      {
         key: 'whitelist',
         path: '/security/whitelist',
         title: '白名单',
@@ -207,14 +215,6 @@ export const menus: AppMenuItem[] = [
         icon: <Bell size={18} />,
         buttons: [button('页面查看', 'base'), button('新增记录', 'add'), button('编辑记录', 'edit'), button('批量导入', 'import'), button('移除/恢复记录', 'status'), button('查看详情', 'detail')],
         component: ({ setNotice }) => <PhoneListPage kind="unsubscribes" title="退订管理" setNotice={setNotice} />
-      },
-      {
-        key: 'setting',
-        path: '/security/settings',
-        title: '发送控制',
-        icon: <Settings size={18} />,
-        buttons: [button('页面查看', 'base'), button('保存配置', 'save'), button('Provider 自检', 'providerTest'), button('执行 Worker', 'workerRun')],
-        component: ({ setNotice }) => <SettingsPage setNotice={setNotice} />
       }
     ]
   },
@@ -267,6 +267,14 @@ export const menus: AppMenuItem[] = [
     icon: <ScrollText size={18} />,
     children: [
       {
+        key: 'approval',
+        path: '/audit/approvals',
+        title: '审批记录',
+        icon: <ClipboardCheck size={18} />,
+        buttons: [button('页面查看', 'base'), button('查看详情', 'detail'), button('通过审批', 'approve'), button('驳回审批', 'reject'), button('撤回审批', 'withdraw')],
+        component: ({ setNotice }) => <ApprovalsPage setNotice={setNotice} />
+      },
+      {
         key: 'operationLog',
         path: '/audit/operation-logs',
         title: '操作日志',
@@ -289,14 +297,6 @@ export const menus: AppMenuItem[] = [
         icon: <Database size={18} />,
         buttons: [button('页面查看', 'base'), button('查看明细', 'detail')],
         component: () => <BatchJobsPage />
-      },
-      {
-        key: 'approval',
-        path: '/audit/approvals',
-        title: '审批记录',
-        icon: <ClipboardCheck size={18} />,
-        buttons: [button('页面查看', 'base'), button('查看详情', 'detail'), button('通过审批', 'approve'), button('驳回审批', 'reject'), button('撤回审批', 'withdraw')],
-        component: ({ setNotice }) => <ApprovalsPage setNotice={setNotice} />
       }
     ]
   }

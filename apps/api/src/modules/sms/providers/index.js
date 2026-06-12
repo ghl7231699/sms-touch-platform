@@ -1,15 +1,10 @@
 import { config } from '../../../config/env.js';
 import { SMS_PROVIDERS } from '../sms.types.js';
-import { MockSmsProvider } from './mock-sms-provider.js';
 import { AliyunDypnsVerifyProvider } from './aliyun-dypns-provider.js';
 
-export function createSmsProvider(providerName = config.smsProvider) {
-  if (providerName === SMS_PROVIDERS.MOCK) {
-    return new MockSmsProvider();
-  }
-
+export function createSmsProvider(providerName = config.smsProvider, overrideConfig = {}) {
   if (providerName === SMS_PROVIDERS.ALIYUN_DYPNS) {
-    return new AliyunDypnsVerifyProvider(config.aliyun);
+    return new AliyunDypnsVerifyProvider({ ...config.aliyun, ...overrideConfig });
   }
 
   const error = new Error(`Unknown SMS_PROVIDER: ${providerName}`);

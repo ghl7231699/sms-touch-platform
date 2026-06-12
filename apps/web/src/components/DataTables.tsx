@@ -1,4 +1,4 @@
-import { eventLabels, sceneLabels } from '../constants/labels';
+import { eventLabels, sceneLabels, sendStatusKey, taskStatusKey } from '../constants/labels';
 import type { SendLog, SmsTask } from '../types';
 import { TableEmptyState } from './EmptyState';
 import { StatusBadge } from './StatusBadge';
@@ -27,7 +27,7 @@ export function TaskTable({ tasks, showDetail = false }: { tasks: SmsTask[]; sho
               <td>{sceneLabels[task.scene] || task.scene}</td>
               <td>{task.phoneMasked}</td>
               <td>{task.templateName || task.templateCode}</td>
-              <td><StatusBadge status={task.status} /></td>
+              <td><StatusBadge status={taskStatusKey(task.status)} /></td>
               <td>{task.attemptCount}/{task.maxAttempts}</td>
               {showDetail && (
                 <td>
@@ -71,7 +71,7 @@ export function LogTable({ logs }: { logs: SendLog[]; showActions?: boolean }) {
               <td>{sceneLabels[log.scene] || log.scene}</td>
               <td>{log.phoneMasked}</td>
               <td>{log.templateName || log.templateCode}</td>
-              <td><StatusBadge status={log.status} /></td>
+              <td><StatusBadge status={sendStatusKey(log.status)} /></td>
               <td>{log.receiptStatus || '-'}</td>
               <td>
                 {log.shortUrl ? (

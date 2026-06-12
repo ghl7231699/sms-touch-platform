@@ -26,7 +26,7 @@ const defaultMapping = JSON.stringify({
 const emptyForm = {
   name: '',
   systemName: '',
-  endpoint: 'mock://member-expiring',
+  endpoint: '',
   method: 'GET',
   authType: 'none',
   authorization: '',

@@ -13,12 +13,6 @@ const PHONE_PATTERN = /^1\d{10}$/;
 const SESSION_TTL_DAYS = 7;
 const EXPORT_DIR = path.resolve(process.cwd(), 'storage', 'exports');
 const now = () => new Date().toISOString();
-const DATA_SOURCE_SAMPLE_ROWS = [
-  { phone: '13900000001', userId: 'member_001', bizId: 'expire_001', scene: 'member', name: '张女士', daysLeft: 3, productName: '年度会员' },
-  { phone: '13900000002', userId: 'member_002', bizId: 'expire_002', scene: 'member', name: '李先生', daysLeft: 1, productName: '月度会员' },
-  { phone: '13900000003', userId: 'member_003', bizId: 'expire_003', scene: 'member', name: '王女士', daysLeft: 0, productName: '季度会员' },
-  { phone: '13900000004', userId: 'member_004', bizId: 'expire_004', scene: 'member', name: '赵先生', daysLeft: 7, productName: '年度会员' }
-];
 
 export const ROLE_DEFINITIONS = [
   {
@@ -150,15 +144,32 @@ const SYSTEM_SETTING_DEFAULTS = {
     allowRealSend: config.taskWorker.allowRealSend
   },
   'sms.short_link': { enabled: true, baseUrl: config.shortLinkBaseUrl, targetUrl: config.shortLinkDefaultTarget },
-  'sms.safety': { requireWhitelistForMock: false, requireWhitelistForRealProvider: true },
+  'sms.safety': { requireWhitelistForRealProvider: true },
   'sms.verification_code': { validMinutes: 5, resendIntervalSeconds: 60, dailyLimit: 10 },
-  'sms.receipt': { enabled: true, allowMockDelivered: true },
+  'sms.receipt': { enabled: true },
   'sms.aliyun': {
     credentialMode: 'env',
     endpoint: config.aliyun.endpoint,
     region: config.aliyun.region,
     signName: config.aliyun.signName,
     templateCode: config.aliyun.templateCode
+  },
+  'sms.provider_configs': {
+    items: [
+      {
+        id: 'provider_aliyun_default',
+        name: '阿里云短信通道',
+        provider: 'aliyun_dypns',
+        endpoint: config.aliyun.endpoint,
+        region: config.aliyun.region,
+        signName: config.aliyun.signName,
+        templateCode: config.aliyun.templateCode,
+        status: 'enabled',
+        remark: '默认服务商配置，密钥从环境变量读取。',
+        createdAt: null,
+        updatedAt: null
+      }
+    ]
   }
 };
 
@@ -168,6 +179,39 @@ function ok(body, statusCode = 200) {
 
 function fail(code, message, statusCode = 400, extra = {}) {
   return { statusCode, body: { success: false, code, message, ...extra } };
+}
+
+function normalizeProviderName(provider) {
+  return provider === 'aliyun_dypns' ? provider : 'aliyun_dypns';
+}
+
+function providerDisplayName(provider) {
+  return normalizeProviderName(provider) === 'aliyun_dypns' ? '阿里云短信通道' : '短信服务商';
+}
+
+function normalizeProviderConfigItem(input = {}, index = 0) {
+  const provider = normalizeProviderName(input.provider || config.smsProvider);
+  return {
+    id: String(input.id || `provider_${index + 1}`),
+    name: String(input.name || providerDisplayName(provider)).trim(),
+    provider,
+    endpoint: String(input.endpoint || config.aliyun.endpoint).trim(),
+    region: String(input.region || config.aliyun.region).trim(),
+    signName: String(input.signName || config.aliyun.signName).trim(),
+    templateCode: String(input.templateCode || config.aliyun.templateCode).trim(),
+    status: input.status === 'disabled' ? 'disabled' : 'enabled',
+    remark: String(input.remark || '').trim(),
+    createdAt: input.createdAt || null,
+    updatedAt: input.updatedAt || null
+  };
+}
+
+function normalizeProviderConfigsSetting(value = {}) {
+  const items = Array.isArray(value.items) ? value.items : [];
+  return {
+    items: (items.length ? items : SYSTEM_SETTING_DEFAULTS['sms.provider_configs'].items)
+      .map((item, index) => normalizeProviderConfigItem(item, index))
+  };
 }
 
 function hashValue(value) {
@@ -492,6 +536,17 @@ async function getSettingsObject() {
   const rows = await prisma.systemSetting.findMany();
   const settings = { ...SYSTEM_SETTING_DEFAULTS };
   for (const row of rows) settings[row.key] = row.value;
+  settings['sms.provider'] = {
+    ...(settings['sms.provider'] || {}),
+    provider: normalizeProviderName(settings['sms.provider']?.provider || config.smsProvider)
+  };
+  settings['sms.safety'] = {
+    requireWhitelistForRealProvider: settings['sms.safety']?.requireWhitelistForRealProvider !== false
+  };
+  settings['sms.receipt'] = {
+    enabled: settings['sms.receipt']?.enabled !== false
+  };
+  settings['sms.provider_configs'] = normalizeProviderConfigsSetting(settings['sms.provider_configs']);
   const policies = await prisma.smsFrequencyPolicy.findMany({ orderBy: { scene: 'asc' } });
   settings['sms.frequency'] = {
     policies: policies.map((policy) => ({
@@ -509,7 +564,30 @@ async function getSettingsObject() {
 
 export async function getSmsProviderName() {
   const settings = await getSettingsObject();
-  return settings['sms.provider']?.provider || config.smsProvider;
+  return normalizeProviderName(settings['sms.provider']?.provider || config.smsProvider);
+}
+
+export async function getActiveSmsProviderConfig(providerName) {
+  const settings = await getSettingsObject();
+  const provider = normalizeProviderName(providerName || settings['sms.provider']?.provider || config.smsProvider);
+  const providerConfigId = settings['sms.provider']?.providerConfigId;
+  const providerConfigs = settings['sms.provider_configs']?.items || [];
+  const selected =
+    providerConfigs.find((item) => item.id === providerConfigId && item.provider === provider) ||
+    providerConfigs.find((item) => item.provider === provider && item.status === 'enabled') ||
+    providerConfigs.find((item) => item.provider === provider) ||
+    normalizeProviderConfigItem({ provider }, 0);
+  const aliyun = settings['sms.aliyun'] || {};
+  return {
+    ...config.aliyun,
+    provider,
+    providerConfigId: selected.id,
+    name: selected.name,
+    endpoint: selected.endpoint || aliyun.endpoint || config.aliyun.endpoint,
+    region: selected.region || aliyun.region || config.aliyun.region,
+    signName: selected.signName || aliyun.signName || config.aliyun.signName,
+    templateCode: selected.templateCode || aliyun.templateCode || config.aliyun.templateCode
+  };
 }
 
 export async function getShortLinkSettings() {
@@ -523,7 +601,27 @@ async function getVerificationCodeSettings() {
 }
 
 function settingRowsFromObject(input = {}) {
-  return Object.entries(input)
+  const normalized = { ...input };
+  if (normalized['sms.provider']) {
+    normalized['sms.provider'] = {
+      ...normalized['sms.provider'],
+      provider: normalizeProviderName(normalized['sms.provider'].provider || config.smsProvider)
+    };
+  }
+  if (normalized['sms.safety']) {
+    normalized['sms.safety'] = {
+      requireWhitelistForRealProvider: normalized['sms.safety'].requireWhitelistForRealProvider !== false
+    };
+  }
+  if (normalized['sms.receipt']) {
+    normalized['sms.receipt'] = {
+      enabled: normalized['sms.receipt'].enabled !== false
+    };
+  }
+  if (normalized['sms.provider_configs']) {
+    normalized['sms.provider_configs'] = normalizeProviderConfigsSetting(normalized['sms.provider_configs']);
+  }
+  return Object.entries(normalized)
     .filter(([key]) => Object.prototype.hasOwnProperty.call(SYSTEM_SETTING_DEFAULTS, key))
     .map(([key, value]) => ({ key, value }));
 }
@@ -646,18 +744,17 @@ async function executeApproval(item) {
 }
 
 function isHighRiskSettingsChange(current, next) {
-  const currentProvider = current['sms.provider']?.provider || 'mock';
-  const nextProvider = next['sms.provider']?.provider || currentProvider;
+  const currentProvider = normalizeProviderName(current['sms.provider']?.provider || config.smsProvider);
+  const nextProvider = normalizeProviderName(next['sms.provider']?.provider || currentProvider);
   const currentSafety = current['sms.safety'] || {};
   const nextSafety = next['sms.safety'] || currentSafety;
   const currentWorker = current['sms.worker'] || {};
   const nextWorker = next['sms.worker'] || currentWorker;
-  const nextRealProvider = nextProvider !== 'mock';
   return (
     currentProvider !== nextProvider ||
     currentSafety.requireWhitelistForRealProvider !== false && nextSafety.requireWhitelistForRealProvider === false ||
-    nextRealProvider && !currentWorker.enabled && nextWorker.enabled ||
-    nextRealProvider && !currentWorker.allowRealSend && nextWorker.allowRealSend
+    !currentWorker.enabled && nextWorker.enabled ||
+    !currentWorker.allowRealSend && nextWorker.allowRealSend
   );
 }
 
@@ -722,13 +819,12 @@ async function checkFrequency({ phone, scene }) {
 export async function checkSendSafety({ phone, scene = 'manual', provider = config.smsProvider, triggerType = 'manual' }) {
   const normalizedPhone = normalizePhone(phone);
   const settings = await getSettingsObject();
-  const requireWhitelist = provider === 'mock'
-    ? Boolean(settings['sms.safety']?.requireWhitelistForMock)
-    : settings['sms.safety']?.requireWhitelistForRealProvider !== false;
+  const providerName = normalizeProviderName(provider);
+  const requireWhitelist = settings['sms.safety']?.requireWhitelistForRealProvider !== false;
 
   const workerSettings = settings['sms.worker'] || {};
   const checks = {
-    provider: { status: provider === 'mock' || config.aliyun.accessKeyId ? 'passed' : 'blocked' },
+    provider: { status: providerName === 'aliyun_dypns' && config.aliyun.accessKeyId ? 'passed' : 'blocked' },
     worker: { status: triggerType === 'auto' && !workerSettings.enabled ? 'warning' : 'passed' },
     whitelist: { status: 'skipped' },
     blacklist: { status: 'passed' },
@@ -960,7 +1056,7 @@ async function routePublicAuth(req, url, readJson) {
         expiresAt: new Date(Date.now() + Number(codeSettings.validMinutes || 5) * 60 * 1000)
       }
     });
-    return ok({ success: true, message: '验证码已生成。', devCode: await getSmsProviderName() === 'mock' ? code : undefined });
+    return ok({ success: true, message: '验证码已生成。' });
   }
 
   if (req.method === 'POST' && url.pathname === '/api/auth/forgot-password/verify-code') {
@@ -1112,18 +1208,51 @@ async function routeUsers(req, url, readJson, actor) {
 
   const resetMatch = url.pathname.match(/^\/api\/users\/([^/]+)\/reset-password$/);
   if (req.method === 'POST' && resetMatch) {
+    const target = await prisma.adminUser.findUnique({ where: { id: resetMatch[1] } });
+    if (!target) return fail('USER_NOT_FOUND', '用户不存在。', 404);
     const token = createSecret('setup');
-    await prisma.authPasswordSetupToken.create({
-      data: {
-        id: createId(),
-        userId: resetMatch[1],
-        tokenHash: hashValue(token),
-        purpose: 'admin_reset_password',
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await prisma.$transaction([
+      prisma.authPasswordSetupToken.updateMany({
+        where: { userId: target.id, purpose: 'admin_reset_password', usedAt: null },
+        data: { usedAt: new Date() }
+      }),
+      prisma.adminUser.update({
+        where: { id: target.id },
+        data: { passwordHash: hashPassword(createSecret('reset_password')), status: 'active' }
+      }),
+      prisma.authSession.updateMany({
+        where: { userId: target.id, revokedAt: null },
+        data: { revokedAt: new Date() }
+      }),
+      prisma.authPasswordSetupToken.create({
+        data: {
+          id: createId(),
+          userId: target.id,
+          tokenHash: hashValue(token),
+          purpose: 'admin_reset_password',
+          expiresAt
+        }
+      })
+    ]);
+    await writeOperationLog({
+      req,
+      actor,
+      action: 'reset_password',
+      resource: 'admin_user',
+      resourceId: target.id,
+      requestBody: { email: target.email, mode: 'setup_link', sessionsRevoked: true, passwordInvalidated: true }
+    });
+    return ok({
+      success: true,
+      setupToken: token,
+      expiresAt: expiresAt.toISOString(),
+      affected: {
+        passwordInvalidated: true,
+        sessionsRevoked: true,
+        nextStep: 'send_setup_link'
       }
     });
-    await writeOperationLog({ req, actor, action: 'reset_password', resource: 'admin_user', resourceId: resetMatch[1] });
-    return ok({ success: true, setupToken: token });
   }
 
   const updateMatch = url.pathname.match(/^\/api\/users\/([^/]+)\/update$/);
@@ -1534,10 +1663,140 @@ function workerStatusSnapshot(runtime = {}) {
   };
 }
 
+function providerConfigsWithActiveFlag(settings) {
+  const activeId = settings['sms.provider']?.providerConfigId;
+  const activeProvider = normalizeProviderName(settings['sms.provider']?.provider);
+  const aliyun = settings['sms.aliyun'] || {};
+  return (settings['sms.provider_configs']?.items || []).map((item) => ({
+    ...item,
+    isActive: activeId
+      ? item.id === activeId
+      : item.provider === activeProvider &&
+        item.signName === (aliyun.signName || config.aliyun.signName) &&
+        item.templateCode === (aliyun.templateCode || config.aliyun.templateCode)
+  }));
+}
+
+function providerConfigPayload(input = {}, current = {}) {
+  const timestamp = now();
+  const provider = normalizeProviderName(input.provider || current.provider || config.smsProvider);
+  const item = normalizeProviderConfigItem({
+    ...current,
+    ...input,
+    id: current.id || input.id || createId(),
+    provider,
+    createdAt: current.createdAt || timestamp,
+    updatedAt: timestamp
+  });
+  if (!item.name) item.name = providerDisplayName(provider);
+  if (!item.signName) {
+    const error = new Error('服务商签名不能为空。');
+    error.code = 'PROVIDER_SIGN_NAME_REQUIRED';
+    throw error;
+  }
+  if (!item.templateCode) {
+    const error = new Error('模板 Code 不能为空。');
+    error.code = 'PROVIDER_TEMPLATE_CODE_REQUIRED';
+    throw error;
+  }
+  return item;
+}
+
+async function saveProviderConfigs(items) {
+  await prisma.systemSetting.upsert({
+    where: { key: 'sms.provider_configs' },
+    create: { id: 'setting_sms_provider_configs', key: 'sms.provider_configs', value: { items } },
+    update: { value: { items } }
+  });
+}
+
+async function routeSmsProviders(req, url, readJson, actor) {
+  if (req.method === 'GET' && url.pathname === '/api/sms-providers') {
+    const settings = await getSettingsObject();
+    return ok({ success: true, items: providerConfigsWithActiveFlag(settings) });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/sms-providers') {
+    const body = await readJson(req);
+    const settings = await getSettingsObject();
+    const items = settings['sms.provider_configs']?.items || [];
+    try {
+      const item = providerConfigPayload(body);
+      await saveProviderConfigs([item, ...items]);
+      await writeOperationLog({ req, actor, action: 'create', resource: 'sms_provider', resourceId: item.id, requestBody: body });
+      return ok({ success: true, item }, 201);
+    } catch (error) {
+      return fail(error.code || 'SMS_PROVIDER_SAVE_FAILED', error.message || '服务商保存失败。', 400);
+    }
+  }
+
+  const providerMatch = url.pathname.match(/^\/api\/sms-providers\/([^/]+)$/);
+  if (req.method === 'GET' && providerMatch) {
+    const settings = await getSettingsObject();
+    const item = providerConfigsWithActiveFlag(settings).find((provider) => provider.id === providerMatch[1]);
+    if (!item) return fail('SMS_PROVIDER_NOT_FOUND', '服务商配置不存在。', 404);
+    return ok({ success: true, item });
+  }
+
+  const actionMatch = url.pathname.match(/^\/api\/sms-providers\/([^/]+)\/(update|status|activate)$/);
+  if (req.method === 'POST' && actionMatch) {
+    const [, id, action] = actionMatch;
+    const body = await readJson(req);
+    const settings = await getSettingsObject();
+    const items = settings['sms.provider_configs']?.items || [];
+    const current = items.find((item) => item.id === id);
+    if (!current) return fail('SMS_PROVIDER_NOT_FOUND', '服务商配置不存在。', 404);
+
+    if (action === 'update') {
+      try {
+        const item = providerConfigPayload(body, current);
+        const nextItems = items.map((provider) => provider.id === id ? item : provider);
+        await saveProviderConfigs(nextItems);
+        await writeOperationLog({ req, actor, action: 'update', resource: 'sms_provider', resourceId: id, requestBody: body });
+        return ok({ success: true, item });
+      } catch (error) {
+        return fail(error.code || 'SMS_PROVIDER_SAVE_FAILED', error.message || '服务商保存失败。', 400);
+      }
+    }
+
+    if (action === 'status') {
+      const item = {
+        ...current,
+        status: body.status === 'disabled' ? 'disabled' : 'enabled',
+        updatedAt: now()
+      };
+      const nextItems = items.map((provider) => provider.id === id ? item : provider);
+      await saveProviderConfigs(nextItems);
+      await writeOperationLog({ req, actor, action: 'change_status', resource: 'sms_provider', resourceId: id, requestBody: body });
+      return ok({ success: true, item });
+    }
+
+    if (current.status === 'disabled') return fail('SMS_PROVIDER_DISABLED', '停用的服务商不能设为当前。', 400);
+    await applySystemSettings({
+      ...settings,
+      'sms.provider': { provider: current.provider, providerConfigId: current.id },
+      'sms.aliyun': {
+        ...(settings['sms.aliyun'] || {}),
+        endpoint: current.endpoint,
+        region: current.region,
+        signName: current.signName,
+        templateCode: current.templateCode
+      },
+      'sms.provider_configs': { items }
+    });
+    await writeOperationLog({ req, actor, action: 'activate', resource: 'sms_provider', resourceId: id, requestBody: { provider: current.provider } });
+    return ok({ success: true, item: { ...current, isActive: true }, settings: await getSettingsObject() });
+  }
+
+  return null;
+}
+
 async function testProviderConfig(providerName, options = {}) {
-  const provider = createSmsProvider(providerName);
+  const normalizedProvider = normalizeProviderName(providerName);
+  const providerConfig = await getActiveSmsProviderConfig(normalizedProvider);
+  const provider = createSmsProvider(normalizedProvider, providerConfig);
   const checks = [
-    { key: 'provider', status: 'passed', message: `Provider ${provider.name || providerName} 可识别。` }
+    { key: 'provider', status: 'passed', message: `Provider ${provider.name || normalizedProvider} 可识别。` }
   ];
 
   if (typeof provider.assertConfig === 'function') {
@@ -1556,7 +1815,7 @@ async function testProviderConfig(providerName, options = {}) {
 
   return {
     success: true,
-    provider: provider.name || providerName,
+    provider: provider.name || normalizedProvider,
     mode: 'dry_run',
     checks
   };
@@ -1830,23 +2089,9 @@ function normalizeDataSourceInput(body = {}, existing = {}) {
   };
 }
 
-function buildMockDataSourceResponse(params = {}) {
-  const limit = Math.min(Math.max(Number(params.limit || params.pageSize) || DATA_SOURCE_SAMPLE_ROWS.length, 1), 20);
-  return {
-    success: true,
-    data: {
-      items: DATA_SOURCE_SAMPLE_ROWS.slice(0, limit),
-      total: DATA_SOURCE_SAMPLE_ROWS.length
-    }
-  };
-}
-
 async function callDataSource(source, params = {}) {
-  if (source.endpoint.startsWith('mock://')) {
-    return { response: buildMockDataSourceResponse(params), statusCode: 200, elapsedMs: 12 };
-  }
   if (!/^https?:\/\//i.test(source.endpoint)) {
-    throw new Error('接口地址必须是 http(s) URL 或 mock:// 演示地址。');
+    throw new Error('接口地址必须是 http(s) URL。');
   }
   const startedAt = Date.now();
   const headers = { 'Content-Type': 'application/json' };
@@ -2520,6 +2765,7 @@ export async function handleGovernanceApi(req, url, readJson, runtime = {}) {
     '/api/blacklist',
     '/api/unsubscribes',
     '/api/settings',
+    '/api/sms-providers',
     '/api/worker',
     '/api/event-sources',
     '/api/data-sources',
@@ -2545,6 +2791,7 @@ export async function handleGovernanceApi(req, url, readJson, runtime = {}) {
     (await routeRegisterRequests(req, url, readJson, actor)) ||
     (await routeRoles(req, url, readJson, actor)) ||
     (await routePhoneList(req, url, readJson, actor)) ||
+    (await routeSmsProviders(req, url, readJson, actor)) ||
     (await routeSettings(req, url, readJson, actor, runtime)) ||
     (await routeEventSources(req, url, readJson, actor)) ||
     (await routeDataSources(req, url, readJson, actor)) ||
@@ -2594,6 +2841,9 @@ function permissionFor(req, url) {
   if (url.pathname === '/api/settings') return 'security:setting:base';
   if (url.pathname === '/api/settings/provider/test') return 'security:setting:providerTest';
   if (url.pathname === '/api/settings/update') return 'security:setting:save';
+  if (url.pathname === '/api/sms-providers') return req.method === 'GET' ? 'security:setting:base' : 'security:setting:save';
+  if (url.pathname.match(/^\/api\/sms-providers\/[^/]+\/(update|status|activate)$/)) return 'security:setting:save';
+  if (url.pathname.match(/^\/api\/sms-providers\/[^/]+$/)) return 'security:setting:base';
   if (url.pathname === '/api/worker/status') return 'security:setting:base';
   if (url.pathname === '/api/worker/run-once') return 'security:setting:workerRun';
   if (url.pathname === '/api/event-sources') return req.method === 'GET' ? 'integration:eventSource:base' : 'integration:eventSource:add';

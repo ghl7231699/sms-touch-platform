@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Activity, BarChart3, CalendarDays, CheckCircle2, Clock3, MessageSquare, MousePointerClick, ShieldCheck, TrendingDown, TrendingUp, Zap } from 'lucide-react';
-import { eventLabels, sceneLabels } from '../../constants/labels';
+import { eventLabels, sceneLabels, sendStatusKey } from '../../constants/labels';
 import type { Rule, SendLog, SmsTask, Stats } from '../../types';
 import { StatusBadge } from '../../components/StatusBadge';
 
@@ -669,7 +669,7 @@ export default function Dashboard({ stats, logs, rules, tasks }: { stats: Stats 
                 <strong>{log.templateName || log.templateCode}</strong>
                 <span>{log.phoneMasked} · {sceneLabels[log.scene] || log.scene} · {new Date(log.createdAt).toLocaleString()}</span>
               </div>
-              <StatusBadge status={log.status} />
+              <StatusBadge status={sendStatusKey(log.status)} />
             </article>
           ))}
           {!logs.length && <p>暂无发送动态</p>}

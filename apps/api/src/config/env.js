@@ -50,7 +50,7 @@ export const config = {
   rootDir,
   port: numberFromEnv('PORT', 3100),
   host: process.env.HOST || '127.0.0.1',
-  smsProvider: process.env.SMS_PROVIDER || 'mock',
+  smsProvider: process.env.SMS_PROVIDER || 'aliyun_dypns',
   shortLinkBaseUrl: process.env.SHORT_LINK_BASE_URL || 'http://127.0.0.1:3100',
   shortLinkDefaultTarget: process.env.SHORT_LINK_DEFAULT_TARGET || 'https://example.com/sms-touch-platform',
   taskWorker: {

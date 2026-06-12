@@ -15,6 +15,5 @@ export const TASK_STATUS = {
 };
 
 export const SMS_PROVIDERS = {
-  MOCK: 'mock',
   ALIYUN_DYPNS: 'aliyun_dypns'
 };

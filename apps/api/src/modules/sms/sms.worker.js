@@ -1,4 +1,5 @@
 import { config } from '../../config/env.js';
+import { getSmsProviderName } from '../governance/governance.service.js';
 import { runDueTasks } from './sms.service.js';
 
 export function createTaskWorker() {
@@ -14,13 +15,7 @@ export function createTaskWorker() {
   };
 
   if (!config.taskWorker.enabled) {
-    state.disabledReason = 'SMS_TASK_WORKER_ENABLED is false.';
-    return state;
-  }
-
-  if (config.smsProvider !== 'mock' && !config.taskWorker.allowRealSend) {
-    state.disabledReason = 'Real provider worker requires SMS_TASK_WORKER_ALLOW_REAL_SEND=true.';
-    console.warn(`[sms-worker] disabled: ${state.disabledReason}`);
+    state.disabledReason = 'Worker 未启用，请在环境变量中配置 SMS_TASK_WORKER_ENABLED=true 后重启服务。';
     return state;
   }
 
@@ -32,6 +27,14 @@ export function createTaskWorker() {
     state.running = true;
     state.lastRunAt = new Date().toISOString();
     try {
+      const providerName = await getSmsProviderName();
+      if (!config.taskWorker.allowRealSend) {
+        state.disabledReason = '真实短信发送未放行，请在环境变量中配置 SMS_TASK_WORKER_ALLOW_REAL_SEND=true 后重启服务。';
+        state.lastProcessed = 0;
+        state.lastError = null;
+        return;
+      }
+      state.disabledReason = null;
       const result = await runDueTasks({ limit: state.batchSize });
       state.lastProcessed = result.body.processed || 0;
       state.lastError = null;

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { FileJson, Zap } from 'lucide-react';
 import { api } from '../../lib/api';
-import { eventLabels, sceneLabels, statusLabel } from '../../constants/labels';
+import { eventLabels, sceneLabels, statusLabel, taskStatusKey } from '../../constants/labels';
 import type { EventItem, Rule, SmsTask } from '../../types';
 import { Modal } from '../../components/Modal';
 import { SelectField } from '../../components/SelectField';
@@ -207,7 +207,7 @@ export default function Events({
                   <tr key={task.id}>
                     <td><strong>{task.templateName || task.templateCode}</strong><span>{task.id}</span></td>
                     <td>{sceneLabels[task.scene] || task.scene}</td>
-                    <td><StatusBadge status={task.status} /></td>
+                    <td><StatusBadge status={taskStatusKey(task.status)} /></td>
                     <td>{timeLabel(task.scheduledAt)}</td>
                   </tr>
                 ))}

@@ -5,7 +5,7 @@ import { evaluateTaskCondition } from './sms.condition-evaluator.js';
 import { createSmsProvider } from './providers/index.js';
 import { mutateStore, readStore } from './sms.repository.js';
 import { SMS_STATUS, TASK_STATUS } from './sms.types.js';
-import { checkSendSafety, getShortLinkSettings, getSmsProviderName } from '../governance/governance.service.js';
+import { checkSendSafety, getActiveSmsProviderConfig, getShortLinkSettings } from '../governance/governance.service.js';
 
 const PHONE_PATTERN = /^1\d{10}$/;
 const EVENT_TYPES = ['user_register', 'membership_expired', 'campaign_start', 'order_completed'];
@@ -55,6 +55,11 @@ function publicResult(log, success) {
   };
 }
 
+function detailResult(item, code, message, mapper = (value) => value) {
+  if (!item) return fail(code, message, 404);
+  return ok({ success: true, item: mapper(item) });
+}
+
 function buildTemplateParam(input = {}) {
   const merged = {
     ...config.aliyun.templateParam,
@@ -69,6 +74,15 @@ function validatePhone(phone) {
   if (!phone) return fail('PHONE_REQUIRED', 'Phone is required.');
   if (!PHONE_PATTERN.test(phone)) return fail('PHONE_INVALID', 'Phone format is invalid.');
   return null;
+}
+
+function sanitizeJson(value) {
+  if (value === undefined) return undefined;
+  try {
+    return JSON.parse(JSON.stringify(value, (_key, item) => (typeof item === 'function' ? undefined : item)));
+  } catch {
+    return { serializationError: 'RAW_RESPONSE_NOT_SERIALIZABLE' };
+  }
 }
 
 function resolveScheduledAt(rule, occurredAt) {
@@ -139,7 +153,7 @@ async function persistSendLog({ phone, template, rule, event, triggerType, scene
     requestId: result?.requestId,
     shortCode,
     shortUrl,
-    rawResponse: result?.raw,
+    rawResponse: sanitizeJson(result?.raw),
     createdAt: now()
   };
 
@@ -167,7 +181,8 @@ async function sendWithProvider({ phone, template, rule, event, triggerType, tem
   const invalid = validatePhone(phone);
   if (invalid) return invalid;
 
-  const providerName = await getSmsProviderName();
+  const providerConfig = await getActiveSmsProviderConfig();
+  const providerName = providerConfig.provider;
   const safety = await checkSendSafety({
     phone,
     scene: template?.scene || rule?.scene || 'manual',
@@ -199,10 +214,10 @@ async function sendWithProvider({ phone, template, rule, event, triggerType, tem
   }
 
   try {
-    const provider = createSmsProvider(providerName);
+    const provider = createSmsProvider(providerName, providerConfig);
     const result = await provider.sendVerifyCode({
       phone,
-      templateCode: template?.providerTemplateId || config.aliyun.templateCode,
+      templateCode: template?.providerTemplateId || providerConfig.templateCode || config.aliyun.templateCode,
       templateParam
     });
     const log = await persistSendLog({
@@ -249,6 +264,15 @@ export async function getDashboard() {
 export async function listTemplates() {
   const store = await readStore();
   return { items: store.templates };
+}
+
+export async function getTemplate(id) {
+  const store = await readStore();
+  return detailResult(
+    store.templates.find((template) => template.id === id || template.providerTemplateId === id),
+    'TEMPLATE_NOT_FOUND',
+    'Template not found.'
+  );
 }
 
 export async function createTemplate(input) {
@@ -299,6 +323,15 @@ export async function updateTemplateStatus(id, status) {
 export async function listRules() {
   const store = await readStore();
   return { items: store.rules };
+}
+
+export async function getRule(id) {
+  const store = await readStore();
+  return detailResult(
+    store.rules.find((rule) => rule.id === id || rule.code === id),
+    'RULE_NOT_FOUND',
+    'Rule not found.'
+  );
 }
 
 export async function createRule(input) {
@@ -466,6 +499,16 @@ export async function listTasks(filters = {}) {
   return { items: tasks.slice((page - 1) * pageSize, page * pageSize).map(safeTask), total, page, pageSize };
 }
 
+export async function getTask(id) {
+  const store = await readStore();
+  return detailResult(
+    store.tasks.find((task) => task.id === id || task.logId === id),
+    'TASK_NOT_FOUND',
+    'Task not found.',
+    safeTask
+  );
+}
+
 export async function cancelTask(id) {
   return mutateStore((store) => {
     const task = store.tasks.find((item) => item.id === id);
@@ -612,7 +655,7 @@ export async function runDueTasks(input = {}) {
   const limit = Math.min(Math.max(Number(input.limit) || 20, 1), 100);
   const dueTasks = store.tasks
     .filter((task) => (
-      [TASK_STATUS.PENDING, TASK_STATUS.FAILED].includes(task.status) &&
+      task.status === TASK_STATUS.PENDING &&
       new Date(task.scheduledAt).getTime() <= Date.now() &&
       Number(task.attemptCount || 0) < Number(task.maxAttempts || 3)
     ))
@@ -683,14 +726,18 @@ export async function receiveEvent(input) {
     queuedTasks.push(safeTask(task));
   }
 
-  const processedTasks = await runDueTasks({ limit: queuedTasks.length || 1 });
   return ok({
     success: true,
     event,
     matchedRuleCount: matchedRules.length,
     queuedTaskCount: queuedTasks.length,
     queuedTasks,
-    processedTasks: processedTasks.body
+    processedTasks: {
+      success: true,
+      processed: 0,
+      results: [],
+      reason: 'Event accepted and tasks queued. Due tasks are executed by worker or manual run-due action.'
+    }
   }, 201);
 }
 
@@ -716,6 +763,15 @@ export async function listEvents(filters = {}) {
   }
   const total = events.length;
   return { items: events.slice((page - 1) * pageSize, page * pageSize), total, page, pageSize };
+}
+
+export async function getEvent(id) {
+  const store = await readStore();
+  return detailResult(
+    store.events.find((event) => event.id === id || event.eventId === id),
+    'EVENT_NOT_FOUND',
+    'Event not found.'
+  );
 }
 
 export async function listLogs(filters = {}) {
@@ -767,6 +823,16 @@ export async function listLogs(filters = {}) {
   return { items: logs.slice((page - 1) * pageSize, page * pageSize).map(safeLog), total, page, pageSize };
 }
 
+export async function getLog(id) {
+  const store = await readStore();
+  return detailResult(
+    store.logs.find((log) => log.id === id || log.requestId === id || log.bizId === id),
+    'SEND_LOG_NOT_FOUND',
+    'Send log not found.',
+    safeLog
+  );
+}
+
 export async function listReceipts(filters = {}) {
   const store = await readStore();
   const page = Math.max(Number(filters.page) || 1, 1);
@@ -777,6 +843,16 @@ export async function listReceipts(filters = {}) {
   return { items: receipts.slice((page - 1) * pageSize, page * pageSize).map(safeReceipt), total, page, pageSize };
 }
 
+export async function getReceipt(id) {
+  const store = await readStore();
+  return detailResult(
+    store.receipts.find((receipt) => receipt.id === id || receipt.requestId === id || receipt.bizId === id),
+    'RECEIPT_NOT_FOUND',
+    'Receipt not found.',
+    safeReceipt
+  );
+}
+
 export async function listClickLogs(filters = {}) {
   const store = await readStore();
   const page = Math.max(Number(filters.page) || 1, 1);
@@ -785,6 +861,15 @@ export async function listClickLogs(filters = {}) {
   if (filters.shortCode) clicks = clicks.filter((click) => click.shortCode === filters.shortCode);
   const total = clicks.length;
   return { items: clicks.slice((page - 1) * pageSize, page * pageSize), total, page, pageSize };
+}
+
+export async function getClickLog(id) {
+  const store = await readStore();
+  return detailResult(
+    store.clickLogs.find((click) => click.id === id || click.shortCode === id || click.logId === id),
+    'CLICK_LOG_NOT_FOUND',
+    'Click log not found.'
+  );
 }
 
 export async function recordShortLinkClick(shortCode, request = {}) {
