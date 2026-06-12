@@ -2,6 +2,7 @@ node_modules/
 web/dist/
 apps/web/dist/
 .env
+.deploy/
 data/*.json
 !.gitkeep
 .DS_Store
