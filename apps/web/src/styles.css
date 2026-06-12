@@ -2247,6 +2247,185 @@ input[type="checkbox"] {
   gap: 16px;
 }
 
+.overviewTrendPanel {
+  display: grid;
+  gap: 14px;
+}
+
+.trendRangeTabs {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.trendRangeTabs button {
+  height: 34px;
+  min-width: 64px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: #fff;
+  color: #667085;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.trendRangeTabs button:last-child {
+  border-right: 0;
+}
+
+.trendRangeTabs button.active {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.overviewTrendLegend {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 16px;
+  color: #475467;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.overviewTrendLegend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.overviewTrendLegend span::before {
+  content: '';
+  width: 22px;
+  height: 3px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.overviewTrendLegend .send {
+  color: #f59e0b;
+}
+
+.overviewTrendLegend .success {
+  color: #2563eb;
+}
+
+.overviewTrendLegend .clicks {
+  color: #22c55e;
+}
+
+.overviewTrendChart {
+  min-height: 300px;
+  padding: 4px 8px 0;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+}
+
+.overviewTrendChart svg {
+  width: 100%;
+  height: 300px;
+  overflow: visible;
+}
+
+.overviewTrendGrid {
+  stroke: #d8e2ef;
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+
+.overviewTrendAxis,
+.overviewTrendLabel {
+  fill: #667085;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.overviewTrendAxis {
+  text-anchor: end;
+}
+
+.overviewTrendLabel {
+  text-anchor: middle;
+}
+
+.overviewTrendLine {
+  fill: none;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.overviewTrendLine.send {
+  stroke: #f59e0b;
+}
+
+.overviewTrendLine.success {
+  stroke: #2563eb;
+}
+
+.overviewTrendLine.clicks {
+  stroke: #22c55e;
+}
+
+.overviewTrendPoint {
+  fill: #fff;
+  stroke-width: 3;
+}
+
+.overviewTrendPoint.send {
+  stroke: #f59e0b;
+}
+
+.overviewTrendPoint.success {
+  stroke: #2563eb;
+}
+
+.overviewTrendPoint.clicks {
+  stroke: #22c55e;
+}
+
+.overviewTrendHitArea {
+  fill: transparent;
+  pointer-events: all;
+}
+
+.overviewTrendGuide,
+.overviewTrendTooltip {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .16s ease;
+}
+
+.overviewTrendGuide {
+  stroke: #98a2b3;
+  stroke-width: 1.5;
+  stroke-dasharray: 5 5;
+}
+
+.overviewTrendHover:hover .overviewTrendGuide,
+.overviewTrendHover:hover .overviewTrendTooltip {
+  opacity: 1;
+}
+
+.overviewTrendTooltip rect {
+  fill: rgba(17, 24, 39, .88);
+  stroke: rgba(255, 255, 255, .2);
+}
+
+.overviewTrendTooltip text {
+  fill: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.overviewTrendTooltip .tooltipTitle {
+  fill: #dbeafe;
+  font-size: 13px;
+  font-weight: 900;
+}
+
 .heroMetric {
   min-height: 190px;
   display: grid;
@@ -2508,8 +2687,15 @@ button.heroMetric.active {
 
 .deltaText {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.deltaText svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
 }
 
 .deltaText.up {

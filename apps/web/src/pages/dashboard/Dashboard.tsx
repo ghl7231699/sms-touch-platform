@@ -6,6 +6,7 @@ import { StatusBadge } from '../../components/StatusBadge';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 type FocusMetric = 'send' | 'success' | 'ctr';
+type TrendRange = 'day' | 'week' | 'month';
 
 function startOfLocalDay(date = new Date()) {
   const value = new Date(date);
@@ -56,14 +57,22 @@ function aggregateLogsInRange(logs: SendLog[], start: Date, end: Date) {
   };
 }
 
-function formatDelta(current: number, previous: number) {
+function formatDelta(current: number, previous: number, unit: 'count' | 'rate' = 'count') {
   const delta = current - previous;
   if (!previous && !current) return { text: '持平', tone: 'flat', delta };
-  if (!previous) return { text: `新增 ${current}`, tone: 'up', delta };
+  const formatValue = (value: number) => unit === 'rate' ? `${Math.abs(value).toFixed(1)} 个百分点` : String(Math.round(Math.abs(value)));
+  if (!previous) return { text: `新增 ${formatValue(current)}`, tone: 'up', delta };
   const percent = (delta / previous) * 100;
   if (delta === 0) return { text: '持平', tone: 'flat', delta };
+  if (unit === 'rate') {
+    return {
+      text: `${delta > 0 ? '+' : '-'}${formatValue(delta)}`,
+      tone: delta > 0 ? 'up' : 'down',
+      delta
+    };
+  }
   return {
-    text: `${delta > 0 ? '+' : ''}${delta} / ${delta > 0 ? '+' : ''}${percent.toFixed(1)}%`,
+    text: `${delta > 0 ? '+' : '-'}${formatValue(delta)} / ${delta > 0 ? '+' : ''}${percent.toFixed(1)}%`,
     tone: delta > 0 ? 'up' : 'down',
     delta
   };
@@ -79,6 +88,27 @@ function formatRate(value: number) {
 
 function windowStart(days: number, end: Date) {
   return new Date(end.getTime() - days * DAY_MS);
+}
+
+function addDays(date: Date, days: number) {
+  return new Date(date.getTime() + days * DAY_MS);
+}
+
+function startOfMonth(date: Date) {
+  const value = new Date(date);
+  value.setDate(1);
+  value.setHours(0, 0, 0, 0);
+  return value;
+}
+
+function addMonths(date: Date, months: number) {
+  const value = new Date(date);
+  value.setMonth(value.getMonth() + months);
+  return value;
+}
+
+function dateLabel(date: Date) {
+  return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
 function MiniBarChart({ points, tone = 'blue' }: { points: { label: string; value: number }[]; tone?: 'blue' | 'green' | 'amber' }) {
@@ -171,8 +201,139 @@ function LargeTrendChart({ points, type, tone = 'blue', unit = 'count' }: { poin
   );
 }
 
+type OverviewTrendPoint = {
+  label: string;
+  period: string;
+  send: number;
+  success: number;
+  clicks: number;
+  successRate: number;
+  ctr: number;
+};
+
+function aggregateOverviewPoint(logs: SendLog[], start: Date, end: Date, label: string, period: string): OverviewTrendPoint {
+  const items = logs.filter((log) => {
+    const createdAt = new Date(log.createdAt).getTime();
+    return createdAt >= start.getTime() && createdAt < end.getTime();
+  });
+  const send = items.filter((log) => log.status !== 'blocked').length;
+  const success = items.filter((log) => log.status === 'success').length;
+  const clicks = items.reduce((sum, log) => sum + Number(log.clickCount || 0), 0);
+  return {
+    label,
+    period,
+    send,
+    success,
+    clicks,
+    successRate: send > 0 ? (success / send) * 100 : 0,
+    ctr: success > 0 ? (clicks / success) * 100 : 0
+  };
+}
+
+function createOverviewTrend(logs: SendLog[], range: TrendRange, todayStart: Date): OverviewTrendPoint[] {
+  if (range === 'day') {
+    return Array.from({ length: 14 }).map((_, index) => {
+      const start = addDays(todayStart, -(13 - index));
+      const end = addDays(start, 1);
+      return aggregateOverviewPoint(logs, start, end, dateLabel(start), `${dateLabel(start)} 当日`);
+    });
+  }
+
+  if (range === 'week') {
+    return Array.from({ length: 8 }).map((_, index) => {
+      const start = addDays(todayStart, -(7 * (7 - index)));
+      const end = addDays(start, 7);
+      const lastDay = addDays(end, -1);
+      return aggregateOverviewPoint(logs, start, end, `第${index + 1}周`, `${dateLabel(start)}-${dateLabel(lastDay)}`);
+    });
+  }
+
+  const currentMonthStart = startOfMonth(todayStart);
+  return Array.from({ length: 6 }).map((_, index) => {
+    const start = addMonths(currentMonthStart, -(5 - index));
+    const end = addMonths(start, 1);
+    return aggregateOverviewPoint(logs, start, end, `${start.getFullYear()}.${start.getMonth() + 1}`, `${start.getFullYear()}年${start.getMonth() + 1}月`);
+  });
+}
+
+function OverviewMultiLineChart({ points }: { points: OverviewTrendPoint[] }) {
+  const width = 980;
+  const height = 300;
+  const padding = { top: 28, right: 34, bottom: 48, left: 44 };
+  const innerWidth = width - padding.left - padding.right;
+  const innerHeight = height - padding.top - padding.bottom;
+  const maxValue = Math.max(...points.flatMap((item) => [item.send, item.success, item.clicks]), 1);
+  const yTicks = Array.from({ length: 5 }).map((_, index) => Math.round((maxValue / 4) * index));
+  const visibleLabelStep = points.length > 12 ? Math.ceil(points.length / 8) : 1;
+  const toXY = (value: number, index: number) => {
+    const x = padding.left + (index / Math.max(points.length - 1, 1)) * innerWidth;
+    const y = padding.top + (1 - value / maxValue) * innerHeight;
+    return { x, y };
+  };
+  const makeLine = (key: 'send' | 'success' | 'clicks') => points.map((item, index) => {
+    const { x, y } = toXY(item[key], index);
+    return `${x},${y}`;
+  }).join(' ');
+  const series = [
+    { key: 'send' as const, label: '总发送量', className: 'send' },
+    { key: 'success' as const, label: '发送成功量', className: 'success' },
+    { key: 'clicks' as const, label: '短链点击量', className: 'clicks' }
+  ];
+
+  return (
+    <div className="overviewTrendChart" aria-label="总发送量、发送成功量、短链点击量趋势">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img">
+        {yTicks.map((tick) => {
+          const y = padding.top + (1 - tick / maxValue) * innerHeight;
+          return (
+            <g key={tick}>
+              <line className="overviewTrendGrid" x1={padding.left} x2={width - padding.right} y1={y} y2={y} />
+              <text className="overviewTrendAxis" x={padding.left - 12} y={y + 4}>{tick}</text>
+            </g>
+          );
+        })}
+        {series.map((item) => (
+          <polyline key={item.key} className={`overviewTrendLine ${item.className}`} points={makeLine(item.key)} />
+        ))}
+        {points.map((point, index) => (
+          <g className="overviewTrendHover" key={point.period}>
+            <rect
+              className="overviewTrendHitArea"
+              x={toXY(0, index).x - innerWidth / Math.max(points.length - 1, 1) / 2}
+              y={padding.top}
+              width={Math.max(innerWidth / Math.max(points.length - 1, 1), 42)}
+              height={innerHeight}
+            />
+            <line className="overviewTrendGuide" x1={toXY(0, index).x} x2={toXY(0, index).x} y1={padding.top} y2={padding.top + innerHeight} />
+            {series.map((item) => {
+              const { x, y } = toXY(point[item.key], index);
+              return (
+                <circle key={item.key} className={`overviewTrendPoint ${item.className}`} cx={x} cy={y} r="3.4">
+                  <title>{`${point.period} · ${item.label}: ${point[item.key]}`}</title>
+                </circle>
+              );
+            })}
+            <g className="overviewTrendTooltip" transform={`translate(${Math.min(Math.max(toXY(0, index).x - 88, padding.left + 4), width - padding.right - 176)}, ${padding.top + 8})`}>
+              <rect width="176" height="116" rx="8" />
+              <text className="tooltipTitle" x="12" y="20">{point.period}</text>
+              <text x="12" y="44">总发送：{point.send}</text>
+              <text x="12" y="62">成功发送：{point.success}</text>
+              <text x="12" y="80">短链点击：{point.clicks}</text>
+              <text x="12" y="98">成功率 {formatRate(point.successRate)} · CTR {formatRate(point.ctr)}</text>
+            </g>
+            {index % visibleLabelStep === 0 && (
+              <text className="overviewTrendLabel" x={toXY(0, index).x} y={height - 16}>{point.label}</text>
+            )}
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
 export default function Dashboard({ stats, logs, rules, tasks }: { stats: Stats | null; logs: SendLog[]; rules: Rule[]; tasks: SmsTask[] }) {
   const [focusMetric, setFocusMetric] = useState<FocusMetric>('send');
+  const [trendRange, setTrendRange] = useState<TrendRange>('week');
   const todayStart = startOfLocalDay();
   const tomorrowStart = new Date(todayStart.getTime() + DAY_MS);
   const yesterdayStart = new Date(todayStart.getTime() - DAY_MS);
@@ -202,12 +363,12 @@ export default function Dashboard({ stats, logs, rules, tasks }: { stats: Stats 
   const todayDelta = formatDelta(todayAgg.send, yesterdayAgg.send);
   const weekDelta = formatDelta(weekAgg.send, previousWeekAgg.send);
   const monthDelta = formatDelta(monthAgg.send, previousMonthAgg.send);
-  const todaySuccessDelta = formatDelta(todayAgg.successRate, yesterdayAgg.successRate);
-  const weekSuccessDelta = formatDelta(weekAgg.successRate, previousWeekAgg.successRate);
-  const monthSuccessDelta = formatDelta(monthAgg.successRate, previousMonthAgg.successRate);
-  const todayCtrDelta = formatDelta(todayAgg.ctr, yesterdayAgg.ctr);
-  const weekCtrDelta = formatDelta(weekAgg.ctr, previousWeekAgg.ctr);
-  const monthCtrDelta = formatDelta(monthAgg.ctr, previousMonthAgg.ctr);
+  const todaySuccessDelta = formatDelta(todayAgg.successRate, yesterdayAgg.successRate, 'rate');
+  const weekSuccessDelta = formatDelta(weekAgg.successRate, previousWeekAgg.successRate, 'rate');
+  const monthSuccessDelta = formatDelta(monthAgg.successRate, previousMonthAgg.successRate, 'rate');
+  const todayCtrDelta = formatDelta(todayAgg.ctr, yesterdayAgg.ctr, 'rate');
+  const weekCtrDelta = formatDelta(weekAgg.ctr, previousWeekAgg.ctr, 'rate');
+  const monthCtrDelta = formatDelta(monthAgg.ctr, previousMonthAgg.ctr, 'rate');
   const todaySuccessCount = countSuccessInRange(logs, todayStart, tomorrowStart);
   const todaySuccessRate = todaySendCount > 0 ? (todaySuccessCount / todaySendCount) * 100 : 0;
   const activeRuleRate = (stats?.ruleCount ?? 0) > 0 ? ((stats?.enabledRuleCount ?? 0) / (stats?.ruleCount ?? 0)) * 100 : 0;
@@ -296,6 +457,12 @@ export default function Dashboard({ stats, logs, rules, tasks }: { stats: Stats 
     { label: '异常任务', value: issueTasks, icon: <ShieldCheck size={18} />, tone: 'red' },
     { label: '安全拦截', value: stats?.blockedCount ?? 0, icon: <ShieldCheck size={18} />, tone: 'green' }
   ];
+  const overviewTrendPoints = createOverviewTrend(logs, trendRange, todayStart);
+  const trendRangeOptions = [
+    { value: 'day' as const, label: '按日' },
+    { value: 'week' as const, label: '按周' },
+    { value: 'month' as const, label: '按月' }
+  ];
 
   return (
     <section className="stack overviewPage">
@@ -312,6 +479,26 @@ export default function Dashboard({ stats, logs, rules, tasks }: { stats: Stats 
             <span>以发送记录创建时间统计日、周、月变化</span>
           </div>
         </div>
+      </section>
+
+      <section className="overviewTrendPanel panel">
+        <div className="panelTitle">
+          <div>
+            <h2>核心数据趋势</h2>
+            <span>对比总发送量、发送成功量和短链点击量，快速判断触达规模和内容吸引力。</span>
+          </div>
+          <div className="trendRangeTabs">
+            {trendRangeOptions.map((item) => (
+              <button className={trendRange === item.value ? 'active' : ''} type="button" key={item.value} onClick={() => setTrendRange(item.value)}>{item.label}</button>
+            ))}
+          </div>
+        </div>
+        <div className="overviewTrendLegend">
+          <span className="send">总发送量</span>
+          <span className="success">发送成功量</span>
+          <span className="clicks">短链点击量</span>
+        </div>
+        <OverviewMultiLineChart points={overviewTrendPoints} />
       </section>
 
       <section className="heroKpiSection">
