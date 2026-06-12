@@ -22,6 +22,29 @@ const emptyRequestFilters = { keyword: '', status: '', dateFrom: '', dateTo: '' 
 const emptyResetResult = { setupToken: '', setupUrl: '', expiresAt: '' };
 const emptyCreateResult = { name: '', email: '', initialPassword: '' };
 
+async function copyText(value: string) {
+  if (!value) return false;
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(value);
+    return true;
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = value;
+  textarea.setAttribute('readonly', 'true');
+  textarea.style.position = 'fixed';
+  textarea.style.left = '-9999px';
+  textarea.style.top = '0';
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  try {
+    return document.execCommand('copy');
+  } finally {
+    document.body.removeChild(textarea);
+  }
+}
+
 export default function UsersPage({ setNotice }: { setNotice: (value: string) => void }) {
   const [tab, setTab] = useState<UserTab>('users');
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -213,14 +236,22 @@ export default function UsersPage({ setNotice }: { setNotice: (value: string) =>
 
   async function copyResetLink() {
     if (!resetResult.setupUrl) return;
-    await navigator.clipboard?.writeText(resetResult.setupUrl);
-    setNotice('设置密码链接已复制');
+    try {
+      const copied = await copyText(resetResult.setupUrl);
+      setNotice(copied ? '设置密码链接已复制' : '复制失败，请手动复制链接');
+    } catch {
+      setNotice('复制失败，请手动复制链接');
+    }
   }
 
   async function copyInitialPassword() {
     if (!createResult.initialPassword) return;
-    await navigator.clipboard?.writeText(createResult.initialPassword);
-    setNotice('初始密码已复制');
+    try {
+      const copied = await copyText(createResult.initialPassword);
+      setNotice(copied ? '初始密码已复制' : '复制失败，请手动复制初始密码');
+    } catch {
+      setNotice('复制失败，请手动复制初始密码');
+    }
   }
 
   async function openUserDetail(user: AdminUser) {
