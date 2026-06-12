@@ -34,7 +34,7 @@ type SendResult = {
 function hydrateVariables(template: Template | undefined, previous: Record<string, string>) {
   const variables = template?.variables?.length ? template.variables : ['code', 'min'];
   return variables.reduce<Record<string, string>>((next, key) => {
-    next[key] = previous[key] || (key === 'code' ? '246810' : key === 'min' ? '5' : '');
+    next[key] = previous[key] || (key === 'code' ? '246810' : key === 'min' ? '5' : key === 'link' ? 'http://127.0.0.1:3100/s/demo1' : '');
     return next;
   }, {});
 }
@@ -228,6 +228,7 @@ export default function ManualSend({
                 <div><span>模板内容</span><strong>{selectedTemplate?.content || '请选择模板'}</strong></div>
                 <div><span>适用场景</span><strong>{selectedTemplate ? sceneLabels[selectedTemplate.scene] || selectedTemplate.scene : '-'}</strong></div>
                 <div><span>服务商 Code</span><strong>{selectedTemplate?.providerTemplateId || '-'}</strong></div>
+                <div><span>短链目标</span><strong>{selectedTemplate?.shortLinkTargetUrl || '使用默认目标地址'}</strong></div>
               </div>
             </section>
             <section>

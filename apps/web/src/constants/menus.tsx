@@ -130,7 +130,7 @@ export const menus: AppMenuItem[] = [
         title: '事件触发',
         icon: <Zap size={18} />,
         buttons: [button('页面查看', 'base'), button('模拟事件', 'simulate')],
-        component: ({ events, tasks, rules, onRefresh, setNotice }) => <Events events={events} tasks={tasks} rules={rules} onRefresh={onRefresh} setNotice={setNotice} />
+        component: ({ tasks, rules, onRefresh, setNotice }) => <Events tasks={tasks} rules={rules} onRefresh={onRefresh} setNotice={setNotice} />
       }
     ]
   },

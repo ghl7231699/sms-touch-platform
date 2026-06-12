@@ -1,5 +1,5 @@
 import { config } from '../../config/env.js';
-import { getSmsProviderName } from '../governance/governance.service.js';
+import { getSettingsObject } from '../governance/governance.service.js';
 import { runDueTasks } from './sms.service.js';
 
 export function createTaskWorker() {
@@ -8,16 +8,12 @@ export function createTaskWorker() {
     running: false,
     intervalMs: config.taskWorker.intervalMs,
     batchSize: config.taskWorker.batchSize,
+    allowRealSend: config.taskWorker.allowRealSend,
     lastRunAt: null,
     lastProcessed: 0,
     lastError: null,
     disabledReason: null
   };
-
-  if (!config.taskWorker.enabled) {
-    state.disabledReason = 'Worker 未启用，请在环境变量中配置 SMS_TASK_WORKER_ENABLED=true 后重启服务。';
-    return state;
-  }
 
   let inFlight = false;
 
@@ -27,9 +23,24 @@ export function createTaskWorker() {
     state.running = true;
     state.lastRunAt = new Date().toISOString();
     try {
-      const providerName = await getSmsProviderName();
-      if (!config.taskWorker.allowRealSend) {
-        state.disabledReason = '真实短信发送未放行，请在环境变量中配置 SMS_TASK_WORKER_ALLOW_REAL_SEND=true 后重启服务。';
+      const settings = await getSettingsObject();
+      const workerSettings = settings['sms.worker'] || {};
+      const enabled = workerSettings.enabled ?? config.taskWorker.enabled;
+      const allowRealSend = workerSettings.allowRealSend ?? config.taskWorker.allowRealSend;
+      state.enabled = Boolean(enabled);
+      state.batchSize = Math.min(Math.max(Number(workerSettings.batchSize) || config.taskWorker.batchSize || 20, 1), 200);
+      state.intervalMs = Math.max(Number(workerSettings.intervalMs) || config.taskWorker.intervalMs || 30000, 5000);
+      state.allowRealSend = Boolean(allowRealSend);
+
+      if (!state.enabled) {
+        state.disabledReason = 'Worker 未启用，请在发送控制中启用 worker。';
+        state.lastProcessed = 0;
+        state.lastError = null;
+        return;
+      }
+
+      if (!state.allowRealSend) {
+        state.disabledReason = '真实短信发送未放行，请在发送控制中启用真实发送。';
         state.lastProcessed = 0;
         state.lastError = null;
         return;
@@ -50,10 +61,15 @@ export function createTaskWorker() {
     }
   }
 
-  state.enabled = true;
-  const timer = setInterval(tick, state.intervalMs);
-  if (typeof timer.unref === 'function') timer.unref();
-  setTimeout(tick, 100).unref?.();
-  console.log(`[sms-worker] enabled interval=${state.intervalMs}ms batch=${state.batchSize}`);
+  function schedule(delay = state.intervalMs) {
+    const timer = setTimeout(async () => {
+      await tick();
+      schedule();
+    }, delay);
+    if (typeof timer.unref === 'function') timer.unref();
+  }
+
+  schedule(100);
+  console.log(`[sms-worker] runtime attached interval=${state.intervalMs}ms batch=${state.batchSize}`);
   return state;
 }

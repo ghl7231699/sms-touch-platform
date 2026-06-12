@@ -7,7 +7,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WITH_SEED=false
 WITH_WORKER=false
 SKIP_DB=false
-SKIP_MIGRATE=false
+SKIP_MIGRATE=true
 INSTALL=false
 STOP_ONLY=false
 API_PORT="${API_PORT:-3100}"
@@ -26,7 +26,8 @@ usage() {
   --install       启动前执行 npm install
   --stop          只关闭当前 API/Web 开发服务，不重新启动
   --skip-db       跳过 Docker PostgreSQL 启动和健康检查
-  --skip-migrate  跳过 Prisma migration
+  --skip-migrate  跳过数据库 schema 同步，默认已跳过
+  --sync-db       启动前同步 Prisma schema
   -h, --help      查看帮助
 
 示例:
@@ -103,6 +104,9 @@ for arg in "$@"; do
     --skip-migrate)
       SKIP_MIGRATE=true
       ;;
+    --sync-db)
+      SKIP_MIGRATE=false
+      ;;
     -h|--help)
       usage
       exit 0
@@ -157,8 +161,10 @@ if [[ "$SKIP_DB" == "false" ]]; then
 fi
 
 if [[ "$SKIP_MIGRATE" == "false" ]]; then
-  log "执行 Prisma migration。"
+  log "同步 Prisma schema。"
   npm run db:migrate
+else
+  log "跳过数据库 schema 同步。"
 fi
 
 if [[ "$WITH_SEED" == "true" ]]; then

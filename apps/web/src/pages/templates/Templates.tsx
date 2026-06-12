@@ -1,17 +1,48 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { FileText, Layers3, MessageSquareText, Plus, RadioTower, Sparkles } from 'lucide-react';
+import { FileText, Layers3, RadioTower, Sparkles } from 'lucide-react';
+import { Button, Dropdown, Empty } from 'antd';
 import { api } from '../../lib/api';
 import { sceneLabels } from '../../constants/labels';
 import type { Template } from '../../types';
 import { Modal } from '../../components/Modal';
 import { SelectField } from '../../components/SelectField';
 import { StatusBadge } from '../../components/StatusBadge';
-import { AuthC } from '../../lib/auth';
-import { EmptyState } from '../../components/EmptyState';
+import { AuthC, requireAuth } from '../../lib/auth';
 import { QueryFilterBar, type QueryFilterValues } from '../../components/QueryFilterBar';
 
-const defaultVariables = ['code', 'min'];
+const defaultVariables = ['link'];
 const defaultTestPhone = '18515385071';
+const defaultShortLinkTarget = 'https://example.com/sms-touch-platform';
+const sceneTemplatePresets: Record<string, { content: string; variables: string[]; providerTemplateId: string; shortLinkTargetUrl: string }> = {
+  register: {
+    providerTemplateId: '100001',
+    content: '欢迎注册速通互联，开通会员可解锁专属权益，点击查看：${link}',
+    variables: ['link'],
+    shortLinkTargetUrl: `${defaultShortLinkTarget}/register`
+  },
+  member: {
+    providerTemplateId: '100002',
+    content: '您的会员权益已到期，续费后可继续使用专属权益，点击续费：${link}',
+    variables: ['link'],
+    shortLinkTargetUrl: `${defaultShortLinkTarget}/member-renewal`
+  },
+  campaign: {
+    providerTemplateId: '100003',
+    content: '活动已开启，限时权益等你领取，点击参与：${link}',
+    variables: ['link'],
+    shortLinkTargetUrl: `${defaultShortLinkTarget}/campaign`
+  },
+  after_sale: {
+    providerTemplateId: '100001',
+    content: '您的订单服务已完成，欢迎查看服务详情并反馈体验：${link}',
+    variables: ['link'],
+    shortLinkTargetUrl: `${defaultShortLinkTarget}/service-feedback`
+  }
+};
+
+function presetForScene(scene: string) {
+  return sceneTemplatePresets[scene] || sceneTemplatePresets.register;
+}
 
 function parseVariables(value: string) {
   return value.split(',').map((item) => item.trim()).filter(Boolean);
@@ -19,7 +50,13 @@ function parseVariables(value: string) {
 
 function previewContent(content: string, variables: string[]) {
   return variables.reduce((result, variable) => {
-    const sample = variable === 'code' ? '482619' : variable === 'min' ? '5' : `{${variable}}`;
+    const sample = variable === 'code'
+      ? '482619'
+      : variable === 'min'
+        ? '5'
+        : variable === 'link'
+          ? 'http://127.0.0.1:3100/s/demo1'
+          : `{${variable}}`;
     const pattern = new RegExp(`\\$\\{${variable.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\}`, 'g');
     return result.replace(pattern, sample);
   }, content);
@@ -38,19 +75,22 @@ export default function Templates({ templates, onRefresh, setNotice }: { templat
   const [form, setForm] = useState({
     name: '',
     scene: 'register',
-    providerTemplateId: '100001',
-    content: '您的测试验证码为${code}，${min}分钟内有效。',
-    variables: defaultVariables.join(', ')
+    providerTemplateId: sceneTemplatePresets.register.providerTemplateId,
+    content: sceneTemplatePresets.register.content,
+    variables: sceneTemplatePresets.register.variables.join(', '),
+    shortLinkTargetUrl: sceneTemplatePresets.register.shortLinkTargetUrl
   });
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
+  const [deletingTemplate, setDeletingTemplate] = useState<Template | null>(null);
   const [editForm, setEditForm] = useState({
     name: '',
     scene: 'register',
     providerTemplateId: '',
     content: '',
-    variables: defaultVariables.join(', ')
+    variables: defaultVariables.join(', '),
+    shortLinkTargetUrl: ''
   });
   const [testingTemplate, setTestingTemplate] = useState<Template | null>(null);
   const [testForm, setTestForm] = useState({
@@ -70,12 +110,7 @@ export default function Templates({ templates, onRefresh, setNotice }: { templat
     { value: 'disabled', label: '停用' }
   ];
   const enabledCount = templates.filter((template) => template.status === 'enabled').length;
-  const sceneEntries = Object.entries(sceneLabels).map(([scene, label]) => {
-    const count = templates.filter((template) => template.scene === scene).length;
-    const enabled = templates.filter((template) => template.scene === scene && template.status === 'enabled').length;
-    return { scene, label, count, enabled };
-  });
-  const maxSceneCount = Math.max(...sceneEntries.map((item) => item.count), 1);
+  const coveredSceneCount = new Set(templates.map((template) => template.scene)).size;
   const formVariables = parseVariables(form.variables);
   const editVariables = parseVariables(editForm.variables);
   const normalizedKeyword = filters.keyword.trim().toLowerCase();
@@ -116,7 +151,7 @@ export default function Templates({ templates, onRefresh, setNotice }: { templat
   }
 
   function variableLines(template: Template) {
-    return template.variables.map((item) => `${item}=${item === 'code' ? '482619' : item === 'min' ? '5' : ''}`).join('\n');
+    return template.variables.map((item) => `${item}=${item === 'code' ? '482619' : item === 'min' ? '5' : item === 'link' ? 'http://127.0.0.1:3100/s/demo1' : ''}`).join('\n');
   }
 
   function openEdit(template: Template) {
@@ -126,13 +161,26 @@ export default function Templates({ templates, onRefresh, setNotice }: { templat
       scene: template.scene,
       providerTemplateId: template.providerTemplateId,
       content: template.content,
-      variables: template.variables.join(', ')
+      variables: template.variables.join(', '),
+      shortLinkTargetUrl: template.shortLinkTargetUrl || ''
     });
   }
 
   function openTest(template: Template) {
     setTestingTemplate(template);
     setTestForm({ phone: defaultTestPhone, variables: variableLines(template) });
+  }
+
+  function applyScenePreset(scene: string) {
+    const preset = presetForScene(scene);
+    setForm({
+      ...form,
+      scene,
+      providerTemplateId: preset.providerTemplateId,
+      content: preset.content,
+      variables: preset.variables.join(', '),
+      shortLinkTargetUrl: preset.shortLinkTargetUrl
+    });
   }
 
   async function toggle(template: Template) {
@@ -185,44 +233,75 @@ export default function Templates({ templates, onRefresh, setNotice }: { templat
     await onRefresh();
   }
 
-  return (
-    <section className="stack">
-      <section className="templateHero">
-        <div>
-          <span className="eyebrow">Template center</span>
-          <h1>模板中心</h1>
-          <p>统一管理运营短信内容、服务商模板 Code 和变量结构，为规则中心和手动发送提供稳定素材。</p>
-        </div>
-        <AuthC authKey="touch:template:add">
-          <button className="primaryButton compact" type="button" onClick={() => setModalOpen(true)}><Plus size={16} />新建模板</button>
-        </AuthC>
-      </section>
+  async function removeTemplate() {
+    if (!deletingTemplate) return;
+    try {
+      await api(`/api/templates/${deletingTemplate.id}/delete`, { method: 'POST' });
+      setNotice(`${deletingTemplate.name} 已删除`);
+      setDeletingTemplate(null);
+      await onRefresh();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : '模板删除失败');
+    }
+  }
 
-      <section className="templateSummaryGrid">
-        <article className="templateSummaryCard">
-          <div><FileText size={18} /></div>
-          <span>模板总数</span>
-          <strong>{templates.length}</strong>
-          <p>{enabledCount} 个已启用</p>
-        </article>
-        <article className="templateSummaryCard green">
-          <div><Sparkles size={18} /></div>
-          <span>启用率</span>
-          <strong>{templates.length ? `${((enabledCount / templates.length) * 100).toFixed(1)}%` : '0.0%'}</strong>
-          <p>停用模板不可被新规则误用</p>
-        </article>
-        <article className="templateSummaryCard amber">
-          <div><Layers3 size={18} /></div>
-          <span>覆盖场景</span>
-          <strong>{sceneEntries.filter((item) => item.count > 0).length}</strong>
-          <p>注册、会员、活动、售后等场景</p>
-        </article>
-        <article className="templateSummaryCard">
-          <div><RadioTower size={18} /></div>
-          <span>Provider Code</span>
-          <strong>{new Set(templates.map((template) => template.providerTemplateId)).size}</strong>
-          <p>服务商模板 Code 去重统计</p>
-        </article>
+  function templateMenuItems(template: Template) {
+    return [
+      requireAuth('touch:template:edit') ? { key: 'edit', label: '编辑模板' } : null,
+      requireAuth('touch:template:test') ? { key: 'test', label: '测试发送' } : null,
+      requireAuth('touch:template:status')
+        ? { key: 'toggle', label: template.status === 'enabled' ? '停用模板' : '启用模板' }
+        : null,
+      requireAuth('touch:template:delete') ? { key: 'delete', label: '删除模板', danger: true } : null
+    ].filter((item): item is { key: string; label: string; danger?: boolean } => Boolean(item));
+  }
+
+  function handleTemplateMenuClick(action: string, template: Template) {
+    if (action === 'edit') openEdit(template);
+    if (action === 'test') openTest(template);
+    if (action === 'toggle') toggle(template);
+    if (action === 'delete') setDeletingTemplate(template);
+  }
+
+  return (
+    <section className="stack templateOpsPage">
+      <section className="templateOpsSummaryPanel">
+        <div className="templateOpsHeader">
+          <div>
+            <h1>模板中心</h1>
+            <p>统一管理运营短信内容、服务商模板 Code 和变量结构，为规则中心和手动发送提供稳定素材。</p>
+          </div>
+          <AuthC authKey="touch:template:add">
+            <Button type="primary" onClick={() => setModalOpen(true)}>新建模板</Button>
+          </AuthC>
+        </div>
+
+        <section className="templateSummaryGrid">
+          <article className="templateSummaryCard">
+            <div><FileText size={18} /></div>
+            <span>模板总数</span>
+            <strong>{templates.length}</strong>
+            <p>{enabledCount} 个已启用</p>
+          </article>
+          <article className="templateSummaryCard green">
+            <div><Sparkles size={18} /></div>
+            <span>启用率</span>
+            <strong>{templates.length ? `${((enabledCount / templates.length) * 100).toFixed(1)}%` : '0.0%'}</strong>
+            <p>停用模板不可被新规则误用</p>
+          </article>
+          <article className="templateSummaryCard amber">
+            <div><Layers3 size={18} /></div>
+            <span>覆盖场景</span>
+            <strong>{coveredSceneCount}</strong>
+            <p>注册、会员、活动、售后等场景</p>
+          </article>
+          <article className="templateSummaryCard">
+            <div><RadioTower size={18} /></div>
+            <span>Provider Code</span>
+            <strong>{new Set(templates.map((template) => template.providerTemplateId)).size}</strong>
+            <p>服务商模板 Code 去重统计</p>
+          </article>
+        </section>
       </section>
 
       <section className="templateWorkspace">
@@ -230,11 +309,8 @@ export default function Templates({ templates, onRefresh, setNotice }: { templat
         <div className="panelTitle">
           <div>
             <h2>模板库</h2>
-            <span>卡片展示模板状态、变量和发送预览 · 当前 {filteredTemplates.length}/{templates.length} 个</span>
+            <span>按场景、状态、变量和服务商 Code 管理模板 · 当前 {filteredTemplates.length}/{templates.length} 个</span>
           </div>
-          <AuthC authKey="touch:template:add">
-            <button className="secondaryButton compact" type="button" onClick={() => setModalOpen(true)}><FileText size={16} />新建模板</button>
-          </AuthC>
         </div>
         <QueryFilterBar
           fields={[
@@ -246,71 +322,75 @@ export default function Templates({ templates, onRefresh, setNotice }: { templat
           onChange={(value) => setFilters({ keyword: '', scene: '', status: '', ...value })}
           onSearch={search}
         />
-        <div className="templateGrid">
-          {!templates.length && <EmptyState title="暂无短信模板" description="新建模板后，规则中心和手动发送才能选择对应短信内容。" />}
-          {templates.length > 0 && !filteredTemplates.length && <EmptyState title="没有匹配的模板" description="试试调整关键词、业务场景或状态筛选条件。" />}
-          {filteredTemplates.map((template) => (
-            <article className="templateCard" key={template.id}>
-              <div className="templateTop">
-                <div>
-                  <strong>{template.name}</strong>
-                  <span>{sceneLabels[template.scene] || template.scene} · Code {template.providerTemplateId}</span>
-                </div>
-                <StatusBadge status={template.status} />
-              </div>
-              <p className="templateContent">{template.content}</p>
-              <div className="chips">
-                {template.variables.map((item) => <span key={item}>{item}</span>)}
-              </div>
-              <div className="templatePreviewBox">
+
+        {!filteredTemplates.length ? (
+          <div className="templateOpsEmpty">
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={templates.length ? '没有匹配的模板' : '暂无短信模板'}>
+              {!templates.length && (
+                <AuthC authKey="touch:template:add">
+                  <Button type="primary" onClick={() => setModalOpen(true)}>创建第一条模板</Button>
+                </AuthC>
+              )}
+            </Empty>
+          </div>
+        ) : (
+          <div className="templateOpsTableWrap">
+            <div className="templateOpsTableHeader">
+              <div className="templateOpsScrollCols">
+                <span>模板</span>
+                <span>场景</span>
+                <span>状态</span>
                 <span>变量预览</span>
-                <strong>{previewContent(template.content, template.variables)}</strong>
               </div>
-              <div className="templateActions">
-                <button className="secondaryButton compact" type="button" onClick={() => setSelectedTemplate(template)}>详情</button>
-                <AuthC authKey="touch:template:edit">
-                  <button className="secondaryButton compact" type="button" onClick={() => openEdit(template)}>编辑</button>
-                </AuthC>
-                <AuthC authKey="touch:template:test">
-                  <button className="secondaryButton compact" type="button" onClick={() => openTest(template)}>测试发送</button>
-                </AuthC>
-                <AuthC authKey="touch:template:status">
-                  <button className="secondaryButton compact" type="button" onClick={() => toggle(template)}>
-                    {template.status === 'enabled' ? '停用' : '启用'}
-                  </button>
-                </AuthC>
-              </div>
-            </article>
-          ))}
-        </div>
+              <span className="templateOpsFixedHead">操作</span>
+            </div>
+            <div className="templateOpsRows">
+              {filteredTemplates.map((template) => {
+                const menuItems = templateMenuItems(template);
+                return (
+                  <article className="templateOpsRow" key={template.id}>
+                    <div className="templateOpsScrollCols">
+                      <div className="templateOpsNameCell">
+                        <strong title={template.name}>{template.name}</strong>
+                        <span>Code {template.providerTemplateId}</span>
+                        <p title={template.content}>{template.content}</p>
+                      </div>
+                      <div className="templateOpsSceneCell">
+                        <strong>{sceneLabels[template.scene] || template.scene}</strong>
+                        <span>{template.scene}</span>
+                      </div>
+                      <div className="templateOpsStatusCell">
+                        <StatusBadge status={template.status} />
+                        <span>{template.status === 'enabled' ? '可被规则和手动发送使用' : '不可用于新发送'}</span>
+                      </div>
+                      <div className="templateOpsPreviewCell">
+                        <strong>{previewContent(template.content, template.variables)}</strong>
+                        <div className="chips">
+                          {template.variables.map((item) => <span key={item}>{item}</span>)}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="templateOpsActions">
+                      <Button type="primary" size="small" onClick={() => setSelectedTemplate(template)}>详情</Button>
+                      <Dropdown
+                        disabled={!menuItems.length}
+                        menu={{
+                          items: menuItems,
+                          onClick: ({ key }) => handleTemplateMenuClick(String(key), template)
+                        }}
+                        trigger={['click']}
+                      >
+                        <Button size="small">更多</Button>
+                      </Dropdown>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </section>
 
-        <aside className="panel templateScenePanel">
-          <div className="panelTitle">
-            <div>
-              <h2>场景覆盖</h2>
-              <span>观察模板素材是否覆盖主要运营场景</span>
-            </div>
-          </div>
-          <div className="templateSceneList">
-            {sceneEntries.map((item) => (
-              <article key={item.scene}>
-                <div>
-                  <strong>{item.label}</strong>
-                  <span>{item.enabled}/{item.count} 启用</span>
-                </div>
-                <div className="miniBarTrack"><div style={{ width: `${Math.max((item.count / maxSceneCount) * 100, item.count ? 8 : 2)}%` }} /></div>
-              </article>
-            ))}
-          </div>
-          <div className="templateGuidance">
-            <MessageSquareText size={18} />
-            <div>
-              <strong>模板建议</strong>
-              <span>创建新规则前，先确认模板变量、服务商 Code 和场景一致，避免规则上线后发送内容不可控。</span>
-            </div>
-          </div>
-        </aside>
       </section>
 
       <Modal open={modalOpen} title="新建模板" subtitle="配置服务商模板 Code、内容和变量预览" onClose={() => setModalOpen(false)} showClose={false} size="wide">
@@ -318,10 +398,11 @@ export default function Templates({ templates, onRefresh, setNotice }: { templat
           <div className="formGrid two">
             <label>模板名称<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /></label>
             <label>业务场景
-              <SelectField value={form.scene} options={sceneOptions} onChange={(scene) => setForm({ ...form, scene })} />
+              <SelectField value={form.scene} options={sceneOptions} onChange={applyScenePreset} />
             </label>
             <label>服务商模板 Code<input value={form.providerTemplateId} onChange={(event) => setForm({ ...form, providerTemplateId: event.target.value })} /></label>
-            <label>变量列表<input value={form.variables} onChange={(event) => setForm({ ...form, variables: event.target.value })} placeholder="code, min" /></label>
+            <label>变量列表<input value={form.variables} onChange={(event) => setForm({ ...form, variables: event.target.value })} placeholder="link" /></label>
+            <label>短链目标地址<input value={form.shortLinkTargetUrl} onChange={(event) => setForm({ ...form, shortLinkTargetUrl: event.target.value })} placeholder="https://example.com/landing-page" /></label>
           </div>
           <label>模板内容<textarea value={form.content} onChange={(event) => setForm({ ...form, content: event.target.value })} /></label>
           <div className="templateModalPreview">
@@ -344,7 +425,8 @@ export default function Templates({ templates, onRefresh, setNotice }: { templat
                 <SelectField value={editForm.scene} options={sceneOptions} onChange={(scene) => setEditForm({ ...editForm, scene })} />
               </label>
               <label>服务商模板 Code<input value={editForm.providerTemplateId} onChange={(event) => setEditForm({ ...editForm, providerTemplateId: event.target.value })} /></label>
-              <label>变量列表<input value={editForm.variables} onChange={(event) => setEditForm({ ...editForm, variables: event.target.value })} placeholder="code, min" /></label>
+              <label>变量列表<input value={editForm.variables} onChange={(event) => setEditForm({ ...editForm, variables: event.target.value })} placeholder="link" /></label>
+              <label>短链目标地址<input value={editForm.shortLinkTargetUrl} onChange={(event) => setEditForm({ ...editForm, shortLinkTargetUrl: event.target.value })} placeholder="https://example.com/landing-page" /></label>
             </div>
             <label>模板内容<textarea value={editForm.content} onChange={(event) => setEditForm({ ...editForm, content: event.target.value })} /></label>
             <div className="templateModalPreview">
@@ -384,6 +466,23 @@ export default function Templates({ templates, onRefresh, setNotice }: { templat
         )}
       </Modal>
 
+      <Modal open={Boolean(deletingTemplate)} title="删除模板" subtitle={deletingTemplate?.name} onClose={() => setDeletingTemplate(null)} showClose={false}>
+        {deletingTemplate && (
+          <div className="stack">
+            <div className="taskActionState confirm">
+              <div>
+                <strong>确认删除 {deletingTemplate.name}？</strong>
+                <span>删除后模板中心不再展示该模板。若模板已被规则、任务或发送记录使用，系统会阻止删除，请改为停用模板。</span>
+              </div>
+            </div>
+            <div className="modalActions">
+              <button className="secondaryButton compact" type="button" onClick={() => setDeletingTemplate(null)}>取消</button>
+              <button className="primaryButton compact dangerButton" type="button" onClick={removeTemplate}>删除</button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       <Modal open={Boolean(selectedTemplate)} title={selectedTemplate?.name || '模板详情'} subtitle="查看模板内容、变量和规则引用前信息" onClose={() => setSelectedTemplate(null)} size="wide">
         {selectedTemplate && (
           <div className="templateDetail">
@@ -403,6 +502,10 @@ export default function Templates({ templates, onRefresh, setNotice }: { templat
               <article>
                 <span>变量预览</span>
                 <p>{previewContent(selectedTemplate.content, selectedTemplate.variables)}</p>
+              </article>
+              <article>
+                <span>短链目标</span>
+                <p>{selectedTemplate.shortLinkTargetUrl || '使用发送控制默认目标地址'}</p>
               </article>
             </div>
             <div className="chips">

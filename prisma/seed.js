@@ -19,8 +19,9 @@ const templates = [
     name: '注册转化提醒',
     scene: 'register',
     providerTemplateId: '100001',
-    content: '您的测试验证码为${code}，${min}分钟内有效。',
-    variables: ['code', 'min'],
+    content: '欢迎注册速通互联，开通会员可解锁专属权益，点击查看：${link}',
+    variables: ['link'],
+    shortLinkTargetUrl: 'https://example.com/sms-touch-platform/register',
     status: 'enabled'
   },
   {
@@ -28,8 +29,9 @@ const templates = [
     name: '会员过期召回',
     scene: 'member',
     providerTemplateId: '100002',
-    content: '您的测试验证码为${code}，${min}分钟内有效。',
-    variables: ['code', 'min'],
+    content: '您的会员权益已到期，续费后可继续使用专属权益，点击续费：${link}',
+    variables: ['link'],
+    shortLinkTargetUrl: 'https://example.com/sms-touch-platform/member-renewal',
     status: 'enabled'
   },
   {
@@ -37,8 +39,9 @@ const templates = [
     name: '活动开始通知',
     scene: 'campaign',
     providerTemplateId: '100003',
-    content: '您的测试验证码为${code}，${min}分钟内有效。',
-    variables: ['code', 'min'],
+    content: '活动已开启，限时权益等你领取，点击参与：${link}',
+    variables: ['link'],
+    shortLinkTargetUrl: 'https://example.com/sms-touch-platform/campaign',
     status: 'enabled'
   },
   {
@@ -46,8 +49,9 @@ const templates = [
     name: '订单完成回访',
     scene: 'after_sale',
     providerTemplateId: '100001',
-    content: '您的测试验证码为${code}，${min}分钟内有效。',
-    variables: ['code', 'min'],
+    content: '您的订单服务已完成，欢迎查看服务详情并反馈体验：${link}',
+    variables: ['link'],
+    shortLinkTargetUrl: 'https://example.com/sms-touch-platform/service-feedback',
     status: 'enabled'
   }
 ];
@@ -132,6 +136,7 @@ const roles = [
       'touch:template:edit',
       'touch:template:test',
       'touch:template:status',
+      'touch:template:delete',
       'touch:rule:base',
       'touch:rule:add',
       'touch:rule:edit',
@@ -330,6 +335,7 @@ function demoLog(index) {
     skipped: '业务条件未满足，任务已跳过。'
   };
   const createdAt = dateAgo(Math.floor(index / 5), index % 8, index * 3);
+  const shortUrl = status === 'success' ? `http://127.0.0.1:3100/s/d${index + 100}` : null;
   return {
     id: `demo_log_${index + 1}`,
     provider: 'aliyun_dypns',
@@ -340,7 +346,7 @@ function demoLog(index) {
     templateId: template.id,
     templateName: template.name,
     templateCode: template.providerTemplateId,
-    templateParam: { code: '***', min: '5' },
+    templateParam: shortUrl ? { code: '***', min: '5', link: shortUrl } : { code: '***', min: '5' },
     ruleId: rule.id,
     ruleName: rule.name,
     eventId: `demo_event_${(index % 16) + 1}`,
@@ -352,7 +358,7 @@ function demoLog(index) {
     bizId: status === 'success' ? `demo_biz_${index + 1}` : null,
     requestId: `demo_req_${index + 1}`,
     shortCode: status === 'success' ? `d${index + 100}` : null,
-    shortUrl: status === 'success' ? `http://127.0.0.1:3100/s/d${index + 100}` : null,
+    shortUrl,
     clickCount: status === 'success' ? index % 4 : 0,
     lastClickedAt: status === 'success' && index % 4 ? dateAgo(0, index % 4) : null,
     rawResponse: { demo: true, status },
@@ -728,13 +734,14 @@ async function main() {
   }
 
   for (const log of demoLogs.filter((item) => item.status === 'success').slice(0, 8)) {
+    const template = templates.find((item) => item.id === log.templateId);
     await prisma.smsShortLink.upsert({
       where: { logId: log.id },
       create: {
         id: `demo_short_${log.id}`,
         shortCode: log.shortCode,
         shortUrl: log.shortUrl,
-        targetUrl: 'https://example.com/sms-touch-platform/campaign',
+        targetUrl: template?.shortLinkTargetUrl || 'https://example.com/sms-touch-platform/campaign',
         logId: log.id,
         userId: `demo_click_user_${log.id}`,
         phoneMasked: log.phoneMasked,

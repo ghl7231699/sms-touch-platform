@@ -7,6 +7,7 @@ export interface Template {
   providerTemplateId: string;
   content: string;
   variables: string[];
+  shortLinkTargetUrl?: string;
   status: Status;
 }
 

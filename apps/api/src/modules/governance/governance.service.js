@@ -14,6 +14,36 @@ const SESSION_TTL_DAYS = 7;
 const EXPORT_DIR = path.resolve(process.cwd(), 'storage', 'exports');
 const now = () => new Date().toISOString();
 
+function normalizeRuleConditionConfig(value = {}) {
+  const normalized = JSON.parse(JSON.stringify(value || {}));
+  if (Array.isArray(normalized.membershipProductIds)) {
+    normalized.membershipProductIds = [...normalized.membershipProductIds]
+      .map((item) => String(item).trim())
+      .filter(Boolean)
+      .sort();
+  }
+  delete normalized.window;
+  return normalized;
+}
+
+function stableStringify(value) {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function ruleBusinessFingerprint(rule) {
+  return [
+    rule.scene || '',
+    rule.eventType || '',
+    rule.conditionType || '',
+    stableStringify(normalizeRuleConditionConfig(rule.conditionConfig || { type: rule.conditionType || 'none' })),
+    rule.templateId || ''
+  ].join('|');
+}
+
 export const ROLE_DEFINITIONS = [
   {
     code: 'admin',
@@ -32,6 +62,7 @@ export const ROLE_DEFINITIONS = [
       'touch:template:edit',
       'touch:template:test',
       'touch:template:status',
+      'touch:template:delete',
       'touch:rule:base',
       'touch:rule:add',
       'touch:rule:edit',
@@ -148,6 +179,11 @@ const SYSTEM_SETTING_DEFAULTS = {
   'sms.safety': { requireWhitelistForRealProvider: true },
   'sms.verification_code': { validMinutes: 5, resendIntervalSeconds: 60, dailyLimit: 10 },
   'sms.receipt': { enabled: true },
+  'sms.integrations': {
+    membershipStatusUrl: config.integrations.membershipStatusUrl,
+    membershipStatusToken: config.integrations.membershipStatusToken,
+    timeoutMs: config.integrations.timeoutMs
+  },
   'sms.aliyun': {
     credentialMode: 'env',
     endpoint: config.aliyun.endpoint,
@@ -533,7 +569,7 @@ async function listWithCount(model, args, mapItem = (item) => item) {
   return { items: items.map(mapItem), total, page, pageSize };
 }
 
-async function getSettingsObject() {
+export async function getSettingsObject() {
   const rows = await prisma.systemSetting.findMany();
   const settings = { ...SYSTEM_SETTING_DEFAULTS };
   for (const row of rows) settings[row.key] = row.value;
@@ -546,6 +582,10 @@ async function getSettingsObject() {
   };
   settings['sms.receipt'] = {
     enabled: settings['sms.receipt']?.enabled !== false
+  };
+  settings['sms.integrations'] = {
+    ...(settings['sms.integrations'] || {}),
+    timeoutMs: Math.max(Number(settings['sms.integrations']?.timeoutMs) || config.integrations.timeoutMs, 1000)
   };
   settings['sms.provider_configs'] = normalizeProviderConfigsSetting(settings['sms.provider_configs']);
   const policies = await prisma.smsFrequencyPolicy.findMany({ orderBy: { scene: 'asc' } });
@@ -596,6 +636,15 @@ export async function getShortLinkSettings() {
   return settings['sms.short_link'] || SYSTEM_SETTING_DEFAULTS['sms.short_link'];
 }
 
+export async function getIntegrationSettings() {
+  const settings = await getSettingsObject();
+  return settings['sms.integrations'] || SYSTEM_SETTING_DEFAULTS['sms.integrations'];
+}
+
+export async function getWhitelistCount() {
+  return prisma.smsWhitelist.count({ where: { status: 'enabled' } });
+}
+
 async function getVerificationCodeSettings() {
   const settings = await getSettingsObject();
   return settings['sms.verification_code'] || SYSTEM_SETTING_DEFAULTS['sms.verification_code'];
@@ -617,6 +666,13 @@ function settingRowsFromObject(input = {}) {
   if (normalized['sms.receipt']) {
     normalized['sms.receipt'] = {
       enabled: normalized['sms.receipt'].enabled !== false
+    };
+  }
+  if (normalized['sms.integrations']) {
+    normalized['sms.integrations'] = {
+      membershipStatusUrl: String(normalized['sms.integrations'].membershipStatusUrl || '').trim(),
+      membershipStatusToken: String(normalized['sms.integrations'].membershipStatusToken || '').trim(),
+      timeoutMs: Math.max(Number(normalized['sms.integrations'].timeoutMs) || config.integrations.timeoutMs, 1000)
     };
   }
   if (normalized['sms.provider_configs']) {
@@ -706,6 +762,17 @@ async function applyRuleStatus(ruleId, status) {
   await mutateStore((store) => {
     const item = store.rules.find((rule) => rule.id === ruleId);
     if (!item) return;
+    if (status !== 'disabled') {
+      const fingerprint = ruleBusinessFingerprint(item);
+      const duplicated = store.rules.find((rule) => (
+        rule.id !== item.id
+        && rule.status === 'enabled'
+        && ruleBusinessFingerprint(rule) === fingerprint
+      ));
+      if (duplicated) {
+        throw new Error(`已存在同类型启用规则「${duplicated.name}」，请先停用或调整原规则。`);
+      }
+    }
     item.status = status === 'disabled' ? 'disabled' : 'enabled';
     item.updatedAt = now();
     updated = item;
@@ -862,8 +929,7 @@ export async function checkSendSafety({ phone, scene = 'manual', provider = conf
         OR: [{ scene: null }, { scene }, { scene: '' }]
       }
     });
-    const inEnvWhitelist = config.whitelist.includes(normalizedPhone);
-    checks.whitelist.status = inDbWhitelist || inEnvWhitelist ? 'passed' : 'blocked';
+    checks.whitelist.status = inDbWhitelist ? 'passed' : 'blocked';
     if (checks.whitelist.status === 'blocked') {
       return {
         passed: false,
@@ -1656,7 +1722,7 @@ function workerStatusSnapshot(runtime = {}) {
     running: Boolean(worker.running),
     intervalMs: worker.intervalMs ?? config.taskWorker.intervalMs,
     batchSize: worker.batchSize ?? config.taskWorker.batchSize,
-    allowRealSend: config.taskWorker.allowRealSend,
+    allowRealSend: worker.allowRealSend ?? config.taskWorker.allowRealSend,
     lastRunAt: worker.lastRunAt || null,
     lastProcessed: Number(worker.lastProcessed) || 0,
     lastError: worker.lastError || null,
@@ -1829,7 +1895,9 @@ async function routeSettings(req, url, readJson, actor, runtime = {}) {
   if (req.method === 'POST' && url.pathname === '/api/worker/run-once') {
     if (typeof runtime.runDueTasks !== 'function') return fail('WORKER_RUNTIME_UNAVAILABLE', '当前进程未挂载 worker 执行入口。', 503);
     const body = await readJson(req);
-    const limit = Math.min(Math.max(Number(body.limit) || config.taskWorker.batchSize || 20, 1), 200);
+    const settings = await getSettingsObject();
+    const workerSettings = settings['sms.worker'] || {};
+    const limit = Math.min(Math.max(Number(body.limit) || Number(workerSettings.batchSize) || config.taskWorker.batchSize || 20, 1), 200);
     const startedAt = new Date();
     try {
       const result = await runtime.runDueTasks({ limit });

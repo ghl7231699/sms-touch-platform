@@ -1,4 +1,4 @@
-import { config } from '../../config/env.js';
+import { getIntegrationSettings } from '../governance/governance.service.js';
 
 function boolFromPayload(payload, keys) {
   for (const key of keys) {
@@ -8,9 +8,10 @@ function boolFromPayload(payload, keys) {
 }
 
 async function fetchMembershipStatus({ userId, phone, rule }) {
-  if (!config.integrations.membershipStatusUrl) return null;
+  const integrations = await getIntegrationSettings();
+  if (!integrations.membershipStatusUrl) return null;
 
-  const url = new URL(config.integrations.membershipStatusUrl);
+  const url = new URL(integrations.membershipStatusUrl);
   if (userId) url.searchParams.set('userId', userId);
   if (phone) url.searchParams.set('phone', phone);
   if (rule?.conditionConfig?.membershipProductIds?.length) {
@@ -18,13 +19,13 @@ async function fetchMembershipStatus({ userId, phone, rule }) {
   }
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), config.integrations.timeoutMs);
+  const timer = setTimeout(() => controller.abort(), integrations.timeoutMs);
   try {
     const response = await fetch(url, {
       headers: {
         Accept: 'application/json',
-        ...(config.integrations.membershipStatusToken
-          ? { Authorization: `Bearer ${config.integrations.membershipStatusToken}` }
+        ...(integrations.membershipStatusToken
+          ? { Authorization: `Bearer ${integrations.membershipStatusToken}` }
           : {})
       },
       signal: controller.signal

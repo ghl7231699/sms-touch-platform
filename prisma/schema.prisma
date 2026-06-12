@@ -14,6 +14,7 @@ model SmsTemplate {
   providerTemplateId String
   content            String
   variables          Json
+  shortLinkTargetUrl String?
   status             String   @default("enabled")
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt

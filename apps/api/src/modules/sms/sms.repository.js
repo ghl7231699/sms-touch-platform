@@ -5,7 +5,13 @@ const prisma = new PrismaClient();
 const iso = (value) => (value instanceof Date ? value.toISOString() : value);
 
 function toTemplate(item) {
-  return { ...item, variables: item.variables || [], createdAt: iso(item.createdAt), updatedAt: iso(item.updatedAt) };
+  return {
+    ...item,
+    variables: item.variables || [],
+    shortLinkTargetUrl: item.shortLinkTargetUrl || '',
+    createdAt: iso(item.createdAt),
+    updatedAt: iso(item.updatedAt)
+  };
 }
 
 function toRule(item) {
@@ -90,6 +96,7 @@ async function createTemplate(tx, item) {
       providerTemplateId: item.providerTemplateId,
       content: item.content,
       variables: item.variables || [],
+      shortLinkTargetUrl: item.shortLinkTargetUrl || null,
       status: item.status || 'enabled',
       createdAt: item.createdAt ? new Date(item.createdAt) : undefined,
       updatedAt: item.updatedAt ? new Date(item.updatedAt) : undefined
@@ -283,6 +290,7 @@ async function persistUpdates(tx, before, after) {
           providerTemplateId: item.providerTemplateId,
           content: item.content,
           variables: item.variables || [],
+          shortLinkTargetUrl: item.shortLinkTargetUrl || null,
           status: item.status
         }
       });
@@ -361,7 +369,12 @@ async function persistUpdates(tx, before, after) {
 }
 
 async function persistDeletes(tx, before, after) {
+  const afterTemplates = byId(after.templates);
   const afterRules = byId(after.rules);
+
+  for (const item of before.templates) {
+    if (!afterTemplates.has(item.id)) await tx.smsTemplate.delete({ where: { id: item.id } });
+  }
 
   for (const item of before.rules) {
     if (!afterRules.has(item.id)) await tx.smsRule.delete({ where: { id: item.id } });

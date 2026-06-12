@@ -9,6 +9,7 @@ import {
   cancelTask,
   copyRule,
   deleteRule,
+  deleteTemplate,
   estimateRuleImpact,
   getDashboard,
   getClickLog,
@@ -42,6 +43,7 @@ import {
 import { createTaskWorker } from './modules/sms/sms.worker.js';
 import {
   getSmsProviderName,
+  getWhitelistCount,
   handleGovernanceApi,
   recordEventSourceLog,
   verifyEventSourceRequest
@@ -123,7 +125,7 @@ async function handleApi(req, res, url) {
     sendJson(res, 200, {
       status: 'ok',
       provider: await getSmsProviderName(),
-      whitelistCount: config.whitelist.length,
+      whitelistCount: await getWhitelistCount(),
       taskWorker
     });
     return;
@@ -188,6 +190,13 @@ async function handleApi(req, res, url) {
   const templateStatusMatch = url.pathname.match(/^\/api\/(?:sms\/)?templates\/([^/]+)\/status$/);
   if (req.method === 'POST' && templateStatusMatch) {
     const result = await updateTemplateStatus(templateStatusMatch[1], (await readJson(req)).status);
+    sendJson(res, result.statusCode, result.body);
+    return;
+  }
+
+  const templateDeleteMatch = url.pathname.match(/^\/api\/(?:sms\/)?templates\/([^/]+)\/delete$/);
+  if (req.method === 'POST' && templateDeleteMatch) {
+    const result = await deleteTemplate(decodeURIComponent(templateDeleteMatch[1]));
     sendJson(res, result.statusCode, result.body);
     return;
   }

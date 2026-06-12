@@ -6,7 +6,7 @@ import type { EventItem, Rule, SmsTask } from '../../types';
 import { Modal } from '../../components/Modal';
 import { SelectField } from '../../components/SelectField';
 import { AuthC } from '../../lib/auth';
-import { EmptyState, TableEmptyState } from '../../components/EmptyState';
+import { TableEmptyState } from '../../components/EmptyState';
 import { StatusBadge } from '../../components/StatusBadge';
 import { QueryFilterBar, type QueryFilterValues } from '../../components/QueryFilterBar';
 import { defaultPagination, ListPagination, withPaginationParams, type PaginationState } from '../../components/ListPagination';
@@ -26,13 +26,11 @@ function prettyJson(value: unknown) {
 const emptyFilters = { keyword: '', eventType: '', phoneSuffix: '' };
 
 export default function Events({
-  events,
   tasks,
   rules,
   onRefresh,
   setNotice
 }: {
-  events: EventItem[];
   tasks: SmsTask[];
   rules: Rule[];
   onRefresh: () => Promise<void>;
@@ -170,10 +168,6 @@ export default function Events({
           </table>
         </div>
         <ListPagination pagination={pagination} onChange={changePage} />
-      </section>
-
-      <section className="eventList">
-        {!events.length && <EmptyState title="暂无事件概览" description="事件会驱动自动化规则命中和短信任务生成。" />}
       </section>
 
       <Modal open={modalOpen} title="模拟业务事件" subtitle="可编辑 payload JSON，用于验证规则匹配和任务生成" onClose={() => setModalOpen(false)} showClose={false} size="wide">

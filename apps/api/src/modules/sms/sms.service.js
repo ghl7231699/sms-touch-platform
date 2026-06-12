@@ -9,11 +9,39 @@ import { checkSendSafety, getActiveSmsProviderConfig, getShortLinkSettings } fro
 
 const PHONE_PATTERN = /^1\d{10}$/;
 const EVENT_TYPES = ['user_register', 'membership_expired', 'campaign_start', 'order_completed'];
+const TEMPLATE_SCENE_DEFAULTS = {
+  register: {
+    providerTemplateId: '100001',
+    content: '欢迎注册速通互联，开通会员可解锁专属权益，点击查看：${link}',
+    variables: ['link'],
+    shortLinkTargetUrl: 'https://example.com/sms-touch-platform/register'
+  },
+  member: {
+    providerTemplateId: '100002',
+    content: '您的会员权益已到期，续费后可继续使用专属权益，点击续费：${link}',
+    variables: ['link'],
+    shortLinkTargetUrl: 'https://example.com/sms-touch-platform/member-renewal'
+  },
+  campaign: {
+    providerTemplateId: '100003',
+    content: '活动已开启，限时权益等你领取，点击参与：${link}',
+    variables: ['link'],
+    shortLinkTargetUrl: 'https://example.com/sms-touch-platform/campaign'
+  },
+  after_sale: {
+    providerTemplateId: '100001',
+    content: '您的订单服务已完成，欢迎查看服务详情并反馈体验：${link}',
+    variables: ['link'],
+    shortLinkTargetUrl: 'https://example.com/sms-touch-platform/service-feedback'
+  }
+};
 
 const now = () => new Date().toISOString();
 const normalizePhone = (phone) => String(phone || '').trim();
 const normalizeScene = (scene) => String(scene || '').trim();
 const createShortCode = () => Math.random().toString(36).slice(2, 8);
+const templateDefaultForScene = (scene) => TEMPLATE_SCENE_DEFAULTS[scene] || TEMPLATE_SCENE_DEFAULTS.register;
+const SHORT_LINK_VARIABLE_PATTERN = /\$\{\s*link\s*\}|{{\s*link\s*}}|##\s*link\s*##/;
 
 function ok(body, statusCode = 200) {
   return { statusCode, body };
@@ -63,12 +91,62 @@ function detailResult(item, code, message, mapper = (value) => value) {
 
 function buildTemplateParam(input = {}) {
   const merged = {
-    ...config.aliyun.templateParam,
+    code: '##code##',
+    min: '5',
     ...input
   };
   if (!merged.code) merged.code = '##code##';
   if (!merged.min) merged.min = '5';
   return merged;
+}
+
+function templateUsesShortLink(template) {
+  return Boolean(
+    template &&
+    ((Array.isArray(template.variables) && template.variables.includes('link')) ||
+      SHORT_LINK_VARIABLE_PATTERN.test(template.content || ''))
+  );
+}
+
+function normalizeTemplateText(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ');
+}
+
+function templateBusinessFingerprint(template) {
+  return [
+    String(template.scene || '').trim(),
+    String(template.providerTemplateId || '').trim(),
+    normalizeTemplateText(template.content)
+  ].join('|');
+}
+
+function findDuplicateTemplate(templates, candidate, excludeId) {
+  const fingerprint = templateBusinessFingerprint(candidate);
+  return templates.find((template) => template.id !== excludeId && templateBusinessFingerprint(template) === fingerprint);
+}
+
+function duplicateTemplateResult(template) {
+  return fail('TEMPLATE_DUPLICATED', '已存在相同业务场景、服务商模板 Code 和模板内容的短信模板，请编辑原模板或调整内容。', 409, {
+    duplicatedTemplate: {
+      id: template.id,
+      name: template.name,
+      scene: template.scene,
+      providerTemplateId: template.providerTemplateId,
+      status: template.status
+    }
+  });
+}
+
+async function prepareShortLink(template) {
+  if (!templateUsesShortLink(template)) return null;
+  const shortLinkSettings = await getShortLinkSettings();
+  const shortCode = createShortCode();
+  const shortUrl = `${shortLinkSettings.baseUrl || config.shortLinkBaseUrl}/s/${shortCode}`;
+  return {
+    shortCode,
+    shortUrl,
+    targetUrl: template.shortLinkTargetUrl || shortLinkSettings.targetUrl || config.shortLinkDefaultTarget
+  };
 }
 
 function validatePhone(phone) {
@@ -178,10 +256,8 @@ function createTaskPayload({ phone, template, rule, event, triggerType, taskType
   };
 }
 
-async function persistSendLog({ phone, template, rule, event, triggerType, scene, status, result, templateParam, message }) {
-  const shortLinkSettings = await getShortLinkSettings();
-  const shortCode = status === SMS_STATUS.SUCCESS ? createShortCode() : undefined;
-  const shortUrl = shortCode ? `${shortLinkSettings.baseUrl || config.shortLinkBaseUrl}/s/${shortCode}` : undefined;
+async function persistSendLog({ phone, template, rule, event, triggerType, scene, status, result, templateParam, message, shortLink }) {
+  const shouldPersistShortLink = status === SMS_STATUS.SUCCESS && shortLink;
   const log = {
     id: createId(),
     provider: result?.provider || config.smsProvider,
@@ -203,19 +279,19 @@ async function persistSendLog({ phone, template, rule, event, triggerType, scene
     message: result?.message || message,
     bizId: result?.bizId,
     requestId: result?.requestId,
-    shortCode,
-    shortUrl,
+    shortCode: shouldPersistShortLink ? shortLink.shortCode : undefined,
+    shortUrl: shouldPersistShortLink ? shortLink.shortUrl : undefined,
     rawResponse: sanitizeJson(result?.raw),
     createdAt: now()
   };
 
   await mutateStore((store) => {
-    if (shortCode) {
+    if (shouldPersistShortLink) {
       store.shortLinks.unshift({
         id: createId(),
-        shortCode,
-        shortUrl,
-        targetUrl: shortLinkSettings.targetUrl || config.shortLinkDefaultTarget,
+        shortCode: shortLink.shortCode,
+        shortUrl: shortLink.shortUrl,
+        targetUrl: shortLink.targetUrl,
         logId: log.id,
         userId: event?.userId || '',
         phoneMasked: log.phoneMasked,
@@ -266,11 +342,13 @@ async function sendWithProvider({ phone, template, rule, event, triggerType, tem
   }
 
   try {
+    const shortLink = await prepareShortLink(template);
+    const sendTemplateParam = shortLink ? { ...templateParam, link: shortLink.shortUrl } : templateParam;
     const provider = createSmsProvider(providerName, providerConfig);
     const result = await provider.sendVerifyCode({
       phone,
       templateCode: template?.providerTemplateId || providerConfig.templateCode || config.aliyun.templateCode,
-      templateParam
+      templateParam: sendTemplateParam
     });
     const log = await persistSendLog({
       phone,
@@ -278,9 +356,10 @@ async function sendWithProvider({ phone, template, rule, event, triggerType, tem
       rule,
       event,
       triggerType,
-      templateParam,
+      templateParam: sendTemplateParam,
       status: result.success ? SMS_STATUS.SUCCESS : SMS_STATUS.FAILED,
-      result
+      result,
+      shortLink
     });
     return ok(publicResult(log, result.success), result.success ? 200 : 502);
   } catch (error) {
@@ -330,18 +409,23 @@ export async function getTemplate(id) {
 export async function createTemplate(input) {
   if (!input.name) return fail('TEMPLATE_NAME_REQUIRED', 'Template name is required.');
   if (!input.scene) return fail('TEMPLATE_SCENE_REQUIRED', 'Template scene is required.');
+  const store = await readStore();
   const createdAt = now();
+  const defaultTemplate = templateDefaultForScene(input.scene);
   const template = {
     id: createId(),
     name: input.name,
     scene: input.scene,
-    providerTemplateId: input.providerTemplateId || config.aliyun.templateCode,
-    content: input.content || '您的测试验证码为${code}，${min}分钟内有效。',
-    variables: Array.isArray(input.variables) ? input.variables : ['code', 'min'],
+    providerTemplateId: input.providerTemplateId || defaultTemplate.providerTemplateId || config.aliyun.templateCode,
+    content: input.content || defaultTemplate.content,
+    variables: Array.isArray(input.variables) ? input.variables : defaultTemplate.variables,
+    shortLinkTargetUrl: input.shortLinkTargetUrl || defaultTemplate.shortLinkTargetUrl || '',
     status: input.status || 'enabled',
     createdAt,
     updatedAt: createdAt
   };
+  const duplicated = findDuplicateTemplate(store.templates, template);
+  if (duplicated) return duplicateTemplateResult(duplicated);
   await mutateStore((store) => store.templates.unshift(template));
   return ok({ success: true, item: template }, 201);
 }
@@ -349,6 +433,20 @@ export async function createTemplate(input) {
 export async function updateTemplate(id, input) {
   if (!input.name) return fail('TEMPLATE_NAME_REQUIRED', 'Template name is required.');
   if (!input.scene) return fail('TEMPLATE_SCENE_REQUIRED', 'Template scene is required.');
+  const store = await readStore();
+  const source = store.templates.find((template) => template.id === id);
+  if (!source) return fail('TEMPLATE_NOT_FOUND', 'Template not found.', 404);
+  const candidate = {
+    ...source,
+    name: input.name,
+    scene: input.scene,
+    providerTemplateId: input.providerTemplateId || config.aliyun.templateCode,
+    content: input.content || source.content,
+    variables: Array.isArray(input.variables) ? input.variables : source.variables,
+    shortLinkTargetUrl: input.shortLinkTargetUrl || ''
+  };
+  const duplicated = findDuplicateTemplate(store.templates, candidate, id);
+  if (duplicated) return duplicateTemplateResult(duplicated);
   return mutateStore((store) => {
     const item = store.templates.find((template) => template.id === id);
     if (!item) return fail('TEMPLATE_NOT_FOUND', 'Template not found.', 404);
@@ -357,6 +455,7 @@ export async function updateTemplate(id, input) {
     item.providerTemplateId = input.providerTemplateId || config.aliyun.templateCode;
     item.content = input.content || item.content;
     item.variables = Array.isArray(input.variables) ? input.variables : item.variables;
+    item.shortLinkTargetUrl = input.shortLinkTargetUrl || '';
     item.updatedAt = now();
     return ok({ success: true, item });
   });
@@ -368,6 +467,31 @@ export async function updateTemplateStatus(id, status) {
     if (!item) return fail('TEMPLATE_NOT_FOUND', 'Template not found.', 404);
     item.status = status === 'disabled' ? 'disabled' : 'enabled';
     item.updatedAt = now();
+    return ok({ success: true, item });
+  });
+}
+
+export async function deleteTemplate(id) {
+  const store = await readStore();
+  const source = store.templates.find((template) => template.id === id || template.providerTemplateId === id);
+  if (!source) return fail('TEMPLATE_NOT_FOUND', 'Template not found.', 404);
+  const relatedRules = store.rules.filter((rule) => rule.templateId === source.id);
+  const relatedTasks = store.tasks.filter((task) => task.templateId === source.id || task.templateName === source.name);
+  const relatedLogs = store.logs.filter((log) => log.templateId === source.id || log.templateName === source.name);
+  const inUse = relatedRules.length > 0 || relatedTasks.length > 0 || relatedLogs.length > 0;
+  if (inUse) {
+    return fail('TEMPLATE_IN_USE', '该模板已被规则、任务或发送记录使用，不能删除。请停用模板，保留历史链路。', 409, {
+      usage: {
+        ruleCount: relatedRules.length,
+        taskCount: relatedTasks.length,
+        logCount: relatedLogs.length
+      }
+    });
+  }
+  return mutateStore((current) => {
+    const index = current.templates.findIndex((template) => template.id === source.id);
+    if (index < 0) return fail('TEMPLATE_NOT_FOUND', 'Template not found.', 404);
+    const [item] = current.templates.splice(index, 1);
     return ok({ success: true, item });
   });
 }
@@ -487,7 +611,7 @@ export async function updateRuleStatus(id, status) {
   const source = store.rules.find((rule) => rule.id === id);
   if (!source) return fail('RULE_NOT_FOUND', 'Rule not found.', 404);
   if (status !== 'disabled') {
-    const duplicated = findDuplicateRule(store.rules, { ...source, status: 'enabled' }, id);
+    const duplicated = findDuplicateRule(store.rules.filter((rule) => rule.status === 'enabled'), { ...source, status: 'enabled' }, id);
     if (duplicated) return duplicateRuleResult(duplicated);
   }
   return mutateStore((store) => {
@@ -861,6 +985,9 @@ export async function listEvents(filters = {}) {
       event.phone
     ].filter(Boolean).some((value) => String(value).toLowerCase().includes(keyword)));
   }
+  events = [...events].sort((a, b) => (
+    new Date(b.createdAt || b.occurredAt || 0).getTime() - new Date(a.createdAt || a.occurredAt || 0).getTime()
+  ));
   const total = events.length;
   return { items: events.slice((page - 1) * pageSize, page * pageSize), total, page, pageSize };
 }
