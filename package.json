@@ -10,6 +10,7 @@
   "scripts": {
     "start": "npm --workspace apps/api run start",
     "dev": "node scripts/dev.js",
+    "dev:sh": "bash scripts/start-dev.sh",
     "dev:api": "npm --workspace apps/api run dev",
     "dev:server": "npm run dev:api",
     "dev:worker": "npm --workspace apps/api run dev:worker",
