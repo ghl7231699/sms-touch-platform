@@ -57,6 +57,8 @@ export function resourceLabel(resource?: string) {
     system_setting: '发送控制',
     sms_worker: 'Worker',
     event_source: '事件来源',
+    data_source: '数据来源',
+    data_source_run: '数据来源执行',
     sms_task: '短信任务',
     export_task: '导出任务',
     operation_log: '操作日志',
@@ -104,7 +106,8 @@ export function batchJobLabel(jobType?: string) {
     task_cancel: '批量取消任务',
     task_retry: '批量重试任务',
     blacklist_import: '批量导入黑名单',
-    unsubscribe_import: '批量导入退订'
+    unsubscribe_import: '批量导入退订',
+    data_source_create_tasks: '数据来源生成任务'
   }[jobType || ''] || jobType || '-';
 }
 
@@ -150,6 +153,13 @@ export function operationLabel(resource?: string, action?: string) {
     'event_source:update': '编辑事件来源',
     'event_source:change_status': '变更事件来源状态',
     'event_source:reset_secret': '重置事件来源密钥',
+    'data_source:create': '新建数据来源',
+    'data_source:update': '编辑数据来源',
+    'data_source:copy': '复制数据来源',
+    'data_source:change_status': '变更数据来源状态',
+    'data_source:test': '调试数据来源',
+    'data_source:preview': '预览数据来源',
+    'data_source:create_tasks': '数据来源生成任务',
     'sms_task:batch_cancel': '批量取消短信任务',
     'sms_task:batch_retry': '批量重试短信任务',
     'export_task:create': '创建导出任务',

@@ -29,6 +29,7 @@ import UsersPage from '../pages/governance/UsersPage';
 import PhoneListPage from '../pages/governance/PhoneListPage';
 import SettingsPage from '../pages/governance/SettingsPage';
 import EventSourcesPage from '../pages/governance/EventSourcesPage';
+import DataSourcesPage from '../pages/governance/DataSourcesPage';
 import AuditPage from '../pages/governance/AuditPage';
 import ExportTasksPage from '../pages/governance/ExportTasksPage';
 import BatchJobsPage from '../pages/governance/BatchJobsPage';
@@ -230,6 +231,24 @@ export const menus: AppMenuItem[] = [
         icon: <KeyRound size={18} />,
         buttons: [button('页面查看', 'base'), button('新建来源', 'add'), button('查看详情', 'detail'), button('编辑来源', 'edit'), button('启停来源', 'status'), button('重置密钥', 'resetSecret')],
         component: ({ setNotice }) => <EventSourcesPage setNotice={setNotice} />
+      },
+      {
+        key: 'dataSource',
+        path: '/integration/data-sources',
+        title: '数据来源',
+        icon: <Database size={18} />,
+        buttons: [
+          button('页面查看', 'base'),
+          button('新建数据来源', 'add'),
+          button('查看详情', 'detail'),
+          button('编辑数据来源', 'edit'),
+          button('复制数据来源', 'copy'),
+          button('启停数据来源', 'status'),
+          button('调试调用', 'test'),
+          button('预览数据', 'preview'),
+          button('生成任务', 'createTasks')
+        ],
+        component: ({ rules, templates, onRefresh, setNotice }) => <DataSourcesPage rules={rules} templates={templates} onRefresh={onRefresh} setNotice={setNotice} />
       },
       {
         key: 'eventSourceLog',

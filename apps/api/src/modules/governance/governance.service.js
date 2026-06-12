@@ -13,6 +13,12 @@ const PHONE_PATTERN = /^1\d{10}$/;
 const SESSION_TTL_DAYS = 7;
 const EXPORT_DIR = path.resolve(process.cwd(), 'storage', 'exports');
 const now = () => new Date().toISOString();
+const DATA_SOURCE_SAMPLE_ROWS = [
+  { phone: '13900000001', userId: 'member_001', bizId: 'expire_001', scene: 'member', name: '张女士', daysLeft: 3, productName: '年度会员' },
+  { phone: '13900000002', userId: 'member_002', bizId: 'expire_002', scene: 'member', name: '李先生', daysLeft: 1, productName: '月度会员' },
+  { phone: '13900000003', userId: 'member_003', bizId: 'expire_003', scene: 'member', name: '王女士', daysLeft: 0, productName: '季度会员' },
+  { phone: '13900000004', userId: 'member_004', bizId: 'expire_004', scene: 'member', name: '赵先生', daysLeft: 7, productName: '年度会员' }
+];
 
 export const ROLE_DEFINITIONS = [
   {
@@ -72,6 +78,13 @@ export const ROLE_DEFINITIONS = [
       'security:setting:workerRun',
       'integration:eventSource:base',
       'integration:eventSource:detail',
+      'integration:dataSource:base',
+      'integration:dataSource:detail',
+      'integration:dataSource:test',
+      'integration:dataSource:preview',
+      'integration:dataSource:createTasks',
+      'integration:dataSourceRun:base',
+      'integration:dataSourceRun:detail',
       'integration:eventSourceLog:base',
       'integration:eventSourceLog:detail',
       'audit:operationLog:base',
@@ -110,6 +123,10 @@ export const ROLE_DEFINITIONS = [
       'security:setting:base',
       'integration:eventSource:base',
       'integration:eventSource:detail',
+      'integration:dataSource:base',
+      'integration:dataSource:detail',
+      'integration:dataSourceRun:base',
+      'integration:dataSourceRun:detail',
       'integration:eventSourceLog:base',
       'integration:eventSourceLog:detail',
       'audit:operationLog:base',
@@ -1743,6 +1760,413 @@ async function routeEventSources(req, url, readJson, actor) {
   return null;
 }
 
+function safeDataSource(item) {
+  if (!item) return item;
+  const authConfig = item.authConfig || {};
+  const hasSecret = Boolean(authConfig.token || authConfig.password || authConfig.secret || authConfig.authorization);
+  return {
+    ...item,
+    authConfig: hasSecret ? { ...authConfig, token: authConfig.token ? '******' : undefined, password: authConfig.password ? '******' : undefined, secret: authConfig.secret ? '******' : undefined, authorization: authConfig.authorization ? '******' : undefined } : authConfig
+  };
+}
+
+function readPath(source, pathValue) {
+  if (!pathValue) return source;
+  return String(pathValue).split('.').filter(Boolean).reduce((current, key) => {
+    if (current === undefined || current === null) return undefined;
+    return current[key];
+  }, source);
+}
+
+function mapValue(row, rule) {
+  if (rule === undefined || rule === null || rule === '') return undefined;
+  if (typeof rule === 'string') {
+    if (rule.startsWith('$')) return readPath(row, rule.slice(1));
+    return readPath(row, rule);
+  }
+  if (typeof rule === 'object') {
+    if (rule.path) return readPath(row, rule.path);
+    if (Object.prototype.hasOwnProperty.call(rule, 'default')) return rule.default;
+  }
+  return rule;
+}
+
+function maskSensitiveAuthConfig(authConfig = {}) {
+  const result = { ...authConfig };
+  for (const key of ['token', 'password', 'secret', 'authorization']) {
+    if (result[key]) result[key] = '******';
+  }
+  return result;
+}
+
+function normalizeDataSourceInput(body = {}, existing = {}) {
+  const fieldMapping = body.fieldMapping || existing.fieldMapping || {
+    phone: 'phone',
+    userId: 'userId',
+    bizId: 'bizId',
+    scene: 'scene',
+    variables: { name: 'name', productName: 'productName', daysLeft: 'daysLeft' }
+  };
+  const authConfig = body.authConfig ? { ...body.authConfig } : existing.authConfig || {};
+  for (const key of Object.keys(authConfig)) {
+    if (authConfig[key] === '******') authConfig[key] = existing.authConfig?.[key];
+  }
+  return {
+    name: String(body.name ?? existing.name ?? '').trim(),
+    systemName: String(body.systemName ?? existing.systemName ?? '').trim(),
+    endpoint: String(body.endpoint ?? existing.endpoint ?? '').trim(),
+    method: String(body.method ?? existing.method ?? 'GET').toUpperCase() === 'POST' ? 'POST' : 'GET',
+    authType: body.authType || existing.authType || 'none',
+    authConfig,
+    requestConfig: body.requestConfig || existing.requestConfig || { params: {} },
+    pagination: body.pagination || existing.pagination || { type: 'none' },
+    responsePath: body.responsePath || existing.responsePath || 'data.items',
+    fieldMapping,
+    dedupeKey: body.dedupeKey || existing.dedupeKey || 'phone',
+    defaultRuleId: body.defaultRuleId || null,
+    defaultTemplateId: body.defaultTemplateId || null,
+    status: body.status === 'disabled' ? 'disabled' : existing.status || 'enabled',
+    remark: body.remark || null
+  };
+}
+
+function buildMockDataSourceResponse(params = {}) {
+  const limit = Math.min(Math.max(Number(params.limit || params.pageSize) || DATA_SOURCE_SAMPLE_ROWS.length, 1), 20);
+  return {
+    success: true,
+    data: {
+      items: DATA_SOURCE_SAMPLE_ROWS.slice(0, limit),
+      total: DATA_SOURCE_SAMPLE_ROWS.length
+    }
+  };
+}
+
+async function callDataSource(source, params = {}) {
+  if (source.endpoint.startsWith('mock://')) {
+    return { response: buildMockDataSourceResponse(params), statusCode: 200, elapsedMs: 12 };
+  }
+  if (!/^https?:\/\//i.test(source.endpoint)) {
+    throw new Error('接口地址必须是 http(s) URL 或 mock:// 演示地址。');
+  }
+  const startedAt = Date.now();
+  const headers = { 'Content-Type': 'application/json' };
+  const authConfig = source.authConfig || {};
+  if (source.authType === 'header_token' && authConfig.token) {
+    headers[authConfig.headerName || 'Authorization'] = authConfig.prefix ? `${authConfig.prefix} ${authConfig.token}` : authConfig.token;
+  }
+  if (source.authType === 'basic' && authConfig.username && authConfig.password) {
+    headers.Authorization = `Basic ${Buffer.from(`${authConfig.username}:${authConfig.password}`).toString('base64')}`;
+  }
+  const requestParams = { ...(source.requestConfig?.params || {}), ...params };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const url = new URL(source.endpoint);
+    const init = { method: source.method, headers, signal: controller.signal };
+    if (source.method === 'GET') {
+      Object.entries(requestParams).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value));
+      });
+    } else {
+      init.body = JSON.stringify(requestParams);
+    }
+    const response = await fetch(url, init);
+    const contentType = response.headers.get('content-type') || '';
+    const body = contentType.includes('json') ? await response.json() : { text: await response.text() };
+    if (!response.ok) throw new Error(`外部接口返回 ${response.status}`);
+    return { response: body, statusCode: response.status, elapsedMs: Date.now() - startedAt };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function mapDataSourceRows(source, rows, { rule, template } = {}) {
+  const mapping = source.fieldMapping || {};
+  const variableMapping = mapping.variables || {};
+  const seen = new Set();
+  const items = [];
+  rows.forEach((row, index) => {
+    const phone = String(mapValue(row, mapping.phone) || '').trim();
+    const scene = String(mapValue(row, mapping.scene) || template?.scene || rule?.scene || '').trim();
+    const bizId = String(mapValue(row, mapping.bizId) || '').trim();
+    const userId = String(mapValue(row, mapping.userId) || '').trim();
+    const templateParam = {};
+    for (const [key, value] of Object.entries(variableMapping)) templateParam[key] = mapValue(row, value);
+    const dedupeValue = source.dedupeKey === 'bizId' ? bizId : source.dedupeKey === 'userId' ? userId : phone;
+    let status = 'valid';
+    let message = '可生成任务';
+    if (!PHONE_PATTERN.test(phone)) {
+      status = 'failed';
+      message = '手机号缺失或格式错误';
+    } else if (dedupeValue && seen.has(dedupeValue)) {
+      status = 'skipped';
+      message = '按去重键过滤重复记录';
+    } else if (rule && rule.status !== 'enabled') {
+      status = 'failed';
+      message = '选择的规则未启用';
+    } else if (template && template.status !== 'enabled') {
+      status = 'failed';
+      message = '选择的短信模板未启用';
+    } else if (rule && scene && rule.scene !== scene) {
+      status = 'skipped';
+      message = `规则场景 ${rule.scene} 与记录场景 ${scene} 不一致`;
+    }
+    if (dedupeValue) seen.add(dedupeValue);
+    items.push({
+      rowIndex: index + 1,
+      phone,
+      phoneMasked: phone ? maskPhone(phone) : '',
+      bizId,
+      userId,
+      scene,
+      ruleId: rule?.id || null,
+      templateId: template?.id || null,
+      templateParam,
+      status,
+      message,
+      raw: row,
+      mapped: { phoneMasked: phone ? maskPhone(phone) : '', bizId, userId, scene, templateParam }
+    });
+  });
+  return items;
+}
+
+async function previewDataSource(source, body = {}, actor, runType = 'preview') {
+  const params = body.params || {};
+  const [rule, template] = await Promise.all([
+    body.ruleId || source.defaultRuleId ? prisma.smsRule.findUnique({ where: { id: body.ruleId || source.defaultRuleId } }) : null,
+    body.templateId || source.defaultTemplateId ? prisma.smsTemplate.findUnique({ where: { id: body.templateId || source.defaultTemplateId } }) : null
+  ]);
+  const callResult = await callDataSource(source, params);
+  const rows = readPath(callResult.response, source.responsePath);
+  if (!Array.isArray(rows)) throw new Error(`返回数据路径 ${source.responsePath} 未提取到数组。`);
+  const mappedItems = mapDataSourceRows(source, rows, { rule, template });
+  const summary = {
+    totalCount: rows.length,
+    validCount: mappedItems.filter((item) => item.status === 'valid').length,
+    failedCount: mappedItems.filter((item) => item.status === 'failed').length,
+    skippedCount: mappedItems.filter((item) => item.status === 'skipped').length,
+    estimatedTaskCount: mappedItems.filter((item) => item.status === 'valid').length,
+    statusCode: callResult.statusCode,
+    elapsedMs: callResult.elapsedMs
+  };
+  const run = await prisma.dataSourceRun.create({
+    data: {
+      id: createId(),
+      dataSourceId: source.id,
+      runType,
+      status: 'success',
+      params,
+      summary,
+      createdById: actor.id,
+      items: {
+        create: mappedItems.slice(0, 100).map((item) => ({
+          id: createId(),
+          rowIndex: item.rowIndex,
+          phoneMasked: item.phoneMasked || null,
+          bizId: item.bizId || null,
+          userId: item.userId || null,
+          scene: item.scene || null,
+          ruleId: item.ruleId || null,
+          templateId: item.templateId || null,
+          status: item.status,
+          message: item.message,
+          raw: item.raw,
+          mapped: item.mapped
+        }))
+      }
+    },
+    include: { items: true }
+  });
+  await prisma.dataSource.update({ where: { id: source.id }, data: { lastRunAt: new Date() } });
+  return { run, summary, items: mappedItems, rule, template, responseSample: rows.slice(0, 3) };
+}
+
+async function routeDataSources(req, url, readJson, actor) {
+  if (req.method === 'GET' && url.pathname === '/api/data-sources') {
+    const filters = Object.fromEntries(url.searchParams.entries());
+    return ok(await listWithCount(prisma.dataSource, {
+      filters,
+      query: {
+        where: {
+          ...(filters.status ? { status: filters.status } : {}),
+          ...(filters.systemName ? { systemName: contains(filters.systemName) } : {}),
+          ...(filters.keyword ? { OR: [{ name: contains(filters.keyword) }, { systemName: contains(filters.keyword) }, { endpoint: contains(filters.keyword) }] } : {}),
+          ...dateRange(filters)
+        },
+        orderBy: { createdAt: 'desc' }
+      }
+    }, safeDataSource));
+  }
+  if (req.method === 'POST' && url.pathname === '/api/data-sources') {
+    const body = await readJson(req);
+    const data = normalizeDataSourceInput(body);
+    if (!data.name || !data.systemName || !data.endpoint) return fail('DATA_SOURCE_REQUIRED', '数据来源名称、业务系统和接口地址必填。');
+    const item = await prisma.dataSource.create({ data: { id: createId(), ...data, createdById: actor.id } });
+    await writeOperationLog({ req, actor, action: 'create', resource: 'data_source', resourceId: item.id, requestBody: { ...body, authConfig: maskSensitiveAuthConfig(body.authConfig || {}) } });
+    return ok({ success: true, item: safeDataSource(item) }, 201);
+  }
+
+  const updateMatch = url.pathname.match(/^\/api\/data-sources\/([^/]+)\/update$/);
+  if (req.method === 'POST' && updateMatch) {
+    const current = await prisma.dataSource.findUnique({ where: { id: updateMatch[1] } });
+    if (!current) return fail('DATA_SOURCE_NOT_FOUND', '数据来源不存在。', 404);
+    const body = await readJson(req);
+    const data = normalizeDataSourceInput(body, current);
+    const item = await prisma.dataSource.update({ where: { id: current.id }, data });
+    await writeOperationLog({ req, actor, action: 'update', resource: 'data_source', resourceId: item.id, requestBody: { ...body, authConfig: maskSensitiveAuthConfig(body.authConfig || {}) } });
+    return ok({ success: true, item: safeDataSource(item) });
+  }
+
+  const statusMatch = url.pathname.match(/^\/api\/data-sources\/([^/]+)\/status$/);
+  if (req.method === 'POST' && statusMatch) {
+    const body = await readJson(req);
+    const item = await prisma.dataSource.update({ where: { id: statusMatch[1] }, data: { status: body.status === 'disabled' ? 'disabled' : 'enabled' } });
+    await writeOperationLog({ req, actor, action: 'change_status', resource: 'data_source', resourceId: item.id, requestBody: body });
+    return ok({ success: true, item: safeDataSource(item) });
+  }
+
+  const copyMatch = url.pathname.match(/^\/api\/data-sources\/([^/]+)\/copy$/);
+  if (req.method === 'POST' && copyMatch) {
+    const current = await prisma.dataSource.findUnique({ where: { id: copyMatch[1] } });
+    if (!current) return fail('DATA_SOURCE_NOT_FOUND', '数据来源不存在。', 404);
+    const item = await prisma.dataSource.create({
+      data: {
+        ...normalizeDataSourceInput({ ...current, name: `${current.name} 副本`, status: 'disabled' }, current),
+        id: createId(),
+        name: `${current.name} 副本`,
+        createdById: actor.id,
+        lastRunAt: null
+      }
+    });
+    await writeOperationLog({ req, actor, action: 'copy', resource: 'data_source', resourceId: item.id, requestBody: { sourceId: current.id } });
+    return ok({ success: true, item: safeDataSource(item) }, 201);
+  }
+
+  const actionMatch = url.pathname.match(/^\/api\/data-sources\/([^/]+)\/(test-call|preview|create-tasks)$/);
+  if (req.method === 'POST' && actionMatch) {
+    const source = await prisma.dataSource.findUnique({ where: { id: actionMatch[1] } });
+    if (!source) return fail('DATA_SOURCE_NOT_FOUND', '数据来源不存在。', 404);
+    if (source.status !== 'enabled') return fail('DATA_SOURCE_DISABLED', '数据来源已停用，不能执行。', 409);
+    const body = await readJson(req);
+    try {
+      const runType = actionMatch[2] === 'test-call' ? 'test' : actionMatch[2] === 'preview' ? 'preview' : 'create_tasks';
+      const preview = await previewDataSource(source, body, actor, runType);
+      if (actionMatch[2] !== 'create-tasks') {
+        await writeOperationLog({ req, actor, action: runType, resource: 'data_source', resourceId: source.id, requestBody: { params: body.params || {}, ruleId: body.ruleId, templateId: body.templateId } });
+        return ok({
+          success: true,
+          run: preview.run,
+          summary: preview.summary,
+          items: preview.items.slice(0, 100),
+          responseSample: preview.responseSample
+        });
+      }
+      const validItems = preview.items.filter((item) => item.status === 'valid');
+      if (!preview.template) return fail('DATA_SOURCE_TEMPLATE_REQUIRED', '请选择短信模板后再生成任务。');
+      if (!validItems.length) return fail('DATA_SOURCE_NO_VALID_ITEM', '没有可生成任务的有效记录。', 409);
+      const limited = validItems.slice(0, Math.min(Math.max(Number(body.limit) || 5000, 1), 5000));
+      const taskRows = limited.map((item) => ({
+        id: createId(),
+        taskType: 'data_source',
+        status: 'pending',
+        triggerType: 'data_source',
+        scene: item.scene || preview.template.scene,
+        phone: item.phone,
+        phoneMasked: item.phoneMasked,
+        templateId: preview.template.id,
+        templateName: preview.template.name,
+        templateCode: preview.template.providerTemplateId,
+        templateParam: item.templateParam || {},
+        ruleId: preview.rule?.id || null,
+        ruleName: preview.rule?.name || null,
+        eventType: 'data_source',
+        scheduledAt: new Date(body.scheduledAt || Date.now()),
+        conditionResult: 'not_checked'
+      }));
+      const job = await prisma.$transaction(async (tx) => {
+        for (const task of taskRows) await tx.smsTask.create({ data: task });
+        const batch = await tx.batchJob.create({
+          data: {
+            id: createId(),
+            name: `${source.name} 批量生成任务`,
+            jobType: 'data_source_create_tasks',
+            status: 'completed',
+            totalCount: preview.items.length,
+            successCount: taskRows.length,
+            failedCount: preview.items.length - taskRows.length,
+            createdById: actor.id,
+            items: {
+              create: preview.items.slice(0, 500).map((item, index) => ({
+                id: createId(),
+                target: item.phoneMasked || `row_${index + 1}`,
+                status: item.status === 'valid' ? 'success' : item.status,
+                message: item.status === 'valid' ? '已生成待发送任务' : item.message
+              }))
+            }
+          },
+          include: { items: true }
+        });
+        await tx.dataSourceRun.update({
+          where: { id: preview.run.id },
+          data: { batchJobId: batch.id, summary: { ...preview.summary, createdTaskCount: taskRows.length } }
+        });
+        return batch;
+      });
+      await writeOperationLog({ req, actor, action: 'create_tasks', resource: 'data_source', resourceId: source.id, requestBody: { params: body.params || {}, count: taskRows.length, batchJobId: job.id } });
+      return ok({ success: true, job, runId: preview.run.id, createdTaskCount: taskRows.length, summary: { ...preview.summary, createdTaskCount: taskRows.length } }, 201);
+    } catch (error) {
+      const run = await prisma.dataSourceRun.create({
+        data: {
+          id: createId(),
+          dataSourceId: source.id,
+          runType: actionMatch[2],
+          status: 'failed',
+          params: body.params || {},
+          summary: {},
+          errorMessage: error.message,
+          createdById: actor.id
+        }
+      });
+      await writeOperationLog({ req, actor, action: actionMatch[2], resource: 'data_source', resourceId: source.id, requestBody: { params: body.params || {} }, result: 'failed', statusCode: 400, errorMessage: error.message });
+      return fail('DATA_SOURCE_RUN_FAILED', error.message || '数据来源执行失败。', 400, { run });
+    }
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/data-source-runs') {
+    const filters = Object.fromEntries(url.searchParams.entries());
+    return ok(await listWithCount(prisma.dataSourceRun, {
+      filters,
+      query: {
+        where: {
+          ...(filters.dataSourceId ? { dataSourceId: filters.dataSourceId } : {}),
+          ...(filters.runType ? { runType: filters.runType } : {}),
+          ...(filters.status ? { status: filters.status } : {}),
+          ...dateRange(filters)
+        },
+        orderBy: { createdAt: 'desc' },
+        include: { dataSource: true }
+      }
+    }));
+  }
+  const runMatch = url.pathname.match(/^\/api\/data-source-runs\/([^/]+)$/);
+  if (req.method === 'GET' && runMatch) {
+    const item = await prisma.dataSourceRun.findUnique({ where: { id: runMatch[1] }, include: { dataSource: true, items: true } });
+    if (!item) return fail('DATA_SOURCE_RUN_NOT_FOUND', '数据来源执行记录不存在。', 404);
+    return ok({ item });
+  }
+  const sourceMatch = url.pathname.match(/^\/api\/data-sources\/([^/]+)$/);
+  if (req.method === 'GET' && sourceMatch) {
+    const item = await prisma.dataSource.findUnique({
+      where: { id: sourceMatch[1] },
+      include: { runs: { orderBy: { createdAt: 'desc' }, take: 5, include: { items: { take: 10 } } } }
+    });
+    if (!item) return fail('DATA_SOURCE_NOT_FOUND', '数据来源不存在。', 404);
+    return ok({ item: safeDataSource(item) });
+  }
+  return null;
+}
+
 async function routeAudit(req, url) {
   if (req.method === 'GET' && url.pathname === '/api/event-source-logs') {
     const filters = Object.fromEntries(url.searchParams.entries());
@@ -2050,6 +2474,8 @@ export async function handleGovernanceApi(req, url, readJson, runtime = {}) {
     '/api/settings',
     '/api/worker',
     '/api/event-sources',
+    '/api/data-sources',
+    '/api/data-source-runs',
     '/api/event-source-logs',
     '/api/operation-logs',
     '/api/export-tasks',
@@ -2073,6 +2499,7 @@ export async function handleGovernanceApi(req, url, readJson, runtime = {}) {
     (await routePhoneList(req, url, readJson, actor)) ||
     (await routeSettings(req, url, readJson, actor, runtime)) ||
     (await routeEventSources(req, url, readJson, actor)) ||
+    (await routeDataSources(req, url, readJson, actor)) ||
     (await routeAudit(req, url, readJson, actor)) ||
     (await routeAuxiliary(req, url, readJson, actor));
 
@@ -2128,6 +2555,16 @@ function permissionFor(req, url) {
   if (url.pathname.match(/^\/api\/event-sources\/[^/]+\/logs$/)) return 'integration:eventSourceLog:base';
   if (url.pathname.match(/^\/api\/event-sources\/[^/]+\/stats$/)) return 'integration:eventSource:detail';
   if (url.pathname.match(/^\/api\/event-sources\/[^/]+$/)) return 'integration:eventSource:detail';
+  if (url.pathname === '/api/data-sources') return req.method === 'GET' ? 'integration:dataSource:base' : 'integration:dataSource:add';
+  if (url.pathname.match(/^\/api\/data-sources\/[^/]+\/update$/)) return 'integration:dataSource:edit';
+  if (url.pathname.match(/^\/api\/data-sources\/[^/]+\/copy$/)) return 'integration:dataSource:copy';
+  if (url.pathname.match(/^\/api\/data-sources\/[^/]+\/status$/)) return 'integration:dataSource:status';
+  if (url.pathname.match(/^\/api\/data-sources\/[^/]+\/test-call$/)) return 'integration:dataSource:test';
+  if (url.pathname.match(/^\/api\/data-sources\/[^/]+\/preview$/)) return 'integration:dataSource:preview';
+  if (url.pathname.match(/^\/api\/data-sources\/[^/]+\/create-tasks$/)) return 'integration:dataSource:createTasks';
+  if (url.pathname.match(/^\/api\/data-sources\/[^/]+$/)) return 'integration:dataSource:detail';
+  if (url.pathname === '/api/data-source-runs') return 'integration:dataSourceRun:base';
+  if (url.pathname.match(/^\/api\/data-source-runs\/[^/]+$/)) return 'integration:dataSourceRun:detail';
   if (url.pathname === '/api/event-source-logs') return 'integration:eventSourceLog:base';
   if (url.pathname.match(/^\/api\/event-source-logs\/[^/]+$/)) return 'integration:eventSourceLog:detail';
   if (url.pathname === '/api/operation-logs') return 'audit:operationLog:base';

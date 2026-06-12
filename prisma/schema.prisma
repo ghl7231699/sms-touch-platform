@@ -440,6 +440,78 @@ model EventSourceLog {
   @@map("event_source_log")
 }
 
+model DataSource {
+  id             String   @id
+  name           String
+  systemName     String
+  endpoint       String
+  method         String   @default("GET")
+  authType       String   @default("none")
+  authConfig     Json?
+  requestConfig  Json?
+  pagination     Json?
+  responsePath   String   @default("data.items")
+  fieldMapping   Json
+  dedupeKey      String   @default("phone")
+  defaultRuleId  String?
+  defaultTemplateId String?
+  status         String   @default("enabled")
+  remark         String?
+  lastRunAt      DateTime?
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  runs DataSourceRun[]
+
+  @@index([status])
+  @@index([systemName])
+  @@map("data_source")
+}
+
+model DataSourceRun {
+  id             String   @id
+  dataSourceId   String
+  runType        String
+  status         String   @default("success")
+  params         Json?
+  summary        Json?
+  errorMessage   String?
+  batchJobId     String?
+  createdById    String?
+  createdAt      DateTime @default(now())
+
+  dataSource DataSource @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
+  items      DataSourceRunItem[]
+
+  @@index([dataSourceId, createdAt])
+  @@index([runType, status])
+  @@map("data_source_run")
+}
+
+model DataSourceRunItem {
+  id             String   @id
+  runId          String
+  rowIndex       Int
+  phoneMasked    String?
+  bizId          String?
+  userId         String?
+  scene          String?
+  ruleId         String?
+  templateId     String?
+  status         String
+  message        String?
+  raw            Json?
+  mapped         Json?
+  taskId         String?
+  createdAt      DateTime @default(now())
+
+  run DataSourceRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, status])
+  @@map("data_source_run_item")
+}
+
 model ExportTask {
   id          String    @id
   name        String
