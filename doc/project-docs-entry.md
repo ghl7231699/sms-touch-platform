@@ -10,6 +10,7 @@
 - [双全栈功能拆分与协作边界](two-fullstack-feature-split.md)：拆分两名全栈工程师的模块、页面、接口、数据表和公共契约边界，减少并行开发冲突。
 - [全栈 A 后续工作计划](fullstack-a-next-work-plan.md)：按触达增长链路拆分全栈 A 后续工作、优先级、协作点、执行顺序和验收口径。
 - [API 接口文档](api-interface-spec.md)：按 PRD 和当前后端实现整理接口、请求参数、响应示例、错误码、已实现与规划差异。
+- [外部事件 Mock 请求 Postman 文档](external-event-mock-postman.md)：提供四类业务事件的 Postman 请求，用于验证事件接入、规则命中、任务生成和发送记录闭环。
 - [前端页面与新增/修改接口梳理](frontend-pages-and-write-api-count.md)：统计当前页面、PRD 页面、弹窗详情和新增/修改接口数量。
 - [环境配置与启动说明](environment-and-startup.md)：说明本地依赖、环境变量、首次启动、日常启动、worker 和验证命令。
 - [项目摘要](project-summary.md)：汇总业务目标、核心能力、事件、规则、系统模块、接口、数据表和验收标准。

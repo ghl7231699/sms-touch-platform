@@ -33,6 +33,14 @@ http://127.0.0.1:5173
 ./scripts/start-dev.sh
 ```
 
+脚本启动前会自动关闭占用 `3100` 和 `5173` 的旧开发进程，避免后端或 Vite 端口冲突。
+
+只关闭当前开发服务，不重新启动：
+
+```bash
+./scripts/start-dev.sh --stop
+```
+
 访问热更新开发页：
 
 ```text
@@ -56,6 +64,7 @@ http://127.0.0.1:5173
 | `--worker` | 启动 API 内置任务 worker，同时启动 Web |
 | `--skip-db` | 跳过 Docker PostgreSQL 启动和健康检查 |
 | `--skip-migrate` | 跳过 Prisma migration |
+| `--stop` | 只关闭占用 `3100` / `5173` 的开发服务，不重新启动 |
 
 ## 环境变量
 

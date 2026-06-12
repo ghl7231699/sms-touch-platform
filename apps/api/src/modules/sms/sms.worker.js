@@ -1,4 +1,5 @@
 import { config } from '../../config/env.js';
+import { getSmsProviderName } from '../governance/governance.service.js';
 import { runDueTasks } from './sms.service.js';
 
 export function createTaskWorker() {
@@ -18,12 +19,6 @@ export function createTaskWorker() {
     return state;
   }
 
-  if (config.smsProvider !== 'mock' && !config.taskWorker.allowRealSend) {
-    state.disabledReason = 'Real provider worker requires SMS_TASK_WORKER_ALLOW_REAL_SEND=true.';
-    console.warn(`[sms-worker] disabled: ${state.disabledReason}`);
-    return state;
-  }
-
   let inFlight = false;
 
   async function tick() {
@@ -32,6 +27,14 @@ export function createTaskWorker() {
     state.running = true;
     state.lastRunAt = new Date().toISOString();
     try {
+      const providerName = await getSmsProviderName();
+      if (providerName !== 'mock' && !config.taskWorker.allowRealSend) {
+        state.disabledReason = 'Real provider worker requires SMS_TASK_WORKER_ALLOW_REAL_SEND=true.';
+        state.lastProcessed = 0;
+        state.lastError = null;
+        return;
+      }
+      state.disabledReason = null;
       const result = await runDueTasks({ limit: state.batchSize });
       state.lastProcessed = result.body.processed || 0;
       state.lastError = null;

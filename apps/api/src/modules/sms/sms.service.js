@@ -71,6 +71,15 @@ function validatePhone(phone) {
   return null;
 }
 
+function sanitizeJson(value) {
+  if (value === undefined) return undefined;
+  try {
+    return JSON.parse(JSON.stringify(value, (_key, item) => (typeof item === 'function' ? undefined : item)));
+  } catch {
+    return { serializationError: 'RAW_RESPONSE_NOT_SERIALIZABLE' };
+  }
+}
+
 function resolveScheduledAt(rule, occurredAt) {
   const base = new Date(occurredAt || now());
   const value = Number(rule?.delayValue || 0);
@@ -139,7 +148,7 @@ async function persistSendLog({ phone, template, rule, event, triggerType, scene
     requestId: result?.requestId,
     shortCode,
     shortUrl,
-    rawResponse: result?.raw,
+    rawResponse: sanitizeJson(result?.raw),
     createdAt: now()
   };
 
@@ -612,7 +621,7 @@ export async function runDueTasks(input = {}) {
   const limit = Math.min(Math.max(Number(input.limit) || 20, 1), 100);
   const dueTasks = store.tasks
     .filter((task) => (
-      [TASK_STATUS.PENDING, TASK_STATUS.FAILED].includes(task.status) &&
+      task.status === TASK_STATUS.PENDING &&
       new Date(task.scheduledAt).getTime() <= Date.now() &&
       Number(task.attemptCount || 0) < Number(task.maxAttempts || 3)
     ))
@@ -683,14 +692,18 @@ export async function receiveEvent(input) {
     queuedTasks.push(safeTask(task));
   }
 
-  const processedTasks = await runDueTasks({ limit: queuedTasks.length || 1 });
   return ok({
     success: true,
     event,
     matchedRuleCount: matchedRules.length,
     queuedTaskCount: queuedTasks.length,
     queuedTasks,
-    processedTasks: processedTasks.body
+    processedTasks: {
+      success: true,
+      processed: 0,
+      results: [],
+      reason: 'Event accepted and tasks queued. Due tasks are executed by worker or manual run-due action.'
+    }
   }, 201);
 }
 

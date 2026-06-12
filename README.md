@@ -22,6 +22,12 @@ http://127.0.0.1:5173
 ./scripts/start-dev.sh
 ```
 
+脚本启动前会自动关闭占用 `3100` 和 `5173` 的旧开发进程，避免端口冲突。只关闭服务时执行：
+
+```bash
+./scripts/start-dev.sh --stop
+```
+
 也可以通过 npm 别名启动：
 
 ```bash

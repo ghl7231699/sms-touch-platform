@@ -13,6 +13,7 @@
 | `two-fullstack-feature-split.md` | - | 双全栈协作拆分 | 两名全栈工程师的模块边界、接口边界、数据表边界、公共契约和冲突规避规则 |
 | `fullstack-a-next-work-plan.md` | - | 全栈 A 工作计划 | 按触达增长链路拆分全栈 A 后续工作、优先级、协作点、执行顺序和验收口径 |
 | `api-interface-spec.md` | - | API 接口文档 | 按 PRD 和当前实现整理接口、请求参数、响应示例、错误码、已实现与规划差异 |
+| `external-event-mock-postman.md` | - | 外部事件 Mock 联调 | 四类业务事件的 Postman 请求、事件来源鉴权、任务生成和发送闭环验证 |
 | `frontend-pages-and-write-api-count.md` | - | 页面与写接口统计 | 梳理当前前端页面、PRD 页面、弹窗详情、已实现和规划中的新增/修改接口数量 |
 | `aliyun-sms-test-config.md` | - | 测试短信配置 | 阿里云测试通道、签名、模板、白名单、环境变量、发送前校验 |
 | `backend-mvp-design.md` | - | 后端 MVP 设计 | 第一阶段后端范围、接口、数据模型、Provider、SDK 接入、验收标准 |
@@ -30,11 +31,11 @@
 | 后端 | 技术设计、事件定义、规则中心设计、环境配置与启动说明、数据库运行说明、角色分工 | 事件接收、规则匹配、任务生成、短信服务商、回执、短链、幂等、数据库迁移 |
 | 前端 | PRD、规则中心设计、接口文档、角色分工、前端 UI 美化计划 | 模板管理、规则管理、手动发送、发送记录、统计页、商业化后台体验 |
 | 全栈 A | 全栈 A 工作计划、双全栈协作拆分、能力路线图、接口文档、实现覆盖说明 | 触达增长链路、A 主责页面、任务顺序、A/B 协作边界 |
-| 测试 | PRD、规则中心设计、事件定义、接口文档、技术设计验收标准 | 四类事件、规则触发、状态流转、短链点击、统计口径 |
+| 测试 | PRD、规则中心设计、事件定义、接口文档、外部事件 Mock 联调、技术设计验收标准 | 四类事件、规则触发、状态流转、短链点击、统计口径 |
 | 运维/安全 | 技术设计、环境配置与启动说明 | 部署建议、日志、失败处理、手机号脱敏、批量发送限制、worker 开关 |
 | 短信联调 | 阿里云短信测试配置、技术设计 | 测试签名、模板参数、白名单、OpenAPI 返回记录 |
 | MVP 开发 | 环境配置与启动说明、后端 MVP 设计、数据库运行说明、阿里云短信测试配置、双全栈协作拆分 | mock 默认通道、SDK Provider、发送日志、基础统计、数据库启动、并行开发边界 |
-| 线上联动 | 能力路线图、事件定义、技术设计 | 事件签名、业务系统对接、条件校验、任务调度 |
+| 线上联动 | 能力路线图、事件定义、外部事件 Mock 联调、技术设计 | 事件签名、业务系统对接、条件校验、任务调度 |
 
 ## 推荐阅读路径
 
@@ -54,13 +55,14 @@
 6. [双全栈功能拆分与协作边界](two-fullstack-feature-split.md)
 7. [全栈 A 后续工作计划](fullstack-a-next-work-plan.md)
 8. [API 接口文档](api-interface-spec.md)
-9. [前端页面与新增/修改接口梳理](frontend-pages-and-write-api-count.md)
-10. [后端 MVP 设计](backend-mvp-design.md)
-11. [数据库与本地 Docker 环境](database-docker-prisma.md)
-12. [阿里云短信测试配置](aliyun-sms-test-config.md)
-13. `短信触达平台 V1 技术设计文档.pdf`
-14. `短信触达平台 V1 - 事件定义文档.pdf`
-15. `短信触达平台 V1 - 规则中心设计.pdf`
+9. [外部事件 Mock 请求 Postman 文档](external-event-mock-postman.md)
+10. [前端页面与新增/修改接口梳理](frontend-pages-and-write-api-count.md)
+11. [后端 MVP 设计](backend-mvp-design.md)
+12. [数据库与本地 Docker 环境](database-docker-prisma.md)
+13. [阿里云短信测试配置](aliyun-sms-test-config.md)
+14. `短信触达平台 V1 技术设计文档.pdf`
+15. `短信触达平台 V1 - 事件定义文档.pdf`
+16. `短信触达平台 V1 - 规则中心设计.pdf`
 
 ### 测试验收
 
@@ -68,7 +70,8 @@
 2. PRD 的业务验收标准
 3. 技术设计的第 17 节验收标准
 4. [API 接口文档](api-interface-spec.md)
-5. 事件定义和规则中心设计中的 V1 支持范围
+5. [外部事件 Mock 请求 Postman 文档](external-event-mock-postman.md)
+6. 事件定义和规则中心设计中的 V1 支持范围
 
 ## 文档关系
 
