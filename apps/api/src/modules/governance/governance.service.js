@@ -1851,6 +1851,9 @@ async function callDataSource(source, params = {}) {
   const startedAt = Date.now();
   const headers = { 'Content-Type': 'application/json' };
   const authConfig = source.authConfig || {};
+  if (source.authType === 'authorization' && authConfig.authorization) {
+    headers.Authorization = authConfig.authorization;
+  }
   if (source.authType === 'header_token' && authConfig.token) {
     headers[authConfig.headerName || 'Authorization'] = authConfig.prefix ? `${authConfig.prefix} ${authConfig.token}` : authConfig.token;
   }
@@ -1931,6 +1934,25 @@ function mapDataSourceRows(source, rows, { rule, template } = {}) {
   return items;
 }
 
+function collectFieldPaths(value, prefix = '', output = new Set()) {
+  if (output.size >= 120 || value === null || value === undefined) return output;
+  if (Array.isArray(value)) {
+    if (value.length) collectFieldPaths(value[0], prefix, output);
+    return output;
+  }
+  if (typeof value !== 'object') {
+    if (prefix) output.add(prefix);
+    return output;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    const nextPrefix = prefix ? `${prefix}.${key}` : key;
+    if (child === null || child === undefined || typeof child !== 'object') output.add(nextPrefix);
+    else collectFieldPaths(child, nextPrefix, output);
+    if (output.size >= 120) break;
+  }
+  return output;
+}
+
 async function previewDataSource(source, body = {}, actor, runType = 'preview') {
   const params = body.params || {};
   const [rule, template] = await Promise.all([
@@ -1983,6 +2005,32 @@ async function previewDataSource(source, body = {}, actor, runType = 'preview') 
 }
 
 async function routeDataSources(req, url, readJson, actor) {
+  if (req.method === 'POST' && url.pathname === '/api/data-sources/test-call') {
+    const body = await readJson(req);
+    const source = { id: 'draft', ...normalizeDataSourceInput(body) };
+    if (!source.endpoint) return fail('DATA_SOURCE_ENDPOINT_REQUIRED', '接口地址必填。');
+    try {
+      const callResult = await callDataSource(source, body.params || source.requestConfig?.params || {});
+      const rows = readPath(callResult.response, source.responsePath);
+      const rowList = Array.isArray(rows) ? rows : [];
+      const sampleForFields = rowList[0] || callResult.response;
+      await writeOperationLog({ req, actor, action: 'test_draft', resource: 'data_source', requestBody: { ...body, authConfig: maskSensitiveAuthConfig(body.authConfig || {}) } });
+      return ok({
+        success: true,
+        statusCode: callResult.statusCode,
+        elapsedMs: callResult.elapsedMs,
+        responsePath: source.responsePath,
+        responsePathValid: Array.isArray(rows),
+        extractedCount: rowList.length,
+        responseSample: rowList.length ? rowList.slice(0, 3) : callResult.response,
+        fieldHints: [...collectFieldPaths(sampleForFields)]
+      });
+    } catch (error) {
+      await writeOperationLog({ req, actor, action: 'test_draft', resource: 'data_source', requestBody: { ...body, authConfig: maskSensitiveAuthConfig(body.authConfig || {}) }, result: 'failed', statusCode: 400, errorMessage: error.message });
+      return fail('DATA_SOURCE_DRAFT_TEST_FAILED', error.message || '数据来源请求预览失败。', 400);
+    }
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/data-sources') {
     const filters = Object.fromEntries(url.searchParams.entries());
     return ok(await listWithCount(prisma.dataSource, {
@@ -2555,6 +2603,7 @@ function permissionFor(req, url) {
   if (url.pathname.match(/^\/api\/event-sources\/[^/]+\/logs$/)) return 'integration:eventSourceLog:base';
   if (url.pathname.match(/^\/api\/event-sources\/[^/]+\/stats$/)) return 'integration:eventSource:detail';
   if (url.pathname.match(/^\/api\/event-sources\/[^/]+$/)) return 'integration:eventSource:detail';
+  if (url.pathname === '/api/data-sources/test-call') return 'integration:dataSource:test';
   if (url.pathname === '/api/data-sources') return req.method === 'GET' ? 'integration:dataSource:base' : 'integration:dataSource:add';
   if (url.pathname.match(/^\/api\/data-sources\/[^/]+\/update$/)) return 'integration:dataSource:edit';
   if (url.pathname.match(/^\/api\/data-sources\/[^/]+\/copy$/)) return 'integration:dataSource:copy';

@@ -29,6 +29,8 @@ const emptyForm = {
   endpoint: 'mock://member-expiring',
   method: 'GET',
   authType: 'none',
+  authorization: '',
+  requestParamsText: JSON.stringify({ limit: 4 }, null, 2),
   responsePath: 'data.items',
   dedupeKey: 'phone',
   defaultRuleId: '',
@@ -73,6 +75,7 @@ export default function DataSourcesPage({ rules, templates, setNotice, onRefresh
   const [runRuleId, setRunRuleId] = useState('');
   const [runTemplateId, setRunTemplateId] = useState('');
   const [preview, setPreview] = useState<{ summary?: DataSourceRunItem['summary']; items?: any[]; responseSample?: unknown[] } | null>(null);
+  const [draftPreview, setDraftPreview] = useState<{ statusCode?: number; elapsedMs?: number; responsePathValid?: boolean; extractedCount?: number; responseSample?: unknown; fieldHints?: string[] } | null>(null);
   const [runDetail, setRunDetail] = useState<DataSourceRunItem | null>(null);
 
   const ruleOptions = useMemo(() => rules.map((rule) => ({ value: rule.id, label: `${rule.name} · ${sceneLabels[rule.scene] || rule.scene}` })), [rules]);
@@ -89,12 +92,15 @@ export default function DataSourcesPage({ rules, templates, setNotice, onRefresh
   }, []);
 
   function payloadFromForm() {
+    const requestParams = jsonParse(form.requestParamsText, null);
     return {
       name: form.name,
       systemName: form.systemName,
       endpoint: form.endpoint,
       method: form.method,
       authType: form.authType,
+      authConfig: form.authType === 'authorization' ? { authorization: form.authorization } : {},
+      requestConfig: { params: requestParams || {} },
       responsePath: form.responsePath,
       dedupeKey: form.dedupeKey,
       defaultRuleId: form.defaultRuleId || null,
@@ -107,6 +113,10 @@ export default function DataSourcesPage({ rules, templates, setNotice, onRefresh
   async function save(event: React.FormEvent) {
     event.preventDefault();
     const payload = payloadFromForm();
+    if (!jsonParse(form.requestParamsText, null)) {
+      setNotice('运行参数 JSON 格式不正确');
+      return;
+    }
     if (!payload.fieldMapping) {
       setNotice('字段映射 JSON 格式不正确');
       return;
@@ -125,6 +135,7 @@ export default function DataSourcesPage({ rules, templates, setNotice, onRefresh
   }
 
   function openEdit(item: DataSourceItem) {
+    setDraftPreview(null);
     setEditing(item);
     setForm({
       name: item.name,
@@ -132,6 +143,8 @@ export default function DataSourcesPage({ rules, templates, setNotice, onRefresh
       endpoint: item.endpoint,
       method: item.method,
       authType: item.authType,
+      authorization: String(item.authConfig?.authorization || item.authConfig?.token || ''),
+      requestParamsText: JSON.stringify(item.requestConfig?.params || {}, null, 2),
       responsePath: item.responsePath,
       dedupeKey: item.dedupeKey,
       defaultRuleId: item.defaultRuleId || '',
@@ -194,6 +207,21 @@ export default function DataSourcesPage({ rules, templates, setNotice, onRefresh
     setRunDetail(data.item);
   }
 
+  async function previewDraftRequest() {
+    const payload = payloadFromForm();
+    const params = jsonParse(form.requestParamsText, null);
+    if (!params) {
+      setNotice('运行参数 JSON 格式不正确');
+      return;
+    }
+    const data = await api<typeof draftPreview>('/api/data-sources/test-call', {
+      method: 'POST',
+      body: JSON.stringify({ ...payload, params })
+    });
+    setDraftPreview(data);
+    setNotice(data?.responsePathValid ? '请求预览完成，已提取返回字段' : '请求成功，但返回数据路径没有提取到数组');
+  }
+
   function search(nextFilters: QueryFilterValues) {
     const typedFilters = { ...emptyFilters, ...nextFilters };
     const nextPagination = { ...pagination, page: 1 };
@@ -210,7 +238,7 @@ export default function DataSourcesPage({ rules, templates, setNotice, onRefresh
             <span>调用外部系统接口，完成字段映射、规则适配和批量生成任务</span>
           </div>
           <AuthC authKey="integration:dataSource:add">
-            <button className="secondaryButton compact" type="button" onClick={() => { setForm(emptyForm); setModalOpen(true); }}><Plus size={16} />新建数据来源</button>
+            <button className="secondaryButton compact" type="button" onClick={() => { setForm(emptyForm); setDraftPreview(null); setModalOpen(true); }}><Plus size={16} />新建数据来源</button>
           </AuthC>
         </div>
 
@@ -271,28 +299,53 @@ export default function DataSourcesPage({ rules, templates, setNotice, onRefresh
         <ListPagination pagination={pagination} onChange={(page, pageSize) => load(filters, { ...pagination, page, pageSize })} />
       </section>
 
-      <Modal open={modalOpen || Boolean(editing)} title={editing ? '编辑数据来源' : '新建数据来源'} subtitle="配置外部接口和字段映射" onClose={() => { setModalOpen(false); setEditing(null); }} showClose={false}>
+      <Modal open={modalOpen || Boolean(editing)} title={editing ? '编辑数据来源' : '新建数据来源'} subtitle="配置外部接口和字段映射" onClose={() => { setModalOpen(false); setEditing(null); setDraftPreview(null); }} showClose={false} size="wide">
         <form className="formPanel wideForm" onSubmit={save}>
-          <div className="formGrid two">
+          <div className="formGrid dataSourceFormGrid">
             <label>名称<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /></label>
             <label>业务系统<input value={form.systemName} onChange={(event) => setForm({ ...form, systemName: event.target.value })} required /></label>
             <label>接口地址<input value={form.endpoint} onChange={(event) => setForm({ ...form, endpoint: event.target.value })} required /></label>
             <label>请求方法<SelectField value={form.method} onChange={(value) => setForm({ ...form, method: value })} options={[{ value: 'GET', label: 'GET' }, { value: 'POST', label: 'POST' }]} /></label>
+            <label>认证方式<SelectField value={form.authType} onChange={(value) => setForm({ ...form, authType: value, authorization: value === 'none' ? '' : form.authorization })} options={[{ value: 'none', label: '无认证' }, { value: 'authorization', label: 'Authorization 请求头' }]} /></label>
+            {form.authType === 'authorization' && (
+              <label>Authorization<input value={form.authorization} onChange={(event) => setForm({ ...form, authorization: event.target.value })} placeholder="例如 Bearer xxxxxx" /></label>
+            )}
             <label>返回数据路径<input value={form.responsePath} onChange={(event) => setForm({ ...form, responsePath: event.target.value })} /></label>
             <label>去重键<SelectField value={form.dedupeKey} onChange={(value) => setForm({ ...form, dedupeKey: value })} options={[{ value: 'phone', label: '手机号' }, { value: 'userId', label: '用户 ID' }, { value: 'bizId', label: '业务 ID' }]} /></label>
             <label>默认规则<SelectField value={form.defaultRuleId} onChange={(value) => setForm({ ...form, defaultRuleId: value })} options={ruleOptions} placeholder="可选" /></label>
             <label>默认模板<SelectField value={form.defaultTemplateId} onChange={(value) => setForm({ ...form, defaultTemplateId: value })} options={templateOptions} placeholder="可选" /></label>
           </div>
+          <label>运行参数 JSON<textarea rows={4} value={form.requestParamsText} onChange={(event) => setForm({ ...form, requestParamsText: event.target.value })} /></label>
           <label>备注<input value={form.remark} onChange={(event) => setForm({ ...form, remark: event.target.value })} /></label>
-          <label>字段映射 JSON<textarea rows={10} value={form.fieldMappingText} onChange={(event) => setForm({ ...form, fieldMappingText: event.target.value })} /></label>
+          {draftPreview && (
+            <section className="approvalBlock">
+              <strong>请求返回预览</strong>
+              <div className="detailCard">
+                <div><span>HTTP</span><strong>{draftPreview.statusCode || '-'}</strong></div>
+                <div><span>耗时</span><strong>{draftPreview.elapsedMs ?? '-'}ms</strong></div>
+                <div><span>数据路径</span><strong>{draftPreview.responsePathValid ? '有效' : '未提取到数组'}</strong></div>
+                <div><span>提取条数</span><strong>{draftPreview.extractedCount || 0}</strong></div>
+              </div>
+              <div className="fieldHintList">
+                {(draftPreview.fieldHints || []).slice(0, 24).map((field) => <code key={field}>{field}</code>)}
+              </div>
+              <pre className="responsePreview">{JSON.stringify(draftPreview.responseSample, null, 2)}</pre>
+            </section>
+          )}
+          <section className="mappingHelp">
+            <strong>字段映射要求</strong>
+            <span>必须配置 `phone`，用于生成任务手机号；`variables` 的 key 要和短信模板变量名一致；`scene` 可来自接口字段，也可由规则或模板兜底；`bizId` / `userId` 用于去重和排查。</span>
+          </section>
+          <label className="fieldMappingEditor">字段映射 JSON<textarea rows={14} value={form.fieldMappingText} onChange={(event) => setForm({ ...form, fieldMappingText: event.target.value })} /></label>
           <div className="modalActions">
-            <button className="secondaryButton compact" type="button" onClick={() => { setModalOpen(false); setEditing(null); }}>取消</button>
+            <button className="secondaryButton compact" type="button" onClick={() => { setModalOpen(false); setEditing(null); setDraftPreview(null); }}>取消</button>
+            <button className="secondaryButton compact" type="button" onClick={previewDraftRequest}>预览请求返回</button>
             <button className="primaryButton compact" type="submit">保存</button>
           </div>
         </form>
       </Modal>
 
-      <Modal open={Boolean(runner)} title="数据预览与生成任务" subtitle={runner?.name} onClose={() => setRunner(null)}>
+      <Modal open={Boolean(runner)} title="数据预览与生成任务" subtitle={runner?.name} onClose={() => setRunner(null)} size="wide">
         {runner && (
           <div className="formPanel wideForm">
             <div className="formGrid two">

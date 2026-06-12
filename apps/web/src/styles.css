@@ -1790,7 +1790,7 @@ td > [data-ui="status-badge"] {
 .modalOverlay {
   position: fixed;
   inset: 0;
-  z-index: 30;
+  z-index: 100;
   display: grid;
   place-items: center;
   padding: 24px;
@@ -1811,7 +1811,7 @@ td > [data-ui="status-badge"] {
 }
 
 .modalPanel.wide {
-  width: min(860px, 100%);
+  width: min(960px, calc(100vw - 48px));
 }
 
 .modalHeader {
@@ -3940,11 +3940,67 @@ button.heroMetric.active {
 }
 
 .wideForm {
-  min-width: min(760px, calc(100vw - 56px));
+  min-width: min(820px, calc(100vw - 96px));
 }
 
 .formPanel textarea {
   resize: vertical;
+}
+
+.dataSourceFormGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dataSourceFormGrid .spanFull,
+.fieldMappingEditor {
+  grid-column: 1 / -1;
+}
+
+.fieldMappingEditor textarea {
+  min-height: 320px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  line-height: 1.55;
+}
+
+.fieldHintList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fieldHintList code {
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: #eef4ff;
+  color: #1d4ed8;
+  font-size: 12px;
+}
+
+.responsePreview {
+  max-height: 260px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.mappingHelp {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  color: #64748b;
+}
+
+.mappingHelp strong {
+  color: #111827;
 }
 
 .miniTimelineItem.asButton {
@@ -3997,8 +4053,13 @@ button.heroMetric.active {
   }
 
   .dataSourceGrid,
-  .compactMetrics {
+  .compactMetrics,
+  .dataSourceFormGrid {
     grid-template-columns: 1fr;
+  }
+
+  .wideForm {
+    min-width: 0;
   }
 
   .content {
