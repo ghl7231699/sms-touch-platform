@@ -468,50 +468,52 @@ export default function Rules({
 
   return (
     <section className="stack rulesOpsPage">
-      <section className="rulesOpsHeader">
-        <div>
-          <h1>规则中心</h1>
-          <p>管理自动化触达规则，关注运行状态、发送表现和转化效率。</p>
+      <section className="rulesOpsSummaryPanel">
+        <div className="rulesOpsHeader">
+          <div>
+            <h1>规则中心</h1>
+            <p>管理自动化触达规则，关注运行状态、发送表现和转化效率。</p>
+          </div>
+          <AuthC authKey="touch:rule:add">
+            <Button
+              type="primary"
+              onClick={() => {
+                setForm({ ...defaultForm, templateId: templates[0]?.id || defaultForm.templateId });
+                setModalOpen(true);
+              }}
+            >
+              新建规则
+            </Button>
+          </AuthC>
         </div>
-        <AuthC authKey="touch:rule:add">
-          <Button
-            type="primary"
-            onClick={() => {
-              setForm({ ...defaultForm, templateId: templates[0]?.id || defaultForm.templateId });
-              setModalOpen(true);
-            }}
-          >
-            新建规则
-          </Button>
-        </AuthC>
-      </section>
 
-      <section className="rulesOpsMetrics">
-        <Card className="rulesOpsMetricCard blue">
-          <div className="rulesOpsMetricHead"><span>规则总数</span><div><ListChecks size={18} /></div></div>
-          <strong>{formatNumber(dashboardMetrics.totalRules)}</strong>
-          <small>{formatNumber(dashboardMetrics.runningRules)} 条运行中</small>
-        </Card>
-        <Card className="rulesOpsMetricCard violet">
-          <div className="rulesOpsMetricHead"><span>今日触发次数</span><div><Zap size={18} /></div></div>
-          <strong>{formatNumber(dashboardMetrics.todayTrigger)}</strong>
-          <small>来自业务事件和定时任务</small>
-        </Card>
-        <Card className="rulesOpsMetricCard green">
-          <div className="rulesOpsMetricHead"><span>今日发送短信</span><div><Send size={18} /></div></div>
-          <strong>{formatNumber(dashboardMetrics.todaySend)}</strong>
-          <small>规则自动生成的发送记录</small>
-        </Card>
-        <Card className="rulesOpsMetricCard amber">
-          <div className="rulesOpsMetricHead"><span>平均 CTR</span><div><MousePointerClick size={18} /></div></div>
-          <strong>{formatPercent(dashboardMetrics.averageCtr)}</strong>
-          <small>按今日点击 / 今日发送计算</small>
-        </Card>
-        <Card className="rulesOpsMetricCard red">
-          <div className="rulesOpsMetricHead"><span>异常规则</span><div><AlertTriangle size={18} /></div></div>
-          <strong>{formatNumber(dashboardMetrics.errorRules)}</strong>
-          <small>今日有失败或拦截的运行规则</small>
-        </Card>
+        <section className="rulesOpsMetrics">
+          <Card className="rulesOpsMetricCard blue">
+            <div className="rulesOpsMetricHead"><span>规则总数</span><div><ListChecks size={18} /></div></div>
+            <strong>{formatNumber(dashboardMetrics.totalRules)}</strong>
+            <small>{formatNumber(dashboardMetrics.runningRules)} 条运行中</small>
+          </Card>
+          <Card className="rulesOpsMetricCard violet">
+            <div className="rulesOpsMetricHead"><span>今日触发次数</span><div><Zap size={18} /></div></div>
+            <strong>{formatNumber(dashboardMetrics.todayTrigger)}</strong>
+            <small>来自业务事件和定时任务</small>
+          </Card>
+          <Card className="rulesOpsMetricCard green">
+            <div className="rulesOpsMetricHead"><span>今日发送短信</span><div><Send size={18} /></div></div>
+            <strong>{formatNumber(dashboardMetrics.todaySend)}</strong>
+            <small>规则自动生成的发送记录</small>
+          </Card>
+          <Card className="rulesOpsMetricCard amber">
+            <div className="rulesOpsMetricHead"><span>平均 CTR</span><div><MousePointerClick size={18} /></div></div>
+            <strong>{formatPercent(dashboardMetrics.averageCtr)}</strong>
+            <small>按今日点击 / 今日发送计算</small>
+          </Card>
+          <Card className="rulesOpsMetricCard red">
+            <div className="rulesOpsMetricHead"><span>异常规则</span><div><AlertTriangle size={18} /></div></div>
+            <strong>{formatNumber(dashboardMetrics.errorRules)}</strong>
+            <small>今日有失败或拦截的运行规则</small>
+          </Card>
+        </section>
       </section>
 
       <section className="rulesOpsWorkbench">
